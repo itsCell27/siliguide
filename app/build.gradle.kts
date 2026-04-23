@@ -56,10 +56,15 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // Ktor dependencies
-    implementation("io.ktor:ktor-client-android:3.4.3")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+    // Ktor core client
+    implementation("io.ktor:ktor-client-core:3.4.2")
+
+    // Ktor Android engine
+    implementation("io.ktor:ktor-client-android:3.4.2")
+
+    // Ktor JSON serialization
+    implementation("io.ktor:ktor-client-content-negotiation:3.4.2")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.4.2")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
