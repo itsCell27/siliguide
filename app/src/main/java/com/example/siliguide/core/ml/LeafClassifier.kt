@@ -8,6 +8,7 @@ import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
+import androidx.core.graphics.scale
 
 class LeafClassifier(context: Context) {
 
@@ -87,7 +88,7 @@ class LeafClassifier(context: Context) {
             bitmap
         }
 
-        val resized = Bitmap.createScaledBitmap(argbBitmap, inputWidth, inputHeight, true)
+        val resized = argbBitmap.scale(inputWidth, inputHeight)
 
         val input = ByteBuffer.allocateDirect(4 * inputWidth * inputHeight * 3)
         input.order(ByteOrder.nativeOrder())

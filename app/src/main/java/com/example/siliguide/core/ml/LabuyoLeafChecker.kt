@@ -8,6 +8,7 @@ import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
+import androidx.core.graphics.scale
 
 class LabuyoLeafChecker(context: Context) {
 
@@ -89,7 +90,7 @@ class LabuyoLeafChecker(context: Context) {
         }
 
         // FIX 3: Use Bitmap.createScaledBitmap for consistent quality (same as LeafClassifier)
-        val resized = Bitmap.createScaledBitmap(argbBitmap, inputWidth, inputHeight, true)
+        val resized = argbBitmap.scale(inputWidth, inputHeight)
 
         val buffer = ByteBuffer.allocateDirect(4 * inputWidth * inputHeight * 3)
         buffer.order(ByteOrder.nativeOrder())

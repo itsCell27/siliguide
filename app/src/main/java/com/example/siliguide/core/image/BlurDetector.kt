@@ -1,7 +1,7 @@
 package com.example.siliguide.core.image
 
 import android.graphics.Bitmap
-import kotlin.math.pow
+import androidx.core.graphics.get
 
 object BlurDetector {
 
@@ -22,7 +22,7 @@ object BlurDetector {
 
         for (y in 0 until height) {
             for (x in 0 until width) {
-                val pixel = bitmap.getPixel(x, y)
+                val pixel = bitmap[x, y]
 
                 val r = (pixel shr 16) and 0xFF
                 val g = (pixel shr 8) and 0xFF
