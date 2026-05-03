@@ -1,5 +1,6 @@
-package com.example.siliguide.data.remote.iot
+package com.example.siliguide.data.repository
 
+import com.example.siliguide.data.remote.iot.Esp32Api
 import com.example.siliguide.data.remote.iot.dto.toDomain
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.IoTRepository

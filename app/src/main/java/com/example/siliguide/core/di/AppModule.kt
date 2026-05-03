@@ -1,13 +1,17 @@
 package com.example.siliguide.core.di
 
 import com.example.siliguide.data.remote.iot.Esp32Api
-import com.example.siliguide.data.remote.iot.Esp32Repository
+import com.example.siliguide.data.repository.Esp32Repository
 import com.example.siliguide.domain.repository.IoTRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import android.content.Context
+import app.cash.sqldelight.db.SqlDriver
+import com.example.siliguide.data.local.sqldelight.DatabaseDriverFactory
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -24,5 +28,11 @@ object AppModule {
     @Singleton
     fun provideIoTRepository(api: Esp32Api): IoTRepository {
         return Esp32Repository(api)
+    }
+
+    @Provides
+    @Singleton
+    fun provideDatabaseDriver(@ApplicationContext context: Context): SqlDriver {
+        return DatabaseDriverFactory(context).createDriver()
     }
 }
