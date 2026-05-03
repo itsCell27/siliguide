@@ -1,7 +1,7 @@
 package com.example.siliguide.core.di
 
 import com.example.siliguide.data.remote.iot.Esp32Api
-import com.example.siliguide.data.remote.iot.Esp32Repository
+import com.example.siliguide.data.repository.Esp32Repository
 import com.example.siliguide.domain.repository.IoTRepository
 import dagger.Module
 import dagger.Provides
@@ -10,7 +10,7 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import android.content.Context
 import app.cash.sqldelight.db.SqlDriver
-import com.example.siliguide.data.local.DatabaseDriverFactory
+import com.example.siliguide.data.local.sqldelight.DatabaseDriverFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Module
