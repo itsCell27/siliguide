@@ -11,6 +11,7 @@ import com.example.siliguide.presentation.features.dashboard.DashboardScreen
 import com.example.siliguide.presentation.features.analysis.CameraScreen
 import com.example.siliguide.presentation.features.analysis.CropAdjustScreen
 import com.example.siliguide.presentation.features.analysis.AnalysisResultScreen
+import com.example.siliguide.presentation.features.iot.IoTSetupConnectionModeScreen
 
 @Composable
 fun SiliGuideNavGraph(
@@ -24,10 +25,25 @@ fun SiliGuideNavGraph(
         composable(Screen.SignUp.route) { /* SignUpScreen() */ }
         composable(Screen.AddPlant.route) { /* AddPlantScreen() */ }
         composable(Screen.Profile.route) { /* ProfileScreen() */ }
-        composable(Screen.IoTSetup.route) { /* IoTSetupScreen() */ }
+
+        composable(route = Screen.IoTSetup.route) {
+            IoTSetupConnectionModeScreen( // <-- This is the new screen we just built!
+                onNavigateBack = { navController.popBackStack() },
+                onNext = { selectedMode ->
+                    // We will navigate to Step 1 here later!
+                    // e.g., navController.navigate("iot_setup_step_1/${selectedMode.name}")
+                }
+            )
+        }
 
         composable(route = Screen.Dashboard.route) {
-            DashboardScreen(onNavigateToCamera = { navController.navigate(Screen.Camera.route) })
+            DashboardScreen(
+                onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
+                onNavigateToAddPlant = { navController.navigate(Screen.AddPlant.route) },
+                onNavigateToAddIoT = { navController.navigate(Screen.IoTSetup.route) },
+                onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+                onNavigateToSeeAll = { /* Future: Navigate to history list */ }
+            )
         }
 
         composable(route = Screen.Camera.route) {
@@ -68,9 +84,12 @@ fun SiliGuideNavGraph(
             val decodedUri = URLDecoder.decode(encodedUri, "UTF-8")
 
             AnalysisResultScreen(
-                imageUri = decodedUri, // We now pass the decoded URI here!
-                onBack = {
+                imageUri = decodedUri,
+                onNavigateBack = { // Replaced 'onBack'
                     navController.popBackStack(Screen.Dashboard.route, inclusive = false)
+                },
+                onSaveAsNote = {
+                    // We will trigger the SaveAnalysisUseCase here next!
                 }
             )
         }
