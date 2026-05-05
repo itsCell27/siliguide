@@ -27,7 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.example.siliguide.core.ui.theme.DarkGreen
+import com.example.siliguide.core.ui.theme.GreenDark
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -195,7 +195,7 @@ fun CameraOverlay(onCapture: () -> Unit, onUpload: () -> Unit, onBack: () -> Uni
             contentAlignment = Alignment.Center
         ) {
             Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(Color.White).clickable { onCapture() }, contentAlignment = Alignment.Center) {
-                Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(DarkGreen))
+                Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(GreenDark))
             }
         }
 

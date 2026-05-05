@@ -29,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.siliguide.core.image.BlurDetector
-import com.example.siliguide.core.ui.theme.DarkGreen
+import com.example.siliguide.core.ui.theme.GreenDark
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,7 +80,7 @@ fun CropAdjustScreen(
 
     if (bitmap == null) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = DarkGreen)
+            CircularProgressIndicator(color = GreenDark)
         }
         return
     }
@@ -174,7 +174,7 @@ fun CropAdjustScreen(
                         }
                     }
                 },
-                modifier = Modifier.background(DarkGreen, CircleShape)
+                modifier = Modifier.background(GreenDark, CircleShape)
             ) {
                 if (isProcessing) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
