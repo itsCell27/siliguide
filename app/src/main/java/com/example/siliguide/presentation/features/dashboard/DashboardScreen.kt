@@ -1,162 +1,868 @@
 package com.example.siliguide.presentation.features.dashboard
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.example.siliguide.R
-import com.example.siliguide.core.ui.theme.DarkGreen
-import com.example.siliguide.core.ui.theme.LightGreenBg
-import com.example.siliguide.core.ui.theme.LightWhiteBg
-import com.example.siliguide.presentation.features.iot.IoTViewModel
+import androidx.compose.ui.zIndex
+import com.example.siliguide.core.ui.theme.*
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import androidx.compose.animation.core.Animatable
+import kotlinx.coroutines.launch
+
+// Status colors (extend theme)
+object StatusColors {
+    val HealthyBg = GreenBgLight
+    val HealthyText = GreenDark
+    val WarningBg = Color(0xFFFAEEDA)
+    val WarningText = Color(0xFF633806)
+    val DangerBg = Color(0xFFFCEBEB)
+    val DangerText = Danger
+    val NoneBg = OffWhite
+    val NoneText = GrayMedium
+}
+
+data class IoTDevice(
+    val id: String,
+    val name: String,
+    val isConnected: Boolean,
+    val mode: String = "Monitoring"
+)
+
+data class PlantCondition(
+    val status: String, // healthy, warning, danger, none
+    val deviceName: String?, // null if no device
+    val isDeviceConnected: Boolean = false,
+    val lastUpdated: String
+)
+
+data class PlantItem(
+    val id: String,
+    val name: String,
+    val condition: PlantCondition
+)
 
 @Composable
 fun DashboardScreen(
-    onNavigateToCamera: () -> Unit // Passed in from NavGraph!
+    onNavigateToCamera: () -> Unit,
+    onNavigateToAddPlant: () -> Unit,
+    onNavigateToAddIoT: () -> Unit,
+    onNavigateToProfile: () -> Unit,
+    onNavigateToSeeAll: () -> Unit
 ) {
-    Scaffold(
-        bottomBar = {
-            // We pass the navigation trigger directly to your custom bottom bar!
-            DashboardBottomBar(onCameraClick = onNavigateToCamera)
-        },
-        containerColor = LightWhiteBg
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
+    var isAddMenuOpen by remember { mutableStateOf(false) }
+
+    // Sample data
+    val iotDevices = listOf(
+        IoTDevice("iot1", "Pot Sensor 1", true),
+        IoTDevice("iot2", "Pot Sensor 2", false),
+    )
+
+    val plants = listOf(
+        PlantItem(
+            "plant1",
+            "Balcony Sili",
+            PlantCondition("healthy", "Pot Sensor 1", true, "Apr 24")
+        ),
+        PlantItem(
+            "plant2",
+            "Backyard Sili",
+            PlantCondition("warning", "Pot Sensor 2", false, "Apr 24")
+        ),
+        PlantItem(
+            "plant3",
+            "Pot #3",
+            PlantCondition("danger", null, false, "Apr 20")
+        ),
+    )
+
+    Box(modifier = Modifier.fillMaxSize().background(OffWhite)) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding() // FIX: Adds dynamic padding so bottom items aren't hidden by the new taller nav bar
+                .padding(bottom = 80.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // TOP BAR
+            TopBarSection(onProfileClick = onNavigateToProfile)
+
+            // IOT DEVICES SECTION
+            IoTDevicesSection(devices = iotDevices, onAddDevice = onNavigateToAddIoT)
+
+            // PLANTS SECTION
+            PlantsSection(plants = plants, onSeeAll = onNavigateToSeeAll)
+        }
+
+        // SCRIM OVERLAY
+        AnimatedVisibility(
+            visible = isAddMenuOpen,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.zIndex(1f)
+        ) {
+            Box(
                 modifier = Modifier
-                    .padding(innerPadding)
                     .fillMaxSize()
-            ) {
-                Text(
-                    text = "SiliGuide",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DarkGreen,
-                    modifier = Modifier.padding(24.dp)
-                )
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { isAddMenuOpen = false }
+            )
+        }
 
-                TestIoTScreen()
+        // BOTTOM SHEET
+        AnimatedVisibility(
+            visible = isAddMenuOpen,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(250)),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding() // FIX: Pushes the bottom sheet perfectly above the system nav bar
+                .zIndex(10f)
+        ) {
+            BottomSheetContent(
+                onAddPlant = {
+                    isAddMenuOpen = false
+                    onNavigateToAddPlant()
+                },
+                onAddIoT = {
+                    isAddMenuOpen = false
+                    onNavigateToAddIoT()
+                },
+                onCancel = { isAddMenuOpen = false }
+            )
+        }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 16.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(LightGreenBg)
-                )
-            }
+        // BOTTOM NAVIGATION
+        BottomNavSection(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            isAddMenuOpen = isAddMenuOpen,
+            onAddClick = { isAddMenuOpen = !isAddMenuOpen },
+            onProfileClick = onNavigateToProfile
+        )
+    }
+}
+
+@Composable
+fun TopBarSection(onProfileClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(White)
+            .statusBarsPadding() // FIX: Pushes the TopBar content safely below the notification bar
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // SiliGuide Logo
+        Row {
+            Text(
+                text = "Sili",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Fraunces,
+                color = Black,
+                letterSpacing = (-0.3f).sp
+            )
+            Text(
+                text = "Guide",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Fraunces,
+                color = GreenPrimary,
+                letterSpacing = (-0.3f).sp
+            )
+        }
+
+        // Avatar
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(GreenBgLight)
+                .border(1.5.dp, GreenLight, CircleShape)
+                .clickable { onProfileClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "B",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = StatusColors.HealthyText
+            )
         }
     }
 }
 
 @Composable
-fun DashboardBottomBar(onCameraClick: () -> Unit) {
-    Surface(
-        color = Color.White,
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-    ) {
+fun IoTDevicesSection(devices: List<IoTDevice>, onAddDevice: () -> Unit) {
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        // Section Header
         Row(
             modifier = Modifier
-                .padding(vertical = 8.dp, horizontal = 32.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomNavItem(
-                painter = painterResource(id = R.drawable.house),
-                label = "Home",
-                isSelected = true
+            Text(
+                text = "IoT Devices",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = GrayHint,
+                letterSpacing = 0.5.sp
             )
+        }
 
-            // Here is your custom camera button!
+        if (devices.isEmpty()) {
+            // Empty state
             Box(
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(DarkGreen)
-                    .clickable { onCameraClick() }, // Triggers the navigation!
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 10.dp)
+                    .border(1.dp, GrayLight, RoundedCornerShape(12.dp))
+                    .padding(12.dp, 16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.camera),
-                    contentDescription = "Scan",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                Row {
+                    Text(
+                        text = "No devices connected. ",
+                        fontSize = 12.sp,
+                        fontFamily = DMSans,
+                        color = GrayHint
+                    )
+                    Text(
+                        text = "Add one",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = GreenPrimary,
+                        modifier = Modifier.clickable { onAddDevice() }
+                    )
+                }
+            }
+        } else {
+            // Horizontal scroll of devices
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 22.dp)
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                devices.forEach { device ->
+                    IoTDeviceCard(device = device)
+                }
+
+                // Add device button
+                Box(
+                    modifier = Modifier
+                        .size(width = 130.dp, height = 70.dp)
+                        .background(White, RoundedCornerShape(12.dp))
+                        .border(1.dp, GrayLight, RoundedCornerShape(12.dp))
+                        .clickable { onAddDevice() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "+ Add",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = GreenPrimary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IoTDeviceCard(device: IoTDevice) {
+    Card(
+        modifier = Modifier
+            .size(width = 130.dp, height = 70.dp),
+        colors = CardDefaults.cardColors(containerColor = White),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp, 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Top: Icon + Status Dot
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(GreenBgLight, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // IoT Icon placeholder
+                    Text("◇", fontSize = 14.sp, color = GreenPrimary)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (device.isConnected) GreenPrimary
+                            else GrayLight
+                        )
                 )
             }
 
-            BottomNavItem(
-                painter = painterResource(id = R.drawable.user),
-                label = "Profile",
-                isSelected = false
+            // Device Name
+            Text(
+                text = device.name,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = Black,
+                maxLines = 1
+            )
+
+            // Status text
+            Text(
+                text = if (device.isConnected) "Connected" else "Offline",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = if (device.isConnected) GreenPrimary
+                else GrayHint
             )
         }
     }
 }
 
 @Composable
-fun BottomNavItem(painter: Painter, label: String, isSelected: Boolean) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+fun PlantsSection(plants: List<PlantItem>, onSeeAll: () -> Unit) {
+    Column(modifier = Modifier.padding(vertical = 14.dp)) {
+        // Section Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "My Plants",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = GrayHint,
+                letterSpacing = 0.5.sp
+            )
+            Text(
+                text = "See All",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = GreenPrimary,
+                modifier = Modifier.clickable { onSeeAll() }
+            )
+        }
+
+        if (plants.isEmpty()) {
+            // Empty state
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(22.dp)
+                    .height(120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(OffWhite)
+                            .border(1.5.dp, Border, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🌱", fontSize = 36.sp)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "No plants yet",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = GrayMedium
+                    )
+                    Text(
+                        text = "Add your first Siling Labuyo plant to get started",
+                        fontSize = 12.sp,
+                        fontFamily = DMSans,
+                        color = GrayHint,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 22.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                plants.forEach { plant ->
+                    PlantCard(plant = plant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlantCard(plant: PlantItem) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = White),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Border)
     ) {
-        Icon(
-            painter = painter,
-            contentDescription = label,
-            tint = if (isSelected) DarkGreen else DarkGreen.copy(alpha = 0.6f),
-            modifier = Modifier.size(28.dp)
-        )
+        Row(
+            modifier = Modifier
+                .padding(12.dp, 12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Plant Thumbnail
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(GreenBgLight)
+                    .border(1.dp, GreenLight, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🌿", fontSize = 20.sp)
+            }
+
+            // Plant Info
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = plant.name,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = DMSans,
+                    color = Black
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Device Badge
+                    if (plant.condition.deviceName != null) {
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (plant.condition.isDeviceConnected)
+                                        GreenBgLight
+                                    else
+                                        OffWhite,
+                                    RoundedCornerShape(5.dp)
+                                )
+                                .padding(2.dp, 3.dp, 6.dp, 3.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (plant.condition.isDeviceConnected)
+                                                GreenPrimary
+                                            else
+                                                GrayLight
+                                        )
+                                )
+                                Text(
+                                    text = plant.condition.deviceName,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFamily = DMSans,
+                                    color = if (plant.condition.isDeviceConnected)
+                                        StatusColors.HealthyText
+                                    else
+                                        GrayHint
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(OffWhite, RoundedCornerShape(5.dp))
+                                .padding(2.dp, 3.dp, 6.dp, 3.dp)
+                        ) {
+                            Text(
+                                text = "No device",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = DMSans,
+                                color = GrayHint
+                            )
+                        }
+                    }
+
+                    // Separator dot
+                    Box(
+                        modifier = Modifier
+                            .size(3.dp)
+                            .clip(CircleShape)
+                            .background(GrayLight)
+                    )
+
+                    // Date
+                    Text(
+                        text = plant.condition.lastUpdated,
+                        fontSize = 10.sp,
+                        fontFamily = DMSans,
+                        color = GrayMedium
+                    )
+                }
+            }
+
+            // Status Badge
+            ConditionBadge(status = plant.condition.status)
+        }
+    }
+}
+
+@Composable
+fun ConditionBadge(status: String) {
+    val (bgColor, textColor) = when (status) {
+        "healthy" -> StatusColors.HealthyBg to StatusColors.HealthyText
+        "warning" -> StatusColors.WarningBg to StatusColors.WarningText
+        "danger" -> StatusColors.DangerBg to StatusColors.DangerText
+        else -> OffWhite to GrayMedium
+    }
+
+    Box(
+        modifier = Modifier
+            .background(bgColor, RoundedCornerShape(6.dp))
+            .padding(3.dp, 4.dp, 8.dp, 4.dp)
+    ) {
         Text(
-            text = label,
-            fontSize = 12.sp,
-            color = if (isSelected) DarkGreen else DarkGreen.copy(alpha = 0.6f),
-            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+            text = when (status) {
+                "healthy" -> "Healthy"
+                "warning" -> "Underwatering"
+                "danger" -> "Leaf Spots"
+                else -> "Not analyzed"
+            },
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = DMSans,
+            color = textColor
         )
     }
 }
 
 @Composable
-fun TestIoTScreen() {
-    val viewModel: IoTViewModel = hiltViewModel()
+fun BottomSheetContent(
+    onAddPlant: () -> Unit,
+    onAddIoT: () -> Unit,
+    onCancel: () -> Unit
+) {
+    // 1. Upgrade to Animatable for smooth spring-back physics
+    val offsetY = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        viewModel.fetchSensors()
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset { IntOffset(0, offsetY.value.roundToInt()) }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        // If they dragged it down more than 150 pixels, close the menu!
+                        if (offsetY.value > 150f) {
+                            onCancel()
+                            // FIX: We deliberately DO NOT reset offsetY to 0 here!
+                            // We leave it exactly where the user's finger left it,
+                            // so AnimatedVisibility seamlessly takes over the downward slide.
+                        } else {
+                            // If they didn't drag far enough, smoothly bounce it back up
+                            coroutineScope.launch {
+                                offsetY.animateTo(0f, animationSpec = tween(300))
+                            }
+                        }
+                    }
+                ) { change, dragAmount ->
+                    change.consume()
+                    // Only allow dragging downwards
+                    if (offsetY.value + dragAmount >= 0) {
+                        coroutineScope.launch {
+                            offsetY.snapTo(offsetY.value + dragAmount)
+                        }
+                    }
+                }
+            },
+        colors = CardDefaults.cardColors(containerColor = White),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(top = 22.dp, bottom = 42.dp)
+        ) {
+            // Handle bar
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .size(width = 36.dp, height = 4.dp)
+                    .background(GrayLight, RoundedCornerShape(2.dp))
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Title
+            Text(
+                text = "What would you like to add?",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Fraunces,
+                color = Black,
+                letterSpacing = (-0.3f).sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            // Subtitle
+            Text(
+                text = "Choose an option below to get started.",
+                fontSize = 12.sp,
+                fontFamily = DMSans,
+                color = GrayMedium,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(bottom = 18.dp)
+            )
+
+            // Option 1: Add Plant
+            SheetOptionItem(
+                icon = "🌱",
+                title = "Add New Plant",
+                description = "Create a new Siling Labuyo plant entry and optionally link a sensor device",
+                onClick = onAddPlant
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Option 2: Add IoT
+            SheetOptionItem(
+                icon = "📡",
+                title = "Add IoT Device",
+                description = "Connect a new IoT device via AP hotspot or home WiFi network",
+                onClick = onAddIoT
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Cancel button
+            TextButton(
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = DMSans,
+                    color = GrayHint
+                )
+            }
+        }
     }
+}
 
-    when {
-        viewModel.isLoading -> Text("Loading...")
-        viewModel.error != null -> Text(viewModel.error!!)
-        viewModel.sensorData != null -> {
+@Composable
+fun SheetOptionItem(
+    icon: String,
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = OffWhite),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(14.dp, 14.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(GreenBgLight, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(icon, fontSize = 20.sp)
+            }
 
-            val data = viewModel.sensorData!!
+            // Text
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = DMSans,
+                    color = Black
+                )
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    fontFamily = DMSans,
+                    color = GrayMedium,
+                    lineHeight = 16.sp
+                )
+            }
 
-            Column {
-                Text("Soil Moisture: ${data.soil.moisture}")
-                Text("Soil Temp: ${data.soil.temperature}")
-                Text("pH: ${data.soil.ph}")
+            // Chevron
+            Text("›", fontSize = 16.sp, color = GrayHint)
+        }
+    }
+}
 
-                Text("EC: ${data.soil.ec}")
-                Text("Nitrogen: ${data.soil.nitrogen}")
-                Text("Phosphorus: ${data.soil.phosphorus}")
-                Text("Potassium: ${data.soil.potassium}")
+@Composable
+fun BottomNavSection(
+    modifier: Modifier = Modifier,
+    isAddMenuOpen: Boolean,
+    onAddClick: () -> Unit,
+    onProfileClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(elevation = 16.dp)
+            .background(White)
+            .navigationBarsPadding() // FIX: Adds padding to keep content above the device's navigation buttons/gesture bar
+            .padding(horizontal = 28.dp, vertical = 12.dp)
+            .zIndex(3f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Home
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+                modifier = Modifier.clickable { }
+            ) {
+                Text("🏠", fontSize = 20.sp)
+                Text(
+                    text = "Home",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = DMSans,
+                    color = GreenPrimary
+                )
+            }
 
-                Text("Light: ${data.environment.light}")
-                Text("Air Temp: ${data.environment.airTemperature}")
+            // Add Button (Center/Floating)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isAddMenuOpen) GreenDark
+                        else GreenPrimary
+                    )
+                    .shadow(
+                        elevation = if (isAddMenuOpen) 12.dp else 4.dp,
+                        shape = CircleShape
+                    )
+                    .clickable { onAddClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isAddMenuOpen) Icons.Default.Close else Icons.Default.Add,
+                    contentDescription = "Add",
+                    tint = White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // Profile
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+                modifier = Modifier.clickable { onProfileClick() }
+            ) {
+                Text("👤", fontSize = 20.sp)
+                Text(
+                    text = "Profile",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = DMSans,
+                    color = GrayHint
+                )
             }
         }
     }
