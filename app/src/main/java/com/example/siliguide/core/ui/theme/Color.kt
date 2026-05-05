@@ -2,14 +2,23 @@ package com.example.siliguide.core.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val DarkGreen = Color(0xFF1B5E20)
-val LightGreenBg = Color(0xFFF1F8F1)
-val LightWhiteBg = Color(0xfff5f7f4)
+// Primary Greens
+val GreenPrimary = Color(0xFF3B6D11)
+val GreenDark = Color(0xFF27500A)
+val GreenMid = Color(0xFF97C459)
+val GreenLight = Color(0xFFC0DD97)
+val GreenBgLight = Color(0xFFEAF3DE)
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Neutrals
+val White = Color(0xFFFFFFFF)
+val OffWhite = Color(0xFFF7F7F5)
+val Border = Color(0xFFEBEBEB)
+val GrayLight = Color(0xFFD8D8D8)
+val GrayHint = Color(0xFFB4B2A9)
+val GrayMedium = Color(0xFF888780)
+val GrayBody = Color(0xFF5F5E5A)
+val Black = Color(0xFF1A1A1A)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Status
+val Danger = Color(0xFF791F1F)
+val DangerBg = Color(0xFFFCEBEB)
