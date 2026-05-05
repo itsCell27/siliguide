@@ -83,6 +83,9 @@
         implementation(libs.androidx.camera.lifecycle)
         implementation(libs.androidx.camera.view)
 
+        // For QR Code Scanning and Decoding
+        implementation(libs.barcode.scanning)
+
         // Machine Learning (TFLite)
         implementation(libs.tensorflow.lite)
         //implementation(libs.tensorflow.lite.support)
