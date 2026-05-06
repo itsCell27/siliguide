@@ -7,6 +7,7 @@ sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
     object Login : Screen("login")
     object SignUp : Screen("signup")
+    object GuestInfo : Screen("guest_info")
     object Dashboard : Screen("dashboard")
     object Camera : Screen("camera")
 
@@ -30,5 +31,8 @@ sealed class Screen(val route: String) {
         fun createRoute(plantId: String) = "plant/$plantId"
     }
     object IoTSetup : Screen("iot_setup")
+    object IoTSetupAP : Screen("iot_setup_ap")
+    object IoTSetupLAN : Screen("iot_setup_lan")
+    object QrScanner : Screen("qr_scanner")
     object Profile : Screen("profile")
 }
