@@ -10,7 +10,9 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import android.content.Context
 import app.cash.sqldelight.db.SqlDriver
+import com.example.siliguide.data.local.session.UserSessionManager
 import com.example.siliguide.data.local.sqldelight.DatabaseDriverFactory
+import com.example.siliguide.data.remote.iot.WifiProvisioningManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Module
@@ -23,16 +25,36 @@ object AppModule {
         return Esp32Api()
     }
 
+    @Provides
+    fun provideWifiProvisioningManager(): WifiProvisioningManager {
+        return WifiProvisioningManager()
+    }
+
     // Tell Hilt: "When a UseCase asks for an IoTRepository, give it an Esp32Repository"
     @Provides
-    @Singleton
-    fun provideIoTRepository(api: Esp32Api): IoTRepository {
-        return Esp32Repository(api)
+    fun provideIoTRepository(
+        api: Esp32Api,
+        wifiProvisioningManager: WifiProvisioningManager,
+        @ApplicationContext context: Context
+    ): IoTRepository {
+        return Esp32Repository(
+            api,
+            wifiProvisioningManager,
+            context
+        )
     }
 
     @Provides
     @Singleton
     fun provideDatabaseDriver(@ApplicationContext context: Context): SqlDriver {
         return DatabaseDriverFactory(context).createDriver()
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserSessionManager(
+        @ApplicationContext context: Context
+    ): UserSessionManager {
+        return UserSessionManager(context)
     }
 }
