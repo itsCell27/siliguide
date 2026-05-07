@@ -1,5 +1,6 @@
 package com.example.siliguide.data.remote.iot
 
+import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -41,6 +42,12 @@ class Esp32Api {
         // based on your LAN/AP connection mode!
         return client
             .get("http://192.168.4.1/data")
+            .body()
+    }
+
+    suspend fun getDeviceInfo(): DeviceInfoDto {
+        return client
+            .get("http://192.168.4.1/info")
             .body()
     }
 }
