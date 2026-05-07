@@ -37,6 +37,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import androidx.compose.animation.core.Animatable
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.example.siliguide.presentation.features.iot.IoTViewModel
+import io.ktor.util.collections.getValue
 import kotlinx.coroutines.launch
 
 // Status colors (extend theme)
@@ -77,8 +80,10 @@ fun DashboardScreen(
     onNavigateToAddPlant: () -> Unit,
     onNavigateToAddIoT: () -> Unit,
     onNavigateToProfile: () -> Unit,
-    onNavigateToSeeAll: () -> Unit
+    onNavigateToSeeAll: () -> Unit,
+    viewModel: DashboardViewModel = hiltViewModel()
 ) {
+    val userName = viewModel.userName.collectAsState()
     var isAddMenuOpen by remember { mutableStateOf(false) }
 
     // Sample data
@@ -115,13 +120,15 @@ fun DashboardScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // TOP BAR
-            TopBarSection(onProfileClick = onNavigateToProfile)
+            TopBarSection(onProfileClick = onNavigateToProfile, user = userName)
 
             // IOT DEVICES SECTION
             IoTDevicesSection(devices = iotDevices, onAddDevice = onNavigateToAddIoT)
 
             // PLANTS SECTION
             PlantsSection(plants = plants, onSeeAll = onNavigateToSeeAll)
+
+            TestIoTScreen()
         }
 
         // SCRIM OVERLAY
@@ -176,7 +183,8 @@ fun DashboardScreen(
 }
 
 @Composable
-fun TopBarSection(onProfileClick: () -> Unit) {
+fun TopBarSection(onProfileClick: () -> Unit, user: State<String>) {
+    val userName = user.value
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -199,6 +207,25 @@ fun TopBarSection(onProfileClick: () -> Unit) {
             Text(
                 text = "Guide",
                 fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Fraunces,
+                color = GreenPrimary,
+                letterSpacing = (-0.3f).sp
+            )
+        }
+
+        Row {
+            Text(
+                text = "Welcome, ",
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Fraunces,
+                color = Black,
+                letterSpacing = (-0.3f).sp
+            )
+            Text(
+                text = userName,
+                fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Fraunces,
                 color = GreenPrimary,
@@ -863,6 +890,45 @@ fun BottomNavSection(
                     fontFamily = DMSans,
                     color = GrayHint
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun TestIoTScreen() {
+    val viewModel: IoTViewModel = hiltViewModel()
+
+    // Use DisposableEffect instead of LaunchedEffect
+    DisposableEffect(Unit) {
+        // Starts the 3-second loop when the screen appears
+        viewModel.startLiveMonitoring()
+
+        onDispose {
+            // Kills the loop immediately when the user navigates away
+            viewModel.stopLiveMonitoring()
+        }
+    }
+
+    when {
+        viewModel.isLoading -> Text("Loading...")
+        viewModel.error != null -> Text(viewModel.error!!)
+        viewModel.sensorData != null -> {
+
+            val data = viewModel.sensorData!!
+
+            Column {
+                Text("Soil Moisture: ${data.soil.moisture}")
+                Text("Soil Temp: ${data.soil.temperature}")
+                Text("pH: ${data.soil.ph}")
+
+                Text("EC: ${data.soil.ec}")
+                Text("Nitrogen: ${data.soil.nitrogen}")
+                Text("Phosphorus: ${data.soil.phosphorus}")
+                Text("Potassium: ${data.soil.potassium}")
+
+                Text("Light: ${data.environment.light}")
+                Text("Air Temp: ${data.environment.airTemperature}")
             }
         }
     }
