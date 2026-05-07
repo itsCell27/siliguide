@@ -1,8 +1,6 @@
 package com.example.siliguide.core.di
 
-import com.example.siliguide.data.local.AuthRepositoryImpl
 import com.example.siliguide.data.repository.PlantRepositoryImpl
-import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.repository.PlantRepository
 import dagger.Binds
 import dagger.Module
@@ -19,10 +17,4 @@ abstract class RepositoryModule {
     abstract fun bindPlantRepository(
         plantRepositoryImpl: PlantRepositoryImpl
     ): PlantRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindAuthRepository(
-        impl: AuthRepositoryImpl
-    ): AuthRepository
 }

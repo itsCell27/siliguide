@@ -10,7 +10,6 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import android.content.Context
 import app.cash.sqldelight.db.SqlDriver
-import com.example.siliguide.data.local.session.UserSessionManager
 import com.example.siliguide.data.local.sqldelight.DatabaseDriverFactory
 import com.example.siliguide.data.remote.iot.WifiProvisioningManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -48,13 +47,5 @@ object AppModule {
     @Singleton
     fun provideDatabaseDriver(@ApplicationContext context: Context): SqlDriver {
         return DatabaseDriverFactory(context).createDriver()
-    }
-
-    @Provides
-    @Singleton
-    fun provideUserSessionManager(
-        @ApplicationContext context: Context
-    ): UserSessionManager {
-        return UserSessionManager(context)
     }
 }

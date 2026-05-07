@@ -39,7 +39,6 @@ import kotlin.math.roundToInt
 import androidx.compose.animation.core.Animatable
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.presentation.features.iot.IoTViewModel
-import io.ktor.util.collections.getValue
 import kotlinx.coroutines.launch
 
 // Status colors (extend theme)
@@ -79,11 +78,9 @@ fun DashboardScreen(
     onNavigateToCamera: () -> Unit,
     onNavigateToAddPlant: () -> Unit,
     onNavigateToAddIoT: () -> Unit,
-    onNavigateToProfile: () -> Unit,
     onNavigateToSeeAll: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val userName = viewModel.userName.collectAsState()
     var isAddMenuOpen by remember { mutableStateOf(false) }
 
     // Sample data
@@ -120,7 +117,7 @@ fun DashboardScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // TOP BAR
-            TopBarSection(onProfileClick = onNavigateToProfile, user = userName)
+            TopBarSection()
 
             // IOT DEVICES SECTION
             IoTDevicesSection(devices = iotDevices, onAddDevice = onNavigateToAddIoT)
@@ -177,14 +174,12 @@ fun DashboardScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
             isAddMenuOpen = isAddMenuOpen,
             onAddClick = { isAddMenuOpen = !isAddMenuOpen },
-            onProfileClick = onNavigateToProfile
         )
     }
 }
 
 @Composable
-fun TopBarSection(onProfileClick: () -> Unit, user: State<String>) {
-    val userName = user.value
+fun TopBarSection() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -211,44 +206,6 @@ fun TopBarSection(onProfileClick: () -> Unit, user: State<String>) {
                 fontFamily = Fraunces,
                 color = GreenPrimary,
                 letterSpacing = (-0.3f).sp
-            )
-        }
-
-        Row {
-            Text(
-                text = "Welcome, ",
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = Fraunces,
-                color = Black,
-                letterSpacing = (-0.3f).sp
-            )
-            Text(
-                text = userName,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = Fraunces,
-                color = GreenPrimary,
-                letterSpacing = (-0.3f).sp
-            )
-        }
-
-        // Avatar
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(GreenBgLight)
-                .border(1.5.dp, GreenLight, CircleShape)
-                .clickable { onProfileClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "B",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = DMSans,
-                color = StatusColors.HealthyText
             )
         }
     }
@@ -818,7 +775,6 @@ fun BottomNavSection(
     modifier: Modifier = Modifier,
     isAddMenuOpen: Boolean,
     onAddClick: () -> Unit,
-    onProfileClick: () -> Unit
 ) {
     Box(
         modifier = modifier
@@ -836,22 +792,6 @@ fun BottomNavSection(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Home
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                modifier = Modifier.clickable { }
-            ) {
-                Text("🏠", fontSize = 20.sp)
-                Text(
-                    text = "Home",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = DMSans,
-                    color = GreenPrimary
-                )
-            }
-
             // Add Button (Center/Floating)
             Box(
                 modifier = Modifier
@@ -873,22 +813,6 @@ fun BottomNavSection(
                     contentDescription = "Add",
                     tint = White,
                     modifier = Modifier.size(24.dp)
-                )
-            }
-
-            // Profile
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                modifier = Modifier.clickable { onProfileClick() }
-            ) {
-                Text("👤", fontSize = 20.sp)
-                Text(
-                    text = "Profile",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = DMSans,
-                    color = GrayHint
                 )
             }
         }

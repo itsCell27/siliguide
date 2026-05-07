@@ -1,13 +1,6 @@
 package com.example.siliguide.presentation.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -18,8 +11,6 @@ import com.example.siliguide.presentation.features.dashboard.DashboardScreen
 import com.example.siliguide.presentation.features.analysis.CameraScreen
 import com.example.siliguide.presentation.features.analysis.CropAdjustScreen
 import com.example.siliguide.presentation.features.analysis.AnalysisResultScreen
-import com.example.siliguide.presentation.features.auth.GuestInfoScreen
-import com.example.siliguide.presentation.features.auth.WelcomeScreen
 import com.example.siliguide.presentation.features.iot.ConnectionMode
 import com.example.siliguide.presentation.features.iot.IoTSetupConnectionModeScreen
 import com.example.siliguide.presentation.features.iot.ap_setup.IoTSetupAPModeScreen
@@ -28,55 +19,32 @@ import com.example.siliguide.presentation.features.iot.components.QrScannerScree
 @Composable
 fun SiliGuideNavGraph(
     navController: NavHostController,
-    startDestination: String = Screen.Welcome.route
+    startDestination: String = Screen.Dashboard.route // App boots instantly to Dashboard
 ) {
-    val startupViewModel: StartupViewModel = hiltViewModel()
-
-    var startDestination by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        startupViewModel.checkSession { hasUser ->
-            startDestination = if (hasUser) {
-                Screen.Dashboard.route
-            } else {
-                Screen.Welcome.route
-            }
-        }
-    }
-
-    // Prevent NavHost from building before decision
-    if (startDestination == null) return
     NavHost(
         navController = navController,
-        startDestination = startDestination!!
+        startDestination = startDestination
     ) {
 
-        composable(Screen.Login.route) { /* LoginScreen() */ }
-        composable(Screen.SignUp.route) { /* SignUpScreen() */ }
+        // --- DASHBOARD (HOME) ---
+        composable(route = Screen.Dashboard.route) {
+            DashboardScreen(
+                onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
+                onNavigateToAddPlant = { navController.navigate(Screen.AddPlant.route) },
+                onNavigateToAddIoT = { navController.navigate(Screen.IoTSetup.route) },
+                onNavigateToSeeAll = { /* Future: Navigate to history list */ }
+            )
+        }
+
+        // --- PLANT MANAGEMENT ---
         composable(Screen.AddPlant.route) { /* AddPlantScreen() */ }
-        composable(Screen.Profile.route) { /* ProfileScreen() */ }
 
-        composable(Screen.Welcome.route) {
-            WelcomeScreen(
-                onLogin = { },
-                onSignUp = { },
-                onContinueGuest = {
-                    navController.navigate(Screen.GuestInfo.route)
-                }
-            )
-        }
+        composable(
+            route = Screen.PlantDetail.route,
+            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
+        ) { /* PlantDetailScreen() */ }
 
-        composable(Screen.GuestInfo.route) {
-            GuestInfoScreen(
-                onContinueSuccess = {
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Welcome.route) { inclusive = true }
-                    }
-                },
-                onCreateAccount = { }
-            )
-        }
-
+        // --- IOT SETUP WIZARD ---
         composable(route = Screen.IoTSetup.route) {
             IoTSetupConnectionModeScreen(
                 onNavigateBack = { navController.popBackStack() },
@@ -86,7 +54,8 @@ fun SiliGuideNavGraph(
                             navController.navigate(Screen.IoTSetupAP.route)
                         }
                         ConnectionMode.LAN_MODE -> {
-                            navController.navigate(Screen.IoTSetupLAN.route)
+                            // Assumes you have a Screen.IoTSetupLAN route defined
+                            navController.navigate("iot_setup_lan")
                         }
                     }
                 }
@@ -109,28 +78,14 @@ fun SiliGuideNavGraph(
                     navController.previousBackStackEntry
                         ?.savedStateHandle
                         ?.set("qr_result", result)
-
                     navController.popBackStack()
                 },
-                onManualEntry = {
-                    navController.popBackStack()
-                },
-                onBack = {
-                    navController.popBackStack()
-                }
+                onManualEntry = { navController.popBackStack() },
+                onBack = { navController.popBackStack() }
             )
         }
 
-        composable(route = Screen.Dashboard.route) {
-            DashboardScreen(
-                onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
-                onNavigateToAddPlant = { navController.navigate(Screen.AddPlant.route) },
-                onNavigateToAddIoT = { navController.navigate(Screen.IoTSetup.route) },
-                onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
-                onNavigateToSeeAll = { /* Future: Navigate to history list */ }
-            )
-        }
-
+        // --- ANALYSIS PIPELINE ---
         composable(route = Screen.Camera.route) {
             CameraScreen(
                 onBack = { navController.popBackStack() },
@@ -170,18 +125,13 @@ fun SiliGuideNavGraph(
 
             AnalysisResultScreen(
                 imageUri = decodedUri,
-                onNavigateBack = { // Replaced 'onBack'
+                onNavigateBack = {
                     navController.popBackStack(Screen.Dashboard.route, inclusive = false)
                 },
                 onSaveAsNote = {
-                    // We will trigger the SaveAnalysisUseCase here next
+                    // Trigger SaveAnalysisUseCase here later
                 }
             )
         }
-
-        composable(
-            route = Screen.PlantDetail.route,
-            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
-        ) { /* PlantDetailScreen() */ }
     }
 }
