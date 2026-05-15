@@ -1,5 +1,7 @@
 package com.example.siliguide.presentation.features.iot.ap_setup
 
+import android.content.Intent
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -7,16 +9,23 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,11 +54,21 @@ fun IoTSetupAPModeScreen(
 
     val context = LocalContext.current
 
-    // Listen for errors and show a Toast message
-    LaunchedEffect(viewModel.error) {
-        viewModel.error?.let { errorMessage ->
-            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+    val defaultName = "SiliGuide IoT${viewModel.connectedDeviceId ?: ""}"
+    var deviceName by remember { mutableStateOf(defaultName) }
+
+    val apConnectionState by viewModel.apConnectionState.collectAsState()
+    val wifiOff = apConnectionState == "WIFI_OFF"
+
+    var showWifiModal by remember { mutableStateOf(false) }
+
+    var previousWifiOff by remember { mutableStateOf(false) }
+
+    LaunchedEffect(wifiOff) {
+        if (wifiOff && !previousWifiOff) {
+            showWifiModal = true
         }
+        previousWifiOff = wifiOff
     }
 
     // STEP 1: Check connection immediately on entry (Removed legacy monitoring)
@@ -103,15 +122,101 @@ fun IoTSetupAPModeScreen(
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            // Removed viewModel.stopMonitoringConnection() - HTTP Ping handles itself!
+            // Disconnect WiFi when leaving screen completely
+            viewModel.disconnectFromDeviceWifi()
         }
     }
 
+
+
     val handleBackPress: () -> Unit = {
         if (currentStep == 2) {
+            // If user go back to step 2, disconnect from device
+            viewModel.disconnectFromDeviceWifi()
             currentStep = 1
         } else {
             onNavigateBack()
+        }
+    }
+
+    // WIFI OFF MODAL
+    if (showWifiModal) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+        )
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .width(300.dp)
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = White)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.TopEnd
+                    ) {
+                        IconButton(
+                            onClick = { showWifiModal = false },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = GrayMedium,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Icon(
+                        Icons.Rounded.Wifi,
+                        contentDescription = null,
+                        tint = Danger,
+                        modifier = Modifier.size(48.dp)
+                    )
+
+                    Text(
+                        "WiFi is Off",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+
+                    Text(
+                        "Turn on WiFi to connect to your IoT device",
+                        fontSize = 13.sp,
+                        color = GrayMedium,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
+                            context.startActivity(intent)
+                            showWifiModal = false
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Danger),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Open WiFi Settings", color = White, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
         }
     }
 
@@ -207,6 +312,7 @@ fun IoTSetupAPModeScreen(
                             }
                         } else {
                             // Step 2 - Save device
+                            viewModel.finalizeSetup(deviceName)
                             onSetupComplete()
                         }
                     },
@@ -264,12 +370,16 @@ fun IoTSetupAPModeScreen(
                         onManualRetry = {
                             isChecking = true
                             viewModel.forceCheckConnection()
-                        }
+                        },
                     )
 
                     // STEP 2: Device Found - Configure
                     2 -> APStep2Content(
-                        qrData = qrResult,
+                        viewModel = viewModel,
+                        deviceName = deviceName,              // ← PASS DOWN
+                        onDeviceNameChange = { newName ->     // ← CALLBACK UP
+                            deviceName = newName
+                        },
                         onBack = { currentStep = 1 }
                     )
                 }
