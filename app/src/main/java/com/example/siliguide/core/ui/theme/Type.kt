@@ -24,33 +24,34 @@ val Fraunces = FontFamily(
 
 val Typography = Typography(
 
-    // Body (default UI)
-    bodyMedium = TextStyle(
-        fontFamily = DMSans,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        //color = Black
-    ),
-
-    titleMedium = TextStyle(
-        fontFamily = DMSans,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        //color = Black
-    ),
-
-    labelSmall = TextStyle(
-        fontFamily = DMSans,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        //color = GrayMedium
-    ),
-
-    // Big headings (use Fraunces manually when needed)
+    // Used for "Add New Plant" top bar and "What's next?" sheet title
     headlineSmall = TextStyle(
         fontFamily = Fraunces,
         fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
-        //color = Black
+        fontSize = 18.sp,
+        letterSpacing = (-0.3).sp
+    ),
+    titleLarge = TextStyle(
+        fontFamily = Fraunces,
+        fontWeight = FontWeight.Bold,
+        fontSize = 17.sp,
+        letterSpacing = (-0.2).sp
+    ),
+    // Standard UI fonts
+    titleMedium = TextStyle(
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp
+    ),
+    labelSmall = TextStyle(
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        letterSpacing = 0.2.sp
     )
 )

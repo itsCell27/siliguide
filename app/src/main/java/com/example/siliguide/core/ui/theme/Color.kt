@@ -22,3 +22,18 @@ val Black = Color(0xFF1A1A1A)
 // Status
 val Danger = Color(0xFF791F1F)
 val DangerBg = Color(0xFFFCEBEB)
+val DangerBorder = Color(0xFFE9B7B7)
+
+// Status - Warning (Amber)
+val Warning = Color(0xFF633806)
+val WarningBg = Color(0xFFFAEEDA)
+val WarningBorder = Color(0xFFE9C589)
+
+// Status - Info (Blue)
+val Info = Color(0xFF1F4A6E)
+val InfoBg = Color(0xFFE6F0F7)
+val InfoBorder = Color(0xFFB4D0E2)
+
+// Status - Success (Green)
+val Success = Color(0xFF3B6D11)
+val SuccessBg = Color(0xFFEAF3DE)
