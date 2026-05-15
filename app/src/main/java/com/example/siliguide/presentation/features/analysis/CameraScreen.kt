@@ -35,7 +35,7 @@ import java.io.File
 
 @Composable
 fun CameraScreen(
-    onImageCaptured: (String) -> Unit, // Now passes a URI String!
+    onImageCaptured: (String) -> Unit, // Now passes a URI String
     onBack: () -> Unit
 ) {
     val context = LocalContext.current

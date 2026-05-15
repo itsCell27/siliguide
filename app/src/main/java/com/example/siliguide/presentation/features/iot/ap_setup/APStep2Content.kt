@@ -2,51 +2,43 @@ package com.example.siliguide.presentation.features.iot.ap_setup
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.siliguide.core.ui.theme.Black
-import com.example.siliguide.core.ui.theme.Border
-import com.example.siliguide.core.ui.theme.Fraunces
-import com.example.siliguide.core.ui.theme.GrayBody
-import com.example.siliguide.core.ui.theme.GrayHint
-import com.example.siliguide.core.ui.theme.GrayMedium
-import com.example.siliguide.core.ui.theme.GreenBgLight
-import com.example.siliguide.core.ui.theme.GreenDark
-import com.example.siliguide.core.ui.theme.GreenLight
-import com.example.siliguide.core.ui.theme.GreenPrimary
-import com.example.siliguide.core.ui.theme.OffWhite
-import com.example.siliguide.core.ui.theme.White
+import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.presentation.features.iot.IoTViewModel
 
 @Composable
 fun APStep2Content(
-    qrData: String?,
+    viewModel: IoTViewModel,
+    deviceName: String,                      // ← RECEIVE
+    onDeviceNameChange: (String) -> Unit,    // ← CALLBACK
     onBack: () -> Unit
 ) {
+
+    val maxChar = 30
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -78,7 +70,8 @@ fun APStep2Content(
 
         // Form Fields
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Device Name
+
+            // --- EDITABLE DEVICE NAME FIELD ---
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Device name", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
                 Row(
@@ -92,12 +85,31 @@ fun APStep2Content(
                 ) {
                     Icon(Icons.Rounded.Wifi, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(9.dp))
-                    Text("Field Sensor 1", fontSize = 14.sp, color = Black, modifier = Modifier.weight(1f))
-                    Text("13/30", fontSize = 11.sp, color = GreenPrimary)
+
+                    // BasicTextField for pure custom styling
+                    BasicTextField(
+                        value = deviceName,
+                        onValueChange = {
+                            if (it.length <= maxChar) onDeviceNameChange(it)  // ← CALL CALLBACK
+                        },
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle(fontSize = 14.sp, color = Black, fontFamily = DMSans),
+                        cursorBrush = SolidColor(GreenPrimary),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        decorationBox = { innerTextField ->
+                            if (deviceName.isEmpty()) {
+                                Text("Enter device name...", fontSize = 14.sp, color = GrayHint)
+                            }
+                            innerTextField()
+                        }
+                    )
+
+                    Text("${deviceName.length}/$maxChar", fontSize = 11.sp, color = GreenPrimary)
                 }
             }
 
-            // Link to a plant
+            // Link to a plant (Static for now as per your design)
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Link to a plant ", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
@@ -120,7 +132,6 @@ fun APStep2Content(
                         .padding(horizontal = 13.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Leaf/Plant Icon placeholder
                     Box(modifier = Modifier.size(16.dp).background(GreenPrimary, CircleShape))
                     Spacer(modifier = Modifier.width(9.dp))
                     Text("Select a plant to link", fontSize = 14.sp, color = GrayMedium, modifier = Modifier.weight(1f))
@@ -129,7 +140,7 @@ fun APStep2Content(
             }
         }
 
-        // Info Box (.ic)
+        // Info Box
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -141,20 +152,13 @@ fun APStep2Content(
             Icon(Icons.Rounded.Wifi, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "In AP Mode your phone must stay connected to SiliGuide_IoTSensors to receive live sensor readings.",
+                text = "In AP Mode your phone must stay connected to the sensor hotspot to receive live readings.",
                 fontSize = 12.sp,
                 color = GrayBody,
                 lineHeight = 16.sp
             )
         }
-    }
-}
 
-@Preview
-@Composable
-fun Step2Prev() {
-    APStep2Content(
-        onBack = {},
-        qrData = "SiliGuide_IoT_XXXX"
-    )
+        Spacer(modifier = Modifier.weight(1f))
+    }
 }

@@ -41,9 +41,10 @@ import com.example.siliguide.core.ui.theme.*
 fun APStep1Content(
     onScanQrClick: () -> Unit,
     isChecking: Boolean = false,
-    onManualRetry: () -> Unit = {}
+    onManualRetry: () -> Unit = {},
 ) {
     val context = LocalContext.current
+
 
     Column(
         modifier = Modifier
