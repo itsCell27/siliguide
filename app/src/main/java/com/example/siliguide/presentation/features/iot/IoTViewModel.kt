@@ -7,27 +7,36 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.usecase.ConnectToDeviceWifiUseCase
 import com.example.siliguide.domain.usecase.FetchSensorsUseCase
+import com.example.siliguide.domain.usecase.ParseWifiQrUseCase
+import com.example.siliguide.domain.usecase.SaveIoTDeviceUseCase
 import com.example.siliguide.domain.usecase.VerifyDeviceConnectionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import android.net.ConnectivityManager
 
 @HiltViewModel
 class IoTViewModel @Inject constructor(
     private val fetchSensorsUseCase: FetchSensorsUseCase,
     private val connectToDeviceWifiUseCase: ConnectToDeviceWifiUseCase,
     private val verifyDeviceConnectionUseCase: VerifyDeviceConnectionUseCase,
+    private val parseWifiQrUseCase: ParseWifiQrUseCase,
+    private val saveIoTDeviceUseCase: SaveIoTDeviceUseCase, // Added this
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -43,11 +52,26 @@ class IoTViewModel @Inject constructor(
     var connectedDeviceId by mutableStateOf<String?>(null)
         private set
 
+    // NEW: Variable to store the pairing token from firmware
+    var pairingToken by mutableStateOf<String?>(null)
+        private set
+
     private val _apConnectionState = MutableStateFlow("IDLE")
     val apConnectionState: StateFlow<String> = _apConnectionState
 
+    // SharedFlow to trigger navigation when saving is done
+    private val _setupComplete = MutableSharedFlow<Unit>()
+    val setupComplete: SharedFlow<Unit> = _setupComplete.asSharedFlow()
+
     // NEW: A reference to hold our polling loop so we can cancel it
     private var pollingJob: Job? = null
+
+    var deviceName by mutableStateOf("")
+        private set
+
+    fun updateDeviceName(name: String) {
+        deviceName = name
+    }
 
     // =========================================================================
     // LIVE DASHBOARD POLLING LOGIC
@@ -108,43 +132,60 @@ class IoTViewModel @Inject constructor(
     // AP CONNECTION & VERIFICATION LOGIC
     // =========================================================================
 
-    fun connectToDeviceFromQr(raw: String) {
-        val result = parseDeviceQr(raw)
+    private fun isWifiEnabled(): Boolean {
+        val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        return wifiManager.isWifiEnabled
+    }
 
-        if (result != null) {
-            val (ssid, password) = result
+    fun connectToDeviceFromQr(raw: String) {
+
+        val credentials = parseWifiQrUseCase(raw)
+
+        if (credentials != null) {
+
+            if (!isWifiEnabled()) {
+                _apConnectionState.value = "WIFI_OFF"
+                error = "WiFi is turned off. Please enable WiFi to connect to the IoT device."
+                return
+            }
+
+            // security validation
+            if (!credentials.ssid.startsWith("SiliGuide")) {
+                _apConnectionState.value = "INVALID_QR"
+                error = "This is not a SiliGuide device."
+                return
+            }
+
             _apConnectionState.value = "CONNECTING"
 
             connectToDeviceWifiUseCase(
-                ssid,
-                password,
+                credentials.ssid,
+                credentials.password,
+
                 onSuccess = {
+
                     viewModelScope.launch {
+
                         delay(1500)
+
                         verifyEsp32ConnectionViaIp()
                     }
                 },
+
                 onFailure = {
+
                     _apConnectionState.value = "FAILED"
+
                     error = "Failed to connect to the sensor's Wi-Fi network."
                 }
             )
+
         } else {
+
             _apConnectionState.value = "INVALID_QR"
+
             error = "Invalid QR Code format."
         }
-    }
-
-    private fun parseDeviceQr(raw: String): Pair<String, String>? {
-        return try {
-            val parts = raw.split(";").associate {
-                val (key, value) = it.split("=")
-                key to value
-            }
-            val ssid = parts["SSID"] ?: return null
-            val pass = parts["PASS"] ?: ""
-            ssid to pass
-        } catch (e: Exception) { null }
     }
 
     private suspend fun verifyEsp32ConnectionViaIp() = withContext(Dispatchers.IO) {
@@ -153,10 +194,17 @@ class IoTViewModel @Inject constructor(
         repeat(5) { attempt ->
             val result = verifyDeviceConnectionUseCase()
 
-            result.onSuccess { deviceId ->
-                Log.d("AP_DEBUG", "Verification Success! Connected to $deviceId")
+            result.onSuccess { info ->
+                Log.d("AP_DEBUG", "Verification Success! Connected to ${info.deviceId}")
                 withContext(Dispatchers.Main) {
-                    connectedDeviceId = deviceId
+                    connectedDeviceId = info.deviceId
+                    pairingToken = info.token
+
+                    // Set default name automatically if user hasn't typed one
+                    if (deviceName.isEmpty()) {
+                        deviceName = "SiliGuide Node ${info.deviceId}"
+                    }
+
                     _apConnectionState.value = "CONNECTED"
                     error = null
                 }
@@ -176,6 +224,34 @@ class IoTViewModel @Inject constructor(
         }
     }
 
+    /**
+     * FINAL STEP: Saves the device to the SQLDelight database
+     */
+    fun finalizeSetup(customName: String) {
+        viewModelScope.launch {
+            val id = connectedDeviceId ?: return@launch
+            val token = pairingToken ?: "" // This is the token from your firmware /info
+
+            val newDevice = IoTDevice(
+                deviceId = id,
+                deviceName = customName,
+                deviceIdentifier = token, // Saved pairing token for future API calls
+                isActive = true,
+                lastKnownIp = "192.168.4.1", // Standard for AP mode
+                connectionMode = "AP"
+            )
+
+            try {
+                saveIoTDeviceUseCase(newDevice)
+                Log.d("AP_DEBUG", "Device saved to database successfully.")
+                _setupComplete.emit(Unit) // Tell the UI to go to Dashboard
+            } catch (e: Exception) {
+                Log.d(e.toString(), "Error saving device to database.")
+                error = "Database Error: Could not save device."
+            }
+        }
+    }
+
     fun forceCheckConnection() {
         Log.d("AP_DEBUG", "Force checking connection (user initiated)")
         _apConnectionState.value = "CONNECTING"
@@ -184,4 +260,28 @@ class IoTViewModel @Inject constructor(
             verifyEsp32ConnectionViaIp()
         }
     }
+
+    fun disconnectFromDeviceWifi() {
+        Log.d("AP_DEBUG", "Disconnecting from device WiFi...")
+
+        viewModelScope.launch {
+            // Unbind app from network
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                    as ConnectivityManager
+            connectivityManager.bindProcessToNetwork(null)
+
+            // ALSO disconnect device from hotspot completely
+            val wifiManager = context.getSystemService(Context.WIFI_SERVICE)
+                    as android.net.wifi.WifiManager
+            wifiManager.disconnect()  // ← DISCONNECT DEVICE TOO
+
+            // Reset state
+            _apConnectionState.value = "IDLE"
+            connectedDeviceId = null
+            pairingToken = null
+            deviceName = ""
+            error = null
+        }
+    }
+
 }
