@@ -19,10 +19,15 @@ class WifiProvisioningManager {
             return
         }
 
-        val specifier = WifiNetworkSpecifier.Builder()
+        val builder = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
-            .setWpa2Passphrase(password)
-            .build()
+
+        // Only apply password if network is secured
+        if (password.isNotEmpty()) {
+            builder.setWpa2Passphrase(password)
+        }
+
+        val specifier = builder.build()
 
         val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
