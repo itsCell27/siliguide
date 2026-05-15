@@ -2,6 +2,7 @@ package com.example.siliguide.presentation.features.analysis
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,6 +14,7 @@ import com.example.siliguide.core.ml.Prediction
 import com.example.siliguide.domain.engine.RuleResult
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.usecase.AnalyzePlantUseCase
+import com.example.siliguide.domain.usecase.FetchSensorsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +25,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AnalysisViewModel @Inject constructor(
     private val analyzePlantUseCase: AnalyzePlantUseCase,
-    @param:ApplicationContext private val context: Context// Need Context to load ML Models!
+    private val fetchSensorsUseCase: FetchSensorsUseCase,
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     var ruleResult by mutableStateOf<RuleResult?>(null)
@@ -35,26 +38,36 @@ class AnalysisViewModel @Inject constructor(
     var isAnalyzing by mutableStateOf(false)
         private set
 
-    fun analyzeImage(bitmap: Bitmap, sensorData: SensorResponse?) {
+    fun analyzeImage(bitmap: Bitmap) {
         isAnalyzing = true
-        analysisError = null
+        analysisError = null // Clear previous errors
 
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                // 1. Run Gatekeeper
+                // 1. Check if it's a leaf
                 val leafChecker = LabuyoLeafChecker(context)
                 val isLabuyo = try { leafChecker.isLeaf(bitmap) } finally { leafChecker.close() }
 
                 if (isLabuyo) {
-                    // 2. Run Classifier
+                    // 2. Run ML Classification
                     val classifier = LeafClassifier(context)
                     val finalResult = try { classifier.predict(bitmap) } finally { classifier.close() }
 
+                    // 3. Try to get Sensor Data
+                    val sensorData = try {
+                        val data = fetchSensorsUseCase()
+                        Log.d("AnalysisViewModel", "Sensor Data Received: $data")
+                        data
+                    } catch (e: Exception) {
+                        // LOG THE EXACT ERROR: This will tell you if it's a Timeout or Wrong IP
+                        Log.e("AnalysisViewModel", "CRITICAL: Sensor Fetch Failed: ${e.message}", e)
+                        null 
+                    }
+
                     withContext(Dispatchers.Main) {
                         prediction = finalResult
-                        // 3. Trigger Rule Engine
+                        // 4. Pass results to Rule Engine
                         ruleResult = analyzePlantUseCase(finalResult.label, sensorData)
-
                         isAnalyzing = false
                     }
                 } else {
@@ -64,6 +77,7 @@ class AnalysisViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
+                Log.e("AnalysisViewModel", "Analysis Pipeline Crashed", e)
                 withContext(Dispatchers.Main) {
                     analysisError = "Analysis failed: ${e.localizedMessage}"
                     isAnalyzing = false
