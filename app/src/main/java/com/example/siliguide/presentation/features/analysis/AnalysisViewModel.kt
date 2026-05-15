@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.siliguide.core.ml.GatekeeperResult
 import com.example.siliguide.core.ml.LabuyoLeafChecker
 import com.example.siliguide.core.ml.LeafClassifier
 import com.example.siliguide.core.ml.Prediction
@@ -38,17 +39,34 @@ class AnalysisViewModel @Inject constructor(
     var isAnalyzing by mutableStateOf(false)
         private set
 
+    var gatekeeperFeatureMaps by mutableStateOf<Array<Array<Array<FloatArray>>>?>(null)
+        private set
+
     fun analyzeImage(bitmap: Bitmap) {
         isAnalyzing = true
         analysisError = null // Clear previous errors
+        gatekeeperFeatureMaps = null // Reset the map for a new image
 
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                // 1. Check if it's a leaf
+                // 1. Run the Gatekeeper
                 val leafChecker = LabuyoLeafChecker(context)
-                val isLabuyo = try { leafChecker.isLeaf(bitmap) } finally { leafChecker.close() }
 
-                if (isLabuyo) {
+                // We now expect a GatekeeperResult object, not just a Boolean
+                val gatekeeperResult: GatekeeperResult = try {
+                    leafChecker.checkLeaf(bitmap)
+                } finally {
+                    leafChecker.close()
+                }
+
+                // If the model says it IS a leaf...
+                if (gatekeeperResult.isLeaf) {
+
+                    // Store the feature maps in our state for the UI
+                    withContext(Dispatchers.Main) {
+                        gatekeeperFeatureMaps = gatekeeperResult.featureMaps
+                    }
+
                     // 2. Run ML Classification
                     val classifier = LeafClassifier(context)
                     val finalResult = try { classifier.predict(bitmap) } finally { classifier.close() }
@@ -59,9 +77,8 @@ class AnalysisViewModel @Inject constructor(
                         Log.d("AnalysisViewModel", "Sensor Data Received: $data")
                         data
                     } catch (e: Exception) {
-                        // LOG THE EXACT ERROR: This will tell you if it's a Timeout or Wrong IP
                         Log.e("AnalysisViewModel", "CRITICAL: Sensor Fetch Failed: ${e.message}", e)
-                        null 
+                        null
                     }
 
                     withContext(Dispatchers.Main) {
@@ -71,7 +88,9 @@ class AnalysisViewModel @Inject constructor(
                         isAnalyzing = false
                     }
                 } else {
+                    // Even if it's NOT a leaf, we still want to show the heatmap so the user sees WHY it failed
                     withContext(Dispatchers.Main) {
+                        gatekeeperFeatureMaps = gatekeeperResult.featureMaps
                         analysisError = "Not a Siling Labuyo leaf. Please retake."
                         isAnalyzing = false
                     }

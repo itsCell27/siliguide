@@ -10,17 +10,50 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import androidx.core.graphics.scale
 
+data class GatekeeperResult(
+    val isLeaf: Boolean,
+    val confidence: Float,
+    val featureMaps: Array<Array<Array<FloatArray>>>?
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as GatekeeperResult
+
+        if (isLeaf != other.isLeaf) return false
+        if (confidence != other.confidence) return false
+        if (featureMaps != null) {
+            if (other.featureMaps == null) return false
+            if (!featureMaps.contentDeepEquals(other.featureMaps)) return false
+        } else if (other.featureMaps != null) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = isLeaf.hashCode()
+        result = 31 * result + confidence.hashCode()
+        result = 31 * result + (featureMaps?.contentDeepHashCode() ?: 0)
+        return result
+    }
+}
+
 class LabuyoLeafChecker(context: Context) {
 
     private var interpreter: Interpreter? = null
     private var inputWidth: Int = 224
     private var inputHeight: Int = 224
-    private var outputSize: Int = 1
+
+    // FIX 2: Variables to track which output is which (TFLite sometimes swaps them)
+    private var predictionOutputIndex: Int = 0
+    private var featureMapOutputIndex: Int = 1
 
     init {
         try {
             val appContext = context.applicationContext
-            val fileDescriptor = appContext.assets.openFd("models/gatekeeper2_v3small.tflite")
+            // Make sure this points to your newly converted DUAL OUTPUT .tflite file
+            val fileDescriptor = appContext.assets.openFd("models/gatekeeper2_dual_output_v3small.tflite")
             val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
             val fileChannel = inputStream.channel
 
@@ -30,7 +63,6 @@ class LabuyoLeafChecker(context: Context) {
                 fileDescriptor.declaredLength
             )
 
-            // FIX 3: Close streams after mapping to avoid file descriptor leaks
             inputStream.close()
             fileDescriptor.close()
 
@@ -41,43 +73,72 @@ class LabuyoLeafChecker(context: Context) {
             inputHeight = inputShape[1]
             inputWidth = inputShape[2]
 
-            val outputShape = tempInterpreter.getOutputTensor(0).shape()
-            outputSize = outputShape[1]
+            // FIX 2 (Continued): Dynamically map the outputs based on their shape
+            val shape0 = tempInterpreter.getOutputTensor(0).shape()
+            if (shape0.size == 2) {
+                // Shape is [1, 2] -> This is the prediction
+                predictionOutputIndex = 0
+                featureMapOutputIndex = 1
+            } else {
+                // Shape is [1, 7, 7, 576] -> This is the feature map
+                predictionOutputIndex = 1
+                featureMapOutputIndex = 0
+            }
 
             interpreter = tempInterpreter
-            Log.d("LabuyoLeafChecker", "Gatekeeper model loaded. Input: ${inputWidth}x${inputHeight}, Output: $outputSize")
+            Log.d("LabuyoLeafChecker", "Dual-Output Gatekeeper model loaded. Input: ${inputWidth}x${inputHeight}")
         } catch (e: Exception) {
             Log.e("LabuyoLeafChecker", "FATAL: Failed to load gatekeeper model", e)
         }
     }
 
-    fun isLeaf(bitmap: Bitmap): Boolean {
-        Log.d("LabuyoLeafChecker", "isLeaf() called - starting verification")
+    // FIX 1 (Continued): Change return type to our new Data Class
+    fun checkLeaf(bitmap: Bitmap): GatekeeperResult {
+        Log.d("LabuyoLeafChecker", "checkLeaf() called - starting verification")
 
         val currentInterpreter = interpreter ?: run {
             Log.e("LabuyoLeafChecker", "Verification failed: Interpreter is NULL")
-            return false
+            return GatekeeperResult(false, 0f, null)
         }
 
         return try {
             val input = preprocess(bitmap)
-            val output = Array(1) { FloatArray(outputSize) }
 
-            currentInterpreter.run(input, output)
+            // FIX 3: Setup Multiple Outputs
+            val inputs = arrayOf(input)
 
-            // Model output: [non_siling_labuyo_leaf, siling_labuyo_leaf]
-            // Index 0 = non_siling_labuyo_leaf, Index 1 = siling_labuyo_leaf
-            val labuyoScore = output[0][1]
+            // Buffer for Output 0: [1 batch, 2 classes]
+            val predictionsBuffer = Array(1) { FloatArray(2) }
+
+            // Buffer for Output 1: [1 batch, 7 height, 7 width, 576 channels]
+            val featureMapsBuffer = Array(1) { Array(7) { Array(7) { FloatArray(576) } } }
+
+            // Map the buffers to the correct TFLite output indices we found in init{}
+            val outputs = mutableMapOf<Int, Any>()
+            outputs[predictionOutputIndex] = predictionsBuffer
+            outputs[featureMapOutputIndex] = featureMapsBuffer
+
+            // RUN DUAL INFERENCE
+            currentInterpreter.runForMultipleInputsOutputs(inputs, outputs)
+
+            // Extract Results
+            val labuyoScore = predictionsBuffer[0][1]
             val result = labuyoScore > 0.5f
 
             Log.d(
                 "LabuyoLeafChecker",
-                "non_labuyo=${output[0][0]}, siling_labuyo=${output[0][1]} → isLeaf=$result"
+                "non_labuyo=${predictionsBuffer[0][0]}, siling_labuyo=${predictionsBuffer[0][1]} → isLeaf=$result"
             )
-            result
+
+            GatekeeperResult(
+                isLeaf = result,
+                confidence = labuyoScore,
+                featureMaps = featureMapsBuffer // Passing the visual data to the UI!
+            )
+
         } catch (e: Exception) {
-            Log.e("LabuyoLeafChecker", "Error during isLeaf execution", e)
-            false
+            Log.e("LabuyoLeafChecker", "Error during checkLeaf execution", e)
+            GatekeeperResult(false, 0f, null)
         }
     }
 
