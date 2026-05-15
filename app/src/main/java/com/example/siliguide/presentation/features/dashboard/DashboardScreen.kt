@@ -40,6 +40,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.presentation.features.iot.IoTViewModel
 import kotlinx.coroutines.launch
+import android.text.format.DateFormat
+import com.example.siliguide.domain.model.IoTDevice
+import com.example.siliguide.domain.model.Plant
 
 // Status colors (extend theme)
 object StatusColors {
@@ -52,13 +55,6 @@ object StatusColors {
     val NoneBg = OffWhite
     val NoneText = GrayMedium
 }
-
-data class IoTDevice(
-    val id: String,
-    val name: String,
-    val isConnected: Boolean,
-    val mode: String = "Monitoring"
-)
 
 data class PlantCondition(
     val status: String, // healthy, warning, danger, none
@@ -78,34 +74,32 @@ fun DashboardScreen(
     onNavigateToCamera: () -> Unit,
     onNavigateToAddPlant: () -> Unit,
     onNavigateToAddIoT: () -> Unit,
+    onNavigateToPlantDetail: (plantId: String) -> Unit,
     onNavigateToSeeAll: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     var isAddMenuOpen by remember { mutableStateOf(false) }
 
-    // Sample data
-    val iotDevices = listOf(
-        IoTDevice("iot1", "Pot Sensor 1", true),
-        IoTDevice("iot2", "Pot Sensor 2", false),
-    )
+    // 1. Map Domain Plants to UI PlantItems
+    val displayPlants = uiState.plants.map { domainPlant ->
+        // This find logic now correctly looks at Domain models
+        val linkedDevice = uiState.devices.find { it.deviceId == domainPlant.deviceId }
 
-    val plants = listOf(
         PlantItem(
-            "plant1",
-            "Balcony Sili",
-            PlantCondition("healthy", "Pot Sensor 1", true, "Apr 24")
-        ),
-        PlantItem(
-            "plant2",
-            "Backyard Sili",
-            PlantCondition("warning", "Pot Sensor 2", false, "Apr 24")
-        ),
-        PlantItem(
-            "plant3",
-            "Pot #3",
-            PlantCondition("danger", null, false, "Apr 20")
-        ),
-    )
+            id = domainPlant.plantId,
+            name = domainPlant.name,
+            condition = PlantCondition(
+                status = "none", // Rule 6: Initial state
+                deviceName = linkedDevice?.deviceName,
+                isDeviceConnected = linkedDevice?.isActive ?: false,
+                lastUpdated = DateFormat.format("MMM dd", domainPlant.dateCreated).toString()
+            )
+        )
+    }
+
+    // 2. Use domain devices directly - no mapping needed
+    val displayDevices = uiState.devices
 
     Box(modifier = Modifier.fillMaxSize().background(OffWhite)) {
 
@@ -119,11 +113,15 @@ fun DashboardScreen(
             // TOP BAR
             TopBarSection()
 
-            // IOT DEVICES SECTION
-            IoTDevicesSection(devices = iotDevices, onAddDevice = onNavigateToAddIoT)
+            // Pass the REAL data from the database
+            IoTDevicesSection(devices = displayDevices, onAddDevice = onNavigateToAddIoT)
 
-            // PLANTS SECTION
-            PlantsSection(plants = plants, onSeeAll = onNavigateToSeeAll)
+            // Pass the REAL data from the database
+            PlantsSection(
+                plants = displayPlants,
+                onSeeAll = onNavigateToSeeAll,
+                onNavigateToPlantDetail = onNavigateToPlantDetail
+            )
 
             TestIoTScreen()
         }
@@ -328,7 +326,7 @@ fun IoTDeviceCard(device: IoTDevice) {
                         .size(7.dp)
                         .clip(CircleShape)
                         .background(
-                            if (device.isConnected) GreenPrimary
+                            if (device.isActive) GreenPrimary
                             else GrayLight
                         )
                 )
@@ -336,7 +334,7 @@ fun IoTDeviceCard(device: IoTDevice) {
 
             // Device Name
             Text(
-                text = device.name,
+                text = device.deviceName,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = DMSans,
@@ -346,11 +344,11 @@ fun IoTDeviceCard(device: IoTDevice) {
 
             // Status text
             Text(
-                text = if (device.isConnected) "Connected" else "Offline",
+                text = if (device.isActive) "Connected" else "Offline",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = DMSans,
-                color = if (device.isConnected) GreenPrimary
+                color = if (device.isActive) GreenPrimary
                 else GrayHint
             )
         }
@@ -358,7 +356,11 @@ fun IoTDeviceCard(device: IoTDevice) {
 }
 
 @Composable
-fun PlantsSection(plants: List<PlantItem>, onSeeAll: () -> Unit) {
+fun PlantsSection(
+    plants: List<PlantItem>,
+    onSeeAll: () -> Unit,
+    onNavigateToPlantDetail: (plantId: String) -> Unit
+) {
     Column(modifier = Modifier.padding(vertical = 14.dp)) {
         // Section Header
         Row(
@@ -435,7 +437,10 @@ fun PlantsSection(plants: List<PlantItem>, onSeeAll: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 plants.forEach { plant ->
-                    PlantCard(plant = plant)
+                    PlantCard(
+                        plant = plant,
+                        onNavigateToDetail = { onNavigateToPlantDetail(plant.id) }
+                    )
                 }
             }
         }
@@ -443,9 +448,14 @@ fun PlantsSection(plants: List<PlantItem>, onSeeAll: () -> Unit) {
 }
 
 @Composable
-fun PlantCard(plant: PlantItem) {
+fun PlantCard(
+    plant: PlantItem,
+    onNavigateToDetail: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onNavigateToDetail() },
         colors = CardDefaults.cardColors(containerColor = White),
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, Border)
