@@ -20,7 +20,7 @@ class LabuyoLeafChecker(context: Context) {
     init {
         try {
             val appContext = context.applicationContext
-            val fileDescriptor = appContext.assets.openFd("models/gatekeeper_v3small.tflite")
+            val fileDescriptor = appContext.assets.openFd("models/gatekeeper2_v3small.tflite")
             val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
             val fileChannel = inputStream.channel
 

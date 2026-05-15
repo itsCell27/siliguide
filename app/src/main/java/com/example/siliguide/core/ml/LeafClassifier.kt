@@ -26,7 +26,7 @@ class LeafClassifier(context: Context) {
 
     init {
         try {
-            val fileDescriptor = context.assets.openFd("models/siliguide_model2.3_v3small_finetuned.tflite")
+            val fileDescriptor = context.assets.openFd("models/siliguide_model2.4.5_v3small.tflite")
             val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
             val fileChannel = inputStream.channel
 
