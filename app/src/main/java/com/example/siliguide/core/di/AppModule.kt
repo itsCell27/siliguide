@@ -1,8 +1,7 @@
 package com.example.siliguide.core.di
 
+import android.app.Application
 import com.example.siliguide.data.remote.iot.Esp32Api
-import com.example.siliguide.data.repository.Esp32Repository
-import com.example.siliguide.domain.repository.IoTRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -10,7 +9,8 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import android.content.Context
 import app.cash.sqldelight.db.SqlDriver
-import com.example.siliguide.data.local.sqldelight.DatabaseDriverFactory
+import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import com.example.siliguide.data.local.SiliGuideDatabase
 import com.example.siliguide.data.remote.iot.WifiProvisioningManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 
@@ -29,23 +29,13 @@ object AppModule {
         return WifiProvisioningManager()
     }
 
-    // Tell Hilt: "When a UseCase asks for an IoTRepository, give it an Esp32Repository"
-    @Provides
-    fun provideIoTRepository(
-        api: Esp32Api,
-        wifiProvisioningManager: WifiProvisioningManager,
-        @ApplicationContext context: Context
-    ): IoTRepository {
-        return Esp32Repository(
-            api,
-            wifiProvisioningManager,
-            context
-        )
-    }
-
     @Provides
     @Singleton
-    fun provideDatabaseDriver(@ApplicationContext context: Context): SqlDriver {
-        return DatabaseDriverFactory(context).createDriver()
+    fun provideSqlDriver(app: Application): SqlDriver {
+        return AndroidSqliteDriver(
+            schema = SiliGuideDatabase.Schema,
+            context = app,
+            name = "siliguide.db"
+        )
     }
 }
