@@ -15,6 +15,8 @@ import com.example.siliguide.presentation.features.iot.ConnectionMode
 import com.example.siliguide.presentation.features.iot.IoTSetupConnectionModeScreen
 import com.example.siliguide.presentation.features.iot.ap_setup.IoTSetupAPModeScreen
 import com.example.siliguide.presentation.features.iot.components.QrScannerScreen
+import com.example.siliguide.presentation.features.plants.AddPlantScreen
+import com.example.siliguide.presentation.features.plants.PlantDetailScreen
 
 @Composable
 fun SiliGuideNavGraph(
@@ -32,12 +34,20 @@ fun SiliGuideNavGraph(
                 onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
                 onNavigateToAddPlant = { navController.navigate(Screen.AddPlant.route) },
                 onNavigateToAddIoT = { navController.navigate(Screen.IoTSetup.route) },
+                onNavigateToPlantDetail = { plantId ->  // ← ADD THIS
+                    navController.navigate(Screen.PlantDetail.createRoute(plantId))
+                },
                 onNavigateToSeeAll = { /* Future: Navigate to history list */ }
             )
         }
 
         // --- PLANT MANAGEMENT ---
-        composable(Screen.AddPlant.route) { /* AddPlantScreen() */ }
+        composable(route = Screen.AddPlant.route) {
+            AddPlantScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCamera = { navController.navigate(Screen.Camera.route)}
+            )
+        }
 
         composable(
             route = Screen.PlantDetail.route,
@@ -126,12 +136,25 @@ fun SiliGuideNavGraph(
             AnalysisResultScreen(
                 imageUri = decodedUri,
                 onNavigateBack = {
-                    navController.popBackStack(Screen.Dashboard.route, inclusive = false)
+                    navController.popBackStack()
                 },
                 onSaveAsNote = {
                     // Trigger SaveAnalysisUseCase here later
                 }
             )
         }
+
+        composable(
+            route = Screen.PlantDetail.route,
+            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
+            PlantDetailScreen(
+                plantId = plantId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAnalysis = { navController.navigate(Screen.Camera.route) }
+            )
+        }
+
     }
 }
