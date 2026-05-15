@@ -1,22 +1,36 @@
 package com.example.siliguide.data.repository
 
 import android.content.Context
+import app.cash.sqldelight.db.SqlDriver
+import com.example.siliguide.data.local.SiliGuideDatabase
 import com.example.siliguide.data.remote.iot.Esp32Api
 import com.example.siliguide.data.remote.iot.WifiProvisioningManager
+import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.toDomain
+import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.IoTRepository
 import javax.inject.Inject
 
-// This class implements the interface. It knows HOW to get the data (via Ktor API).
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import com.example.siliguide.data.local.mapper.toIotDomain
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
 class Esp32Repository @Inject constructor(
     private val api: Esp32Api,
     private val wifiProvisioningManager: WifiProvisioningManager,
-    private val context: Context
+    @ApplicationContext private val context: Context,
+    driver: SqlDriver
 ) : IoTRepository {
 
+    private val database = SiliGuideDatabase(driver)
+    private val queries = database.siliGuideQueries
+
     override suspend fun getSensors(): SensorResponse {
-        // Fetch the DTO from the API, then immediately map it to the pure Domain model
         val dto = api.getSensorData()
         return dto.toDomain()
     }
@@ -36,19 +50,43 @@ class Esp32Repository @Inject constructor(
         )
     }
 
-    override suspend fun verifyDeviceConnection(): Result<String> {
+    override suspend fun verifyDeviceConnection(): Result<DeviceInfoDto> {
         return try {
             val info = api.getDeviceInfo()
 
-            // Validate the payload
             if (info.device == "SiliGuide" && info.mode == "AP") {
-                Result.success(info.deviceId)
+                Result.success(info)
             } else {
                 Result.failure(Exception("Unrecognized device format."))
             }
         } catch (e: Exception) {
-            // Ktor will automatically throw timeouts or connection errors
             Result.failure(e)
         }
+    }
+
+    // --- DATABASE OPERATIONS ---
+
+    override suspend fun deleteDevice(deviceId: String) {
+        queries.deleteDevice(deviceId)
+    }
+
+    override suspend fun saveDevice(device: IoTDevice) {
+        queries.insertDevice(
+            device_id = device.deviceId,
+            device_name = device.deviceName,
+            device_identifier = device.deviceIdentifier,
+            is_active = if (device.isActive) 1L else 0L,
+            last_known_ip = device.lastKnownIp,
+            connection_mode = device.connectionMode
+        )
+    }
+
+    override fun getAllDevices(): Flow<List<IoTDevice>> {
+        return queries.getAllDevices()
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { sqlEntities ->
+                sqlEntities.map { it.toIotDomain() }
+            }
     }
 }
