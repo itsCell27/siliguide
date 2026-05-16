@@ -1,9 +1,14 @@
 package com.example.siliguide.presentation.features.analysis
 
 import android.graphics.BitmapFactory
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,23 +24,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.draw.blur
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.engine.RuleResult
 
-// ─── Threshold level for sensor chip display ───────────────────────────────
 enum class SensorLevel { LOW, NORMAL, HIGH }
 
 data class SensorRowData(
@@ -44,7 +53,6 @@ data class SensorRowData(
     val level: SensorLevel
 )
 
-// ─── Main Screen ────────────────────────────────────────────────────────────
 @Composable
 fun AnalysisResultScreen(
     imageUri: String,
@@ -55,6 +63,7 @@ fun AnalysisResultScreen(
     val result = viewModel.ruleResult
     val prediction = viewModel.prediction
     val isLoading = viewModel.isAnalyzing
+    val heatmapOverlay = viewModel.heatmapOverlay // ← NEW
     val context = LocalContext.current
     val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -74,7 +83,6 @@ fun AnalysisResultScreen(
         }
     }
 
-    // Determine which state we are in
     val confidence = prediction?.confidence ?: 0f
     val confidencePct = (confidence * 100).toInt()
     val isOutOfScope = !isLoading && (result == null || confidencePct < 50)
@@ -83,7 +91,6 @@ fun AnalysisResultScreen(
         topBar = {
             ResultTopBar(
                 isOutOfScope = isOutOfScope,
-                plantLabel = "Labuyo Plant · Just now",
                 onBack = onNavigateBack
             )
         },
@@ -110,6 +117,7 @@ fun AnalysisResultScreen(
                 OutOfScopeContent(
                     confidencePct = confidencePct,
                     bitmap = bitmapState.value,
+                    heatmapOverlay = heatmapOverlay, // ← NEW
                     padding = padding
                 )
             }
@@ -120,6 +128,7 @@ fun AnalysisResultScreen(
                     confidence = confidence,
                     predictedClass = prediction?.label ?: "Unknown",
                     bitmap = bitmapState.value,
+                    heatmapOverlay = heatmapOverlay, // ← NEW
                     padding = padding
                 )
             }
@@ -127,11 +136,9 @@ fun AnalysisResultScreen(
     }
 }
 
-// ─── Top Bar ────────────────────────────────────────────────────────────────
 @Composable
 fun ResultTopBar(
     isOutOfScope: Boolean,
-    plantLabel: String,
     onBack: () -> Unit
 ) {
     Column(
@@ -177,7 +184,7 @@ fun ResultTopBar(
                     lineHeight = 18.sp
                 )
                 Text(
-                    text = if (isOutOfScope) "Image rejected · just now" else plantLabel,
+                    text = if (isOutOfScope) "Image rejected · just now" else "Labuyo plant · just now",
                     fontSize = 11.sp,
                     color = GrayMedium,
                     modifier = Modifier.padding(top = 1.dp)
@@ -188,8 +195,6 @@ fun ResultTopBar(
     }
 }
 
-// ─── Bottom Bar ─────────────────────────────────────────────────────────────
-
 @Composable
 fun ResultBottomBar(
     isOutOfScope: Boolean,
@@ -198,11 +203,12 @@ fun ResultBottomBar(
 ) {
     Column(
         modifier = Modifier
+            .fillMaxWidth()
             .background(White)
-            .border(topBorder = true)
+            .border(BorderStroke(1.dp, Border), RoundedCornerShape(0.dp))
             .navigationBarsPadding()
-            .padding(horizontal = 18.dp)
-            .padding(top = 10.dp, bottom = 20.dp),
+            .padding(horizontal = 18.dp, vertical = 10.dp)
+            .padding(top = 12.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Button(
@@ -234,17 +240,13 @@ fun ResultBottomBar(
     }
 }
 
-// Helper extension — adds a top hairline border to a Column/Row
-private fun Modifier.border(topBorder: Boolean): Modifier = if (topBorder)
-    this.border(1.dp, Border, RoundedCornerShape(0.dp)) else this
-
-// ─── 10A / 10B Content ──────────────────────────────────────────────────────
 @Composable
 fun ResultContent(
     result: RuleResult,
     confidence: Float,
     predictedClass: String,
     bitmap: android.graphics.Bitmap?,
+    heatmapOverlay: android.graphics.Bitmap?, // ← NEW param
     padding: PaddingValues
 ) {
     val pct = (confidence * 100).toInt()
@@ -257,13 +259,13 @@ fun ResultContent(
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Gray info banner — only for partial (no sensors)
+        // Info banner - only if no sensors
         if (!result.isUsingSensors) {
             InfoBannerCard()
         }
 
-        // 1:1 Leaf image
-        LeafImageCard(bitmap = bitmap)
+        // Leaf image - centered, 1:1 aspect
+        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay) // ← NEW param
 
         // Prediction card
         PredictionResultCard(
@@ -272,11 +274,10 @@ fun ResultContent(
             pct = pct
         )
 
-        // Plant condition card
+        // Plant condition or partial diagnosis
         if (result.isUsingSensors) {
             PlantConditionCard(
-                result = result,
-                confidencePct = pct,
+                condition = result.condition ?: "Unknown",
                 symptom = result.symptoms.firstOrNull() ?: "Unknown"
             )
         } else {
@@ -284,9 +285,8 @@ fun ResultContent(
             SymptomDescriptionCard(symptom = result.symptoms.firstOrNull() ?: "Unknown")
         }
 
-        // Sensor readings — only for full analysis
+        // Sensor readings - only with full analysis
         if (result.isUsingSensors) {
-            // TODO: wire real sensor data from ViewModel when available
             SensorReadingsCard(sensors = emptyList())
         }
 
@@ -301,38 +301,183 @@ fun ResultContent(
     }
 }
 
-// ─── Leaf image ─────────────────────────────────────────────────────────────
+// ─── LeafImageCard with perfectly scaled heatmap overlay ─────────────────
+
 @Composable
-fun LeafImageCard(bitmap: android.graphics.Bitmap?) {
+fun LeafImageCard(
+    bitmap: android.graphics.Bitmap?,
+    heatmapOverlay: android.graphics.Bitmap? = null // ← null = no heatmap UI
+) {
     if (bitmap == null) return
+
+    var showHeatmap by remember { mutableStateOf(false) }
+
+    // 250 ms fade. Target lowered to 0.55f for standard Python-style CAM transparency
+    val heatmapAlpha by animateFloatAsState(
+        targetValue = if (showHeatmap) 0.55f else 0f,
+        animationSpec = tween(durationMillis = 250),
+        label = "heatmap_alpha"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
-            .background(Color(0xFF1F3909))
+            .background(LeafBgDark)
     ) {
+        // Layer 1 — The original leaf photo
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = "Cropped leaf",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
-        // Bottom label
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(10.dp)
-                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                .padding(horizontal = 8.dp, vertical = 3.dp)
-        ) {
-            Text("📷 Cropped sample · 1:1", fontSize = 10.sp, color = White)
+
+        // Layer 2 — The properly scaled CAM Heatmap
+        if (heatmapOverlay != null) {
+            Image(
+                bitmap = heatmapOverlay.asImageBitmap(),
+                contentDescription = "AI Heatmap Overlay",
+                // This scales the 224x224 AI map to perfectly match the layout bounds!
+                contentScale = ContentScale.Crop,
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(4.dp)
+                    .graphicsLayer(alpha = heatmapAlpha)
+            )
+
+            // Layer 3 — Legend top-right, visible only when heatmap is on
+            if (showHeatmap) {
+                HeatmapLegend(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                )
+            }
+        }
+
+        // Layer 4 — Eye toggle button bottom-right
+        if (heatmapOverlay != null) {
+            HeatmapToggleButton(
+                isActive = showHeatmap,
+                onToggle = { showHeatmap = !showHeatmap },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+            )
         }
     }
 }
 
-// ─── Info banner ────────────────────────────────────────────────────────────
+/**
+ * Eye-off / eye-on toggle. Tint shifts to #FF8A4C when active, matching
+ * `.img-card.heat-on .heat-btn { color: #FF8A4C }` in the HTML.
+ * Drawn inline via Canvas — no drawable resource required.
+ */
+@Composable
+fun HeatmapToggleButton(
+    isActive: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val iconTint = if (isActive) Color(0xFFFF8A4C) else White
+
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.1f))
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center
+    ) {
+
+        Canvas(modifier = Modifier.size(16.dp)) {
+            val w = size.width
+            val h = size.height
+
+            val strokeWidthPx = 2.dp.toPx()
+            val stroke = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
+
+            // Outer almond eye shape
+            val eyePath = Path().apply {
+                moveTo(0f, h / 2f)
+                cubicTo(w * 0.25f, 0f,   w * 0.75f, 0f,   w,       h / 2f)
+                cubicTo(w * 0.75f, h,    w * 0.25f, h,    0f,      h / 2f)
+                close()
+            }
+            drawPath(eyePath, color = iconTint, style = stroke)
+
+            // Pupil circle
+            drawCircle(color = iconTint, radius = h * 0.17f, center = Offset(w / 2f, h / 2f))
+
+            // Diagonal slash when eye is OFF (heatmap hidden)
+            if (!isActive) {
+                drawLine(
+                    color = iconTint,
+                    start = Offset(w * 0.12f, h * 0.12f),
+                    end   = Offset(w * 0.88f, h * 0.88f),
+                    strokeWidth = strokeWidthPx, // Use the updated stroke width here too
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Redesigned Horizontal Pill Legend.
+ * Takes up 50% less space so it doesn't block the leaf!
+ */
+@Composable
+fun HeatmapLegend(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp)) // Smooth rounded edges
+            .border(1.dp, White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "AI Focus:  Low",
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = White.copy(alpha = 0.85f),
+            letterSpacing = 0.3.sp
+        )
+
+        // The Gradient Bar (Slightly narrower)
+        Box(
+            modifier = Modifier
+                .width(46.dp)
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0.00f to Color(0xFF1A4DFF),
+                            0.28f to Color(0xFF36F0A0),
+                            0.55f to Color(0xFFFFE000),
+                            0.80f to Color(0xFFFF7A1F),
+                            1.00f to Color(0xFFFF1A1A)
+                        )
+                    )
+                )
+        )
+
+        Text(
+            text = "High",
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = White.copy(alpha = 0.85f),
+            letterSpacing = 0.3.sp
+        )
+    }
+}
+
 @Composable
 fun InfoBannerCard() {
     Row(
@@ -361,7 +506,6 @@ fun InfoBannerCard() {
     }
 }
 
-// ─── Prediction card ────────────────────────────────────────────────────────
 @Composable
 fun PredictionResultCard(
     predictedClass: String,
@@ -371,21 +515,30 @@ fun PredictionResultCard(
     val isHigh = pct >= 80
     val isModerate = pct in 50..79
 
-    // Badge colors
     val badgeBg = when {
-        isHigh -> GreenBgLight; isModerate -> WarningBg; else -> DangerBg
+        isHigh -> GreenBgLight
+        isModerate -> WarningBg
+        else -> DangerBg
     }
     val badgeBd = when {
-        isHigh -> GreenLight; isModerate -> WarningBorder; else -> DangerBorder
+        isHigh -> GreenLight
+        isModerate -> WarningBorder
+        else -> DangerBorder
     }
     val badgeTx = when {
-        isHigh -> GreenDark; isModerate -> Warning; else -> Danger
+        isHigh -> GreenDark
+        isModerate -> Warning
+        else -> Danger
     }
     val badgeLabel = when {
-        isHigh -> "High confidence"; isModerate -> "Moderate"; else -> "Low confidence"
+        isHigh -> "High confidence"
+        isModerate -> "Moderate"
+        else -> "Low confidence"
     }
     val barColor = when {
-        isHigh -> GreenPrimary; isModerate -> Warning; else -> Danger
+        isHigh -> GreenPrimary
+        isModerate -> Warning
+        else -> Danger
     }
 
     Column(
@@ -419,9 +572,9 @@ fun PredictionResultCard(
             )
         }
 
-        // Symptom name
+        // Symptom name - Large
         Text(
-            text = predictedClass,   // "Healthy" / "Curling" / "Spots" / "Yellowing"
+            text = predictedClass,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = Fraunces,
@@ -435,8 +588,18 @@ fun PredictionResultCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Confidence", fontSize = 11.sp, color = GrayMedium, letterSpacing = 0.4.sp)
-            Text("$pct%", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Black)
+            Text(
+                "Confidence",
+                fontSize = 11.sp,
+                color = GrayMedium,
+                letterSpacing = 0.4.sp
+            )
+            Text(
+                "$pct%",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Black
+            )
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -479,7 +642,7 @@ fun PredictionResultCard(
             )
         }
 
-        // Warn box — moderate confidence only
+        // Moderate confidence warning
         if (isModerate) {
             Row(
                 modifier = Modifier
@@ -510,24 +673,23 @@ fun PredictionResultCard(
     }
 }
 
-// ─── Plant Condition card (Full analysis) ───────────────────────────────────
 @Composable
 fun PlantConditionCard(
-    result: RuleResult,
-    symptom: String,
-    confidencePct: Int
+    condition: String,
+    symptom: String
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GreenBgLight, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(GreenBgLight)
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(
@@ -540,12 +702,12 @@ fun PlantConditionCard(
         }
         HorizontalDivider(color = GreenLight)
 
-        // Body — condition name only
+        // Body
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)
         ) {
             Text(
-                text = result.condition ?: "Unknown",
+                text = condition,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Fraunces,
@@ -556,7 +718,6 @@ fun PlantConditionCard(
     }
 }
 
-// ─── Sensor Readings card ───────────────────────────────────────────────────
 @Composable
 fun SensorReadingsCard(sensors: List<SensorRowData>) {
     if (sensors.isEmpty()) return
@@ -566,6 +727,7 @@ fun SensorReadingsCard(sensors: List<SensorRowData>) {
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         // Header
         Row(
@@ -586,11 +748,23 @@ fun SensorReadingsCard(sensors: List<SensorRowData>) {
         }
         HorizontalDivider(color = Border)
 
-        // Sensor rows
+        // Sensor rows (dummy data for now)
         Column(modifier = Modifier.padding(horizontal = 14.dp)) {
-            sensors.forEachIndexed { index, sensor ->
+            val dummySensors = listOf(
+                SensorRowData("Soil Moisture", "65%", SensorLevel.NORMAL),
+                SensorRowData("Soil Temp", "22.5°C", SensorLevel.NORMAL),
+                SensorRowData("Soil pH", "6.8", SensorLevel.NORMAL),
+                SensorRowData("EC", "1.2 mS/cm", SensorLevel.NORMAL),
+                SensorRowData("Nitrogen", "45 ppm", SensorLevel.LOW),
+                SensorRowData("Phosphorus", "32 ppm", SensorLevel.NORMAL),
+                SensorRowData("Potassium", "210 ppm", SensorLevel.NORMAL),
+                SensorRowData("Light Intensity", "45000 lux", SensorLevel.HIGH),
+                SensorRowData("Air Temp", "28°C", SensorLevel.NORMAL)
+            )
+
+            dummySensors.forEachIndexed { index, sensor ->
                 SensorTableRow(sensor = sensor)
-                if (index < sensors.lastIndex) {
+                if (index < dummySensors.lastIndex) {
                     HorizontalDivider(
                         color = Border.copy(alpha = 0.5f),
                         thickness = 0.5.dp,
@@ -624,7 +798,12 @@ fun SensorTableRow(sensor: SensorRowData) {
             ) {
                 Text("·", fontSize = 14.sp, color = GreenPrimary)
             }
-            Text(sensor.name, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Black)
+            Text(
+                sensor.name,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Black
+            )
         }
 
         // Value
@@ -664,7 +843,6 @@ fun SensorChip(level: SensorLevel) {
     }
 }
 
-// ─── Care Recommendations card ──────────────────────────────────────────────
 @Composable
 fun CareRecommendationsCard(items: List<String>) {
     Column(
@@ -672,11 +850,12 @@ fun CareRecommendationsCard(items: List<String>) {
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GreenBgLight, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(GreenBgLight)
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(
@@ -698,7 +877,6 @@ fun CareRecommendationsCard(items: List<String>) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    // Number circle
                     Box(
                         modifier = Modifier
                             .size(20.dp)
@@ -725,7 +903,6 @@ fun CareRecommendationsCard(items: List<String>) {
     }
 }
 
-// ─── Possible Conditions card (Partial) ─────────────────────────────────────
 @Composable
 fun PossibleConditionsCard(causes: List<String>?) {
     Column(
@@ -733,11 +910,12 @@ fun PossibleConditionsCard(causes: List<String>?) {
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(OffWhite, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(OffWhite)
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(
@@ -749,6 +927,7 @@ fun PossibleConditionsCard(causes: List<String>?) {
             )
         }
         HorizontalDivider(color = Border)
+
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -762,7 +941,6 @@ fun PossibleConditionsCard(causes: List<String>?) {
     }
 }
 
-// ─── Symptom description card (Partial) ─────────────────────────────────────
 @Composable
 fun SymptomDescriptionCard(symptom: String) {
     val description = when (symptom.lowercase()) {
@@ -784,6 +962,7 @@ fun SymptomDescriptionCard(symptom: String) {
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
@@ -806,15 +985,24 @@ fun SymptomDescriptionCard(symptom: String) {
                     .background(GreenBgLight, RoundedCornerShape(5.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
-                Text(symptom, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = GreenDark)
+                Text(
+                    symptom,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = GreenDark
+                )
             }
             Spacer(modifier = Modifier.height(7.dp))
-            Text(description, fontSize = 11.sp, color = GrayBody, lineHeight = 16.sp)
+            Text(
+                description,
+                fontSize = 11.sp,
+                color = GrayBody,
+                lineHeight = 16.sp
+            )
         }
     }
 }
 
-// ─── Locked Recommendations card (Partial) ──────────────────────────────────
 @Composable
 fun LockedRecommendationsCard() {
     Column(
@@ -822,11 +1010,12 @@ fun LockedRecommendationsCard() {
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(OffWhite, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(OffWhite)
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(
@@ -846,7 +1035,12 @@ fun LockedRecommendationsCard() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(Icons.Rounded.Info, null, tint = GrayMedium, modifier = Modifier.size(32.dp))
+            Icon(
+                Icons.Rounded.Info,
+                null,
+                tint = GrayMedium,
+                modifier = Modifier.size(32.dp)
+            )
             Text(
                 "Connect an IoT device for tailored advice",
                 fontSize = 12.sp,
@@ -866,11 +1060,11 @@ fun LockedRecommendationsCard() {
     }
 }
 
-// ─── 10C Out-of-scope content ───────────────────────────────────────────────
 @Composable
 fun OutOfScopeContent(
     confidencePct: Int,
     bitmap: android.graphics.Bitmap?,
+    heatmapOverlay: android.graphics.Bitmap?, // ← NEW param
     padding: PaddingValues
 ) {
     Column(
@@ -881,34 +1075,8 @@ fun OutOfScopeContent(
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Smaller 1:1 image
-        if (bitmap != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.65f)
-                    .aspectRatio(1f)
-                    .align(Alignment.CenterHorizontally)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, Border, RoundedCornerShape(14.dp))
-                    .background(Color(0xFF1F3909))
-            ) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Cropped sample",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text("📷 Cropped sample · 1:1", fontSize = 10.sp, color = White)
-                }
-            }
-        }
+        // Image — reuses LeafImageCard; gatekeeper heatmap shown here too
+        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay) // ← replaces the old inline Box
 
         // Rejection hero
         Column(
@@ -931,7 +1099,12 @@ fun OutOfScopeContent(
                     .border(1.5.dp, DangerBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.Close, null, tint = Danger, modifier = Modifier.size(26.dp))
+                Icon(
+                    Icons.Rounded.Close,
+                    null,
+                    tint = Danger,
+                    modifier = Modifier.size(26.dp)
+                )
             }
             Text(
                 "We can't analyze this image",
@@ -959,10 +1132,12 @@ fun OutOfScopeContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Box(modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(Danger))
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Danger)
+                )
                 Text(
                     "Confidence $confidencePct%",
                     fontSize = 10.sp,
@@ -986,7 +1161,7 @@ fun OutOfScopeContent(
             }
         }
 
-        // Supported symptoms 2x2 grid
+        // Supported symptoms grid
         SupportedSymptomsCard()
 
         // Tips
@@ -1007,7 +1182,6 @@ fun OutOfScopeContent(
     }
 }
 
-// ─── Supported symptoms 2x2 grid ────────────────────────────────────────────
 @Composable
 fun SupportedSymptomsCard() {
     Column(
@@ -1015,11 +1189,12 @@ fun SupportedSymptomsCard() {
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GreenBgLight, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(GreenBgLight)
                 .padding(horizontal = 14.dp, vertical = 11.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -1040,35 +1215,31 @@ fun SupportedSymptomsCard() {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ScopeTileCompose(
+                ScopeTile(
                     modifier = Modifier.weight(1f),
                     title = "Healthy",
                     tag = "OK",
-                    desc = "Vibrant green, intact, no spotting or curling",
-                    imageResId = R.drawable.healthy
+                    desc = "Vibrant green, intact, no spotting or curling"
                 )
-                ScopeTileCompose(
+                ScopeTile(
                     modifier = Modifier.weight(1f),
                     title = "Curling",
                     tag = "!",
-                    desc = "Edges roll inward or downward",
-                    imageResId = R.drawable.curling
+                    desc = "Edges roll inward or downward"
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ScopeTileCompose(
+                ScopeTile(
                     modifier = Modifier.weight(1f),
                     title = "Spots",
                     tag = "!",
-                    desc = "Brown/black blemishes on leaf surface",
-                    imageResId = R.drawable.spots
+                    desc = "Brown/black blemishes on leaf surface"
                 )
-                ScopeTileCompose(
+                ScopeTile(
                     modifier = Modifier.weight(1f),
                     title = "Yellowing",
                     tag = "!",
-                    desc = "Loss of green pigment, pale or yellow",
-                    imageResId = R.drawable.yellowing
+                    desc = "Loss of green pigment, pale or yellow"
                 )
             }
         }
@@ -1076,12 +1247,11 @@ fun SupportedSymptomsCard() {
 }
 
 @Composable
-fun ScopeTileCompose(
+fun ScopeTile(
     modifier: Modifier,
     title: String,
     tag: String,
-    desc: String,
-    imageResId: Int
+    desc: String
 ) {
     Column(
         modifier = modifier
@@ -1090,34 +1260,50 @@ fun ScopeTileCompose(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Image(
-            painter = painterResource(id = imageResId),
-            contentDescription = title,
-            contentScale = ContentScale.Crop,
+        // Placeholder for leaf image (using emoji)
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(8.dp))
-        )
+                .background(LeafBgDark),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🌿", fontSize = 28.sp)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Black)
+            Text(
+                title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Black
+            )
             Box(
                 modifier = Modifier
                     .background(GreenBgLight, RoundedCornerShape(4.dp))
                     .padding(horizontal = 6.dp, vertical = 1.dp)
             ) {
-                Text(tag, fontSize = 9.sp, fontWeight = FontWeight.Medium, color = GreenDark)
+                Text(
+                    tag,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = GreenDark
+                )
             }
         }
-        Text(desc, fontSize = 10.sp, color = GrayMedium, lineHeight = 14.sp)
+        Text(
+            desc,
+            fontSize = 10.sp,
+            color = GrayMedium,
+            lineHeight = 14.sp
+        )
     }
 }
 
-// ─── Shared helpers ─────────────────────────────────────────────────────────
 @Composable
 fun ResultBullet(text: String) {
     Row(
@@ -1153,11 +1339,12 @@ fun SectionCard(
             .fillMaxWidth()
             .background(White, RoundedCornerShape(14.dp))
             .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(headerBg, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(headerBg)
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(

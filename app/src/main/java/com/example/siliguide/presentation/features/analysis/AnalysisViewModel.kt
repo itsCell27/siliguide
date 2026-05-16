@@ -108,7 +108,7 @@
                         val generatedErrorOverlay = heatmapGen.generateHeatmap(
                             featureMaps = gatekeeperResult.featureMaps,
                             predictedClassIndex = 0, // 0 is the "non_siling_labuyo_leaf" class index
-                            csvFilename = "weights/leaf_checker_model2_dense_weights.csv"
+                            csvFilename = "weights/leaf_checker2_dense_weights.csv"
                         )
 
                         withContext(Dispatchers.Main) {
