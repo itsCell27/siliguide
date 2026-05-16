@@ -19,7 +19,7 @@ val GrayMedium = Color(0xFF888780)
 val GrayBody = Color(0xFF5F5E5A)
 val Black = Color(0xFF1A1A1A)
 
-// Status
+// Status - Danger (Red)
 val Danger = Color(0xFF791F1F)
 val DangerBg = Color(0xFFFCEBEB)
 val DangerBorder = Color(0xFFE9B7B7)
@@ -37,3 +37,12 @@ val InfoBorder = Color(0xFFB4D0E2)
 // Status - Success (Green)
 val Success = Color(0xFF3B6D11)
 val SuccessBg = Color(0xFFEAF3DE)
+
+// Page backgrounds
+val PageBg = Color(0xFFF4F3EE)
+val PageFrameBg = Color(0xFFF7F7F5)
+
+// Leaf backgrounds
+val LeafBgDark = Color(0xFF1F3909)
+val LeafBgMedium = Color(0xFF2A3D10)
+val LeafBgYellow = Color(0xFF3A4408)

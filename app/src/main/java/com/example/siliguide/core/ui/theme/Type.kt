@@ -6,10 +6,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.*
-import androidx.compose.ui.unit.sp
 import com.example.siliguide.R
 
-// Set of Material typography styles to start with
 // DM Sans (main UI font)
 val DMSans = FontFamily(
     Font(R.font.dmsans_regular, FontWeight.Normal),
@@ -17,41 +15,73 @@ val DMSans = FontFamily(
     Font(R.font.dmsans_bold, FontWeight.Bold)
 )
 
-// Fraunces (only for display)
+// Fraunces (display - serif)
 val Fraunces = FontFamily(
     Font(R.font.fraunces_bold, FontWeight.Bold)
 )
 
 val Typography = Typography(
 
-    // Used for "Add New Plant" top bar and "What's next?" sheet title
+    // Large headings - Fraunces serif
+    displaySmall = TextStyle(
+        fontFamily = Fraunces,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        letterSpacing = (-0.3).sp
+    ),
+
+    headlineLarge = TextStyle(
+        fontFamily = Fraunces,
+        fontWeight = FontWeight.Bold,
+        fontSize = 20.sp,
+        letterSpacing = (-0.3).sp
+    ),
+
     headlineSmall = TextStyle(
         fontFamily = Fraunces,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
         letterSpacing = (-0.3).sp
     ),
+
     titleLarge = TextStyle(
         fontFamily = Fraunces,
         fontWeight = FontWeight.Bold,
         fontSize = 17.sp,
         letterSpacing = (-0.2).sp
     ),
-    // Standard UI fonts
+
+    // Body text
     titleMedium = TextStyle(
         fontFamily = DMSans,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp
     ),
+
     bodyMedium = TextStyle(
         fontFamily = DMSans,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp
     ),
+
+    bodySmall = TextStyle(
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        lineHeight = 16.sp
+    ),
+
     labelSmall = TextStyle(
         fontFamily = DMSans,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         letterSpacing = 0.2.sp
+    ),
+
+    labelMedium = TextStyle(
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        letterSpacing = 0.4.sp
     )
 )
