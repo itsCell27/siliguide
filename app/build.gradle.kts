@@ -114,6 +114,7 @@
 
         // Dependency Injection (Hilt - NEW)
         implementation(libs.hilt.android)
+        implementation(libs.androidx.compose.foundation)
         ksp(libs.hilt.compiler) // Note: KSP is used instead of kapt to improve build speeds
         implementation(libs.androidx.hilt.navigation.compose)
 

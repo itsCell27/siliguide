@@ -38,6 +38,7 @@ dataStore = "1.2.1"
 navigationCompose = "2.9.8"
 coil = "2.7.0"
 accompanist = "0.37.3"
+foundation = "1.11.1"
 
 
 [libraries]
@@ -98,6 +99,7 @@ accompanist-permissions = { module = "com.google.accompanist:accompanist-permiss
 # BACKGROUND & STORAGE
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workManager" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "dataStore" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 
 
 [plugins]
