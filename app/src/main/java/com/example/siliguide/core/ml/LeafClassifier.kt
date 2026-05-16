@@ -17,16 +17,20 @@ class LeafClassifier(context: Context) {
     private var inputHeight: Int = 224
     private var numClasses: Int = 4
 
+    // FIX 2: Variables to track which output is which
+    private var predictionOutputIndex: Int = 0
+    private var featureMapOutputIndex: Int = 1
+
     private val labels = listOf(
-        "leaf_curling",
+        "curling",
         "healthy",
-        "leaf_spots",
+        "spots",
         "yellowing"
     )
 
     init {
         try {
-            val fileDescriptor = context.assets.openFd("models/siliguide_model2.4.5_v3small.tflite")
+            val fileDescriptor = context.assets.openFd("models/leaf_classifier_model2_dual_output_v3small.tflite")
             val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
             val fileChannel = inputStream.channel
 
@@ -46,11 +50,22 @@ class LeafClassifier(context: Context) {
             inputHeight = inputShape[1]
             inputWidth = inputShape[2]
 
-            val outputShape = tempInterpreter.getOutputTensor(0).shape()
-            numClasses = outputShape[1]
+            // FIX 2 (Continued): Dynamically map the outputs based on shape
+            val shape0 = tempInterpreter.getOutputTensor(0).shape()
+            if (shape0.size == 2) {
+                // Shape is [1, 4] -> Prediction Probabilities
+                predictionOutputIndex = 0
+                featureMapOutputIndex = 1
+                numClasses = shape0[1]
+            } else {
+                // Shape is [1, 7, 7, 576] -> Feature Maps
+                predictionOutputIndex = 1
+                featureMapOutputIndex = 0
+                numClasses = tempInterpreter.getOutputTensor(1).shape()[1]
+            }
 
             interpreter = tempInterpreter
-            Log.d("LeafClassifier", "Model loaded. Input: ${inputWidth}x${inputHeight}, Output: $numClasses classes")
+            Log.d("LeafClassifier", "Dual-Output Classifier loaded. Input: ${inputWidth}x${inputHeight}, Output: $numClasses classes")
         } catch (e: Exception) {
             Log.e("LeafClassifier", "Error loading model", e)
         }
@@ -60,24 +75,47 @@ class LeafClassifier(context: Context) {
         val currentInterpreter = interpreter
             ?: throw IllegalStateException("Interpreter is closed or not initialized")
 
-        Log.d("LeafClassifier", "Starting prediction...")
-        val input = preprocess(bitmap)
-        val output = Array(1) { FloatArray(numClasses) }
+        Log.d("LeafClassifier", "Starting dual prediction...")
 
-        currentInterpreter.run(input, output)
+        return try {
+            val input = preprocess(bitmap)
 
-        val scores = output[0]
-        Log.d("LeafClassifier", "Raw scores: ${scores.toList()}")
+            // FIX 3: Setup Multiple Outputs
+            val inputs = arrayOf(input)
 
-        val maxIndex = scores.indices.maxByOrNull { scores[it] } ?: 0
+            // Buffer for Output 0: [1 batch, 4 classes]
+            val predictionsBuffer = Array(1) { FloatArray(numClasses) }
 
-        val result = Prediction(
-            label = labels[maxIndex],
-            confidence = scores[maxIndex],
-            allScores = scores
-        )
-        Log.d("LeafClassifier", "Prediction: ${result.label} (${(result.confidence * 100).toInt()}%)")
-        return result
+            // Buffer for Output 1: [1 batch, 7 height, 7 width, 576 channels]
+            val featureMapsBuffer = Array(1) { Array(7) { Array(7) { FloatArray(576) } } }
+
+            // Map the buffers to the correct TFLite output indices
+            val outputs = mutableMapOf<Int, Any>()
+            outputs[predictionOutputIndex] = predictionsBuffer
+            outputs[featureMapOutputIndex] = featureMapsBuffer
+
+            // RUN DUAL INFERENCE
+            currentInterpreter.runForMultipleInputsOutputs(inputs, outputs)
+
+            // Extract Results
+            val scores = predictionsBuffer[0]
+            Log.d("LeafClassifier", "Raw scores: ${scores.toList()}")
+
+            val maxIndex = scores.indices.maxByOrNull { scores[it] } ?: 0
+
+            val result = Prediction(
+                label = labels[maxIndex],
+                confidence = scores[maxIndex],
+                allScores = scores,
+                featureMaps = featureMapsBuffer // Passing the visual data!
+            )
+            Log.d("LeafClassifier", "Prediction: ${result.label} (${(result.confidence * 100).toInt()}%)")
+            result
+
+        } catch (e: Exception) {
+            Log.e("LeafClassifier", "Error during prediction execution", e)
+            Prediction("Error", 0f, FloatArray(numClasses))
+        }
     }
 
     private fun preprocess(bitmap: Bitmap): ByteBuffer {

@@ -53,7 +53,7 @@ class LabuyoLeafChecker(context: Context) {
         try {
             val appContext = context.applicationContext
             // Make sure this points to your newly converted DUAL OUTPUT .tflite file
-            val fileDescriptor = appContext.assets.openFd("models/gatekeeper2_dual_output_v3small.tflite")
+            val fileDescriptor = appContext.assets.openFd("models/leaf_checker_model2_dual_output_v3small.tflite")
             val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
             val fileChannel = inputStream.channel
 
