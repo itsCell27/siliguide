@@ -24,11 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,19 +41,31 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.ui.draw.blur
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.engine.RuleResult
-
-enum class SensorLevel { LOW, NORMAL, HIGH }
+import com.example.siliguide.domain.engine.ThresholdLevel
 
 data class SensorRowData(
     val name: String,
     val value: String,
-    val level: SensorLevel
+    val level: ThresholdLevel,
+    val iconType: SensorIconType
 )
+
+// Icon variants — drawn inline via Canvas, no drawable resources needed
+enum class SensorIconType {
+    SOIL_TEMP,       // line-graph path
+    SOIL_PH,         // circle + crosshair
+    SOIL_EC,         // 3 horizontal lines
+    SOIL_MOISTURE,   // water-drop fill
+    LETTER_N,        // text "N"
+    LETTER_P,        // text "P"
+    LETTER_K,        // text "K"
+    LIGHT,           // sun: filled circle + 4 rays
+    AIR_TEMP         // thermometer stem + bulb
+}
 
 @Composable
 fun AnalysisResultScreen(
@@ -63,9 +77,11 @@ fun AnalysisResultScreen(
     val result = viewModel.ruleResult
     val prediction = viewModel.prediction
     val isLoading = viewModel.isAnalyzing
-    val heatmapOverlay = viewModel.heatmapOverlay // ← NEW
+    val heatmapOverlay = viewModel.heatmapOverlay
     val context = LocalContext.current
     val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val sensorUiState = viewModel.sensorUiState
+    val predictionName = viewModel.predictionName
 
     LaunchedEffect(imageUri) {
         if (result == null && !isLoading) {
@@ -117,7 +133,7 @@ fun AnalysisResultScreen(
                 OutOfScopeContent(
                     confidencePct = confidencePct,
                     bitmap = bitmapState.value,
-                    heatmapOverlay = heatmapOverlay, // ← NEW
+                    heatmapOverlay = heatmapOverlay,
                     padding = padding
                 )
             }
@@ -126,10 +142,11 @@ fun AnalysisResultScreen(
                 ResultContent(
                     result = result!!,
                     confidence = confidence,
-                    predictedClass = prediction?.label ?: "Unknown",
+                    predictedClass = predictionName ?: "Unknown",
                     bitmap = bitmapState.value,
-                    heatmapOverlay = heatmapOverlay, // ← NEW
-                    padding = padding
+                    heatmapOverlay = heatmapOverlay,
+                    padding = padding,
+                    sensorUiState = sensorUiState,
                 )
             }
         }
@@ -246,8 +263,9 @@ fun ResultContent(
     confidence: Float,
     predictedClass: String,
     bitmap: android.graphics.Bitmap?,
-    heatmapOverlay: android.graphics.Bitmap?, // ← NEW param
-    padding: PaddingValues
+    heatmapOverlay: android.graphics.Bitmap?,
+    padding: PaddingValues,
+    sensorUiState: List<SensorRowData>
 ) {
     val pct = (confidence * 100).toInt()
 
@@ -265,7 +283,7 @@ fun ResultContent(
         }
 
         // Leaf image - centered, 1:1 aspect
-        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay) // ← NEW param
+        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay)
 
         // Prediction card
         PredictionResultCard(
@@ -278,16 +296,16 @@ fun ResultContent(
         if (result.isUsingSensors) {
             PlantConditionCard(
                 condition = result.condition ?: "Unknown",
-                symptom = result.symptoms.firstOrNull() ?: "Unknown"
+                description = result.conditionDescription ?: "Unknown"
             )
         } else {
             PossibleConditionsCard(causes = result.possibleCauses)
-            SymptomDescriptionCard(symptom = result.symptoms.firstOrNull() ?: "Unknown")
+            SymptomDescriptionCard(symptom = result.condition ?: "Unknown")
         }
 
-        // Sensor readings - only with full analysis
-        if (result.isUsingSensors) {
-            SensorReadingsCard(sensors = emptyList())
+        // Draw Sensor Readings if state is available
+        if (result.isUsingSensors && sensorUiState.isNotEmpty()) {
+            SensorReadingsCard(sensors = sensorUiState)
         }
 
         // Care recommendations
@@ -301,18 +319,17 @@ fun ResultContent(
     }
 }
 
-// ─── LeafImageCard with perfectly scaled heatmap overlay ─────────────────
+// ─── LeafImageCard (heatmap overlay) ─────────────────────────────────────────
 
 @Composable
 fun LeafImageCard(
     bitmap: android.graphics.Bitmap?,
-    heatmapOverlay: android.graphics.Bitmap? = null // ← null = no heatmap UI
+    heatmapOverlay: android.graphics.Bitmap? = null
 ) {
     if (bitmap == null) return
 
     var showHeatmap by remember { mutableStateOf(false) }
 
-    // 250 ms fade. Target lowered to 0.55f for standard Python-style CAM transparency
     val heatmapAlpha by animateFloatAsState(
         targetValue = if (showHeatmap) 0.55f else 0f,
         animationSpec = tween(durationMillis = 250),
@@ -327,7 +344,7 @@ fun LeafImageCard(
             .border(1.dp, Border, RoundedCornerShape(14.dp))
             .background(LeafBgDark)
     ) {
-        // Layer 1 — The original leaf photo
+        // Layer 1 — leaf photo
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = "Cropped leaf",
@@ -335,12 +352,11 @@ fun LeafImageCard(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Layer 2 — The properly scaled CAM Heatmap
+        // Layer 2 — CAM heatmap
         if (heatmapOverlay != null) {
             Image(
                 bitmap = heatmapOverlay.asImageBitmap(),
                 contentDescription = "AI Heatmap Overlay",
-                // This scales the 224x224 AI map to perfectly match the layout bounds!
                 contentScale = ContentScale.Crop,
                 filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 modifier = Modifier
@@ -349,7 +365,7 @@ fun LeafImageCard(
                     .graphicsLayer(alpha = heatmapAlpha)
             )
 
-            // Layer 3 — Legend top-right, visible only when heatmap is on
+            // Layer 3 — legend top-right
             if (showHeatmap) {
                 HeatmapLegend(
                     modifier = Modifier
@@ -359,7 +375,7 @@ fun LeafImageCard(
             }
         }
 
-        // Layer 4 — Eye toggle button bottom-right
+        // Layer 4 — eye toggle button bottom-right
         if (heatmapOverlay != null) {
             HeatmapToggleButton(
                 isActive = showHeatmap,
@@ -372,11 +388,6 @@ fun LeafImageCard(
     }
 }
 
-/**
- * Eye-off / eye-on toggle. Tint shifts to #FF8A4C when active, matching
- * `.img-card.heat-on .heat-btn { color: #FF8A4C }` in the HTML.
- * Drawn inline via Canvas — no drawable resource required.
- */
 @Composable
 fun HeatmapToggleButton(
     isActive: Boolean,
@@ -393,15 +404,12 @@ fun HeatmapToggleButton(
             .clickable(onClick = onToggle),
         contentAlignment = Alignment.Center
     ) {
-
         Canvas(modifier = Modifier.size(16.dp)) {
             val w = size.width
             val h = size.height
-
             val strokeWidthPx = 2.dp.toPx()
             val stroke = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
 
-            // Outer almond eye shape
             val eyePath = Path().apply {
                 moveTo(0f, h / 2f)
                 cubicTo(w * 0.25f, 0f,   w * 0.75f, 0f,   w,       h / 2f)
@@ -409,17 +417,14 @@ fun HeatmapToggleButton(
                 close()
             }
             drawPath(eyePath, color = iconTint, style = stroke)
-
-            // Pupil circle
             drawCircle(color = iconTint, radius = h * 0.17f, center = Offset(w / 2f, h / 2f))
 
-            // Diagonal slash when eye is OFF (heatmap hidden)
             if (!isActive) {
                 drawLine(
                     color = iconTint,
                     start = Offset(w * 0.12f, h * 0.12f),
                     end   = Offset(w * 0.88f, h * 0.88f),
-                    strokeWidth = strokeWidthPx, // Use the updated stroke width here too
+                    strokeWidth = strokeWidthPx,
                     cap = StrokeCap.Round
                 )
             }
@@ -427,15 +432,11 @@ fun HeatmapToggleButton(
     }
 }
 
-/**
- * Redesigned Horizontal Pill Legend.
- * Takes up 50% less space so it doesn't block the leaf!
- */
 @Composable
 fun HeatmapLegend(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp)) // Smooth rounded edges
+            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
             .border(1.dp, White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -448,8 +449,6 @@ fun HeatmapLegend(modifier: Modifier = Modifier) {
             color = White.copy(alpha = 0.85f),
             letterSpacing = 0.3.sp
         )
-
-        // The Gradient Bar (Slightly narrower)
         Box(
             modifier = Modifier
                 .width(46.dp)
@@ -467,7 +466,6 @@ fun HeatmapLegend(modifier: Modifier = Modifier) {
                     )
                 )
         )
-
         Text(
             text = "High",
             fontSize = 8.5.sp,
@@ -475,6 +473,252 @@ fun HeatmapLegend(modifier: Modifier = Modifier) {
             color = White.copy(alpha = 0.85f),
             letterSpacing = 0.3.sp
         )
+    }
+}
+
+// ─── Sensor Readings Card — Screen 10A ───────────────────────────────────────
+//
+// Header: plain white bg, title "SENSOR READINGS · AT ANALYSIS" (ink), "9 sensors" (muted)
+// Body top padding: 4dp. Bottom padding: 8dp.
+// Each row: 3-column grid — [icon+name] [value] [chip]
+// Rows separated by 1dp dashed --hairline divider (last row has none).
+// Icon box: 22×22dp, GreenBgLight bg, 6dp corners — contains unique inline Canvas icon.
+// N/P/K rows use a bold letter text instead of a canvas icon.
+// chip-norm → GreenBgLight bg, GreenLight border, GreenDark text
+// chip-low  → InfoBg bg, InfoBorder border, Info text
+// chip-high → DangerBg bg, DangerBorder border, Danger text
+
+@Composable
+fun SensorReadingsCard(sensors: List<SensorRowData>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(White, RoundedCornerShape(14.dp))
+            .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(White)
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SENSOR READINGS · AT ANALYSIS",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Black,
+                letterSpacing = 0.4.sp
+            )
+            Text(
+                text = "${sensors.size} sensors",
+                fontSize = 10.sp,
+                color = GrayMedium
+            )
+        }
+        HorizontalDivider(color = Border)
+
+        Column(
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)
+        ) {
+            sensors.forEachIndexed { index, sensor ->
+                SensorTableRow(sensor = sensor)
+                if (index < sensors.lastIndex) {
+                    DashedDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashedDivider() {
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+    ) {
+        val dashWidth = 6.dp.toPx()
+        val gapWidth = 4.dp.toPx()
+        val y = size.height / 2f
+        var x = 0f
+        while (x < size.width) {
+            drawLine(color = Border, start = Offset(x, y), end = Offset((x + dashWidth).coerceAtMost(size.width), y), strokeWidth = 1.dp.toPx())
+            x += dashWidth + gapWidth
+        }
+    }
+}
+
+@Composable
+fun SensorTableRow(sensor: SensorRowData) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SensorIconBox(iconType = sensor.iconType)
+            Text(text = sensor.name, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Black)
+        }
+        Text(text = sensor.value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
+        SensorChip(level = sensor.level)
+    }
+}
+
+@Composable
+fun SensorIconBox(iconType: SensorIconType) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .background(GreenBgLight, RoundedCornerShape(6.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        when (iconType) {
+            // N / P / K — bold text label, matches HTML `font-size:9px;font-weight:600;color:#3B6D11`
+            SensorIconType.LETTER_N,
+            SensorIconType.LETTER_P,
+            SensorIconType.LETTER_K -> {
+                val letter = when (iconType) {
+                    SensorIconType.LETTER_N -> "N"
+                    SensorIconType.LETTER_P -> "P"
+                    else                    -> "K"
+                }
+                Text(
+                    text = letter,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GreenPrimary
+                )
+            }
+
+            // All other icons drawn on an 11×11dp Canvas to match the HTML SVG viewBox="0 0 11 11"
+            else -> {
+                Canvas(modifier = Modifier.size(11.dp)) {
+                    val w  = size.width
+                    val h  = size.height
+                    val ic = GreenPrimary
+
+                    when (iconType) {
+
+                        // Soil Temp — line graph: M2 8 L5 5 L7 7 L9 4
+                        SensorIconType.SOIL_TEMP -> {
+                            val path = Path().apply {
+                                moveTo(w * 2 / 11f, h * 8 / 11f)
+                                lineTo(w * 5 / 11f, h * 5 / 11f)
+                                lineTo(w * 7 / 11f, h * 7 / 11f)
+                                lineTo(w * 9 / 11f, h * 4 / 11f)
+                            }
+                            drawPath(
+                                path  = path,
+                                color = ic,
+                                style = Stroke(
+                                    width = 1.4.dp.toPx(),
+                                    cap   = StrokeCap.Round,
+                                    join  = StrokeJoin.Round
+                                )
+                            )
+                        }
+
+                        // Soil pH — circle r=3.5 at centre + crosshair lines
+                        SensorIconType.SOIL_PH -> {
+                            drawCircle(
+                                color  = ic,
+                                radius = h * 3.5f / 11f,
+                                center = Offset(w / 2f, h / 2f),
+                                style  = Stroke(width = 1.2.dp.toPx())
+                            )
+                            // horizontal M2.5 5.5 h6
+                            drawLine(ic, Offset(w * 2.5f / 11f, h / 2f), Offset(w * 8.5f / 11f, h / 2f), 1.1.dp.toPx())
+                            // vertical   M5.5 2.5 v6
+                            drawLine(ic, Offset(w / 2f, h * 2.5f / 11f), Offset(w / 2f, h * 8.5f / 11f), 1.1.dp.toPx())
+                        }
+
+                        // Soil EC — 3 horizontal lines at y=3, 5.5, 8
+                        SensorIconType.SOIL_EC -> {
+                            val sw = 1.2.dp.toPx()
+                            val cap = StrokeCap.Round
+                            drawLine(ic, Offset(w * 2 / 11f, h * 3 / 11f),   Offset(w * 9 / 11f, h * 3 / 11f),   sw, cap)
+                            drawLine(ic, Offset(w * 2 / 11f, h * 5.5f / 11f), Offset(w * 9 / 11f, h * 5.5f / 11f), sw, cap)
+                            drawLine(ic, Offset(w * 2 / 11f, h * 8 / 11f),   Offset(w * 9 / 11f, h * 8 / 11f),   sw, cap)
+                        }
+
+                        // Soil Moisture — filled water-drop teardrop
+                        // M5.5 1.5 C5.5 1.5 9 4.5 9 7 C9 8.66 7.43 10 5.5 10 S2 8.66 2 7 C2 4.5 5.5 1.5 5.5 1.5Z
+                        SensorIconType.SOIL_MOISTURE -> {
+                            val drop = Path().apply {
+                                val cx = w / 2f
+                                moveTo(cx, h * 1.5f / 11f)
+                                cubicTo(cx, h * 1.5f / 11f,  w * 9 / 11f, h * 4.5f / 11f,  w * 9 / 11f, h * 7 / 11f)
+                                cubicTo(w * 9 / 11f, h * 8.66f / 11f,  w * 7.43f / 11f, h * 10 / 11f,  cx, h * 10 / 11f)
+                                cubicTo(w * 2 / 11f, h * 8.66f / 11f,  w * 2 / 11f, h * 7 / 11f,  w * 2 / 11f, h * 7 / 11f)
+                                cubicTo(w * 2 / 11f, h * 4.5f / 11f,  cx, h * 1.5f / 11f,  cx, h * 1.5f / 11f)
+                                close()
+                            }
+                            drawPath(drop, color = ic)
+                        }
+
+                        // Light — filled circle r=2 + 4 ray lines (N, S, W, E)
+                        SensorIconType.LIGHT -> {
+                            drawCircle(ic, radius = h * 2 / 11f, center = Offset(w / 2f, h / 2f))
+                            val sw  = 1.dp.toPx()
+                            val cap = StrokeCap.Round
+                            // top
+                            drawLine(ic, Offset(w / 2f, h * 1 / 11f),   Offset(w / 2f, h * 2.4f / 11f), sw, cap)
+                            // bottom
+                            drawLine(ic, Offset(w / 2f, h * 8.6f / 11f), Offset(w / 2f, h * 10 / 11f),  sw, cap)
+                            // left
+                            drawLine(ic, Offset(w * 1 / 11f, h / 2f),   Offset(w * 2.4f / 11f, h / 2f), sw, cap)
+                            // right
+                            drawLine(ic, Offset(w * 8.6f / 11f, h / 2f), Offset(w * 10 / 11f, h / 2f),  sw, cap)
+                        }
+
+                        // Air Temp — vertical stem + filled bulb at bottom
+                        // M5.5 1.5 v6.2   circle cx=5.5 cy=9 r=1.5
+                        SensorIconType.AIR_TEMP -> {
+                            drawLine(
+                                color       = ic,
+                                start       = Offset(w / 2f, h * 1.5f / 11f),
+                                end         = Offset(w / 2f, h * 7.7f / 11f),
+                                strokeWidth = 1.4.dp.toPx(),
+                                cap         = StrokeCap.Round
+                            )
+                            drawCircle(ic, radius = h * 1.5f / 11f, center = Offset(w / 2f, h * 9 / 11f))
+                        }
+
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Sensor chip ──────────────────────────────────────────────────────────────
+// chip-norm → GreenBgLight / GreenLight / GreenDark  "Normal"
+// chip-low  → InfoBg / InfoBorder / Info             "Low"
+// chip-high → DangerBg / DangerBorder / Danger       "High"
+@Composable
+fun SensorChip(level: ThresholdLevel) {
+    val (bg, bd, tx, label) = when (level) {
+        ThresholdLevel.NORMAL -> arrayOf(GreenBgLight, GreenLight, GreenDark, "Normal")
+        ThresholdLevel.LOW -> arrayOf(InfoBg, InfoBorder, Info, "Low")
+        ThresholdLevel.HIGH -> arrayOf(DangerBg, DangerBorder, Danger, "High")
+        ThresholdLevel.UNKNOWN -> arrayOf(OffWhite, Border, GrayBody, "Unknown")
+    }
+    Box(
+        modifier = Modifier
+            .background(bg as Color, RoundedCornerShape(5.dp))
+            .border(1.dp, bd as Color, RoundedCornerShape(5.dp))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
+    ) {
+        Text(text = label as String, fontSize = 9.sp, fontWeight = FontWeight.Medium, color = tx as Color, letterSpacing = 0.4.sp)
     }
 }
 
@@ -676,7 +920,7 @@ fun PredictionResultCard(
 @Composable
 fun PlantConditionCard(
     condition: String,
-    symptom: String
+    description: String
 ) {
     Column(
         modifier = Modifier
@@ -685,7 +929,7 @@ fun PlantConditionCard(
             .border(1.dp, Border, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
     ) {
-        // Header
+        // Header — green bg, uppercase label
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -693,7 +937,7 @@ fun PlantConditionCard(
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(
-                "PLANT CONDITION",
+                text = "PLANT CONDITION",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = GreenDark,
@@ -702,7 +946,7 @@ fun PlantConditionCard(
         }
         HorizontalDivider(color = GreenLight)
 
-        // Body
+        // Body — condition name + description
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)
         ) {
@@ -714,132 +958,14 @@ fun PlantConditionCard(
                 color = Black,
                 letterSpacing = (-0.2f).sp
             )
-        }
-    }
-}
-
-@Composable
-fun SensorReadingsCard(sensors: List<SensorRowData>) {
-    if (sensors.isEmpty()) return
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(White, RoundedCornerShape(14.dp))
-            .border(1.dp, Border, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 11.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                "SENSOR READINGS · AT ANALYSIS",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = Black,
-                letterSpacing = 0.4.sp
-            )
-            Text("9 sensors", fontSize = 10.sp, color = GrayMedium)
-        }
-        HorizontalDivider(color = Border)
-
-        // Sensor rows (dummy data for now)
-        Column(modifier = Modifier.padding(horizontal = 14.dp)) {
-            val dummySensors = listOf(
-                SensorRowData("Soil Moisture", "65%", SensorLevel.NORMAL),
-                SensorRowData("Soil Temp", "22.5°C", SensorLevel.NORMAL),
-                SensorRowData("Soil pH", "6.8", SensorLevel.NORMAL),
-                SensorRowData("EC", "1.2 mS/cm", SensorLevel.NORMAL),
-                SensorRowData("Nitrogen", "45 ppm", SensorLevel.LOW),
-                SensorRowData("Phosphorus", "32 ppm", SensorLevel.NORMAL),
-                SensorRowData("Potassium", "210 ppm", SensorLevel.NORMAL),
-                SensorRowData("Light Intensity", "45000 lux", SensorLevel.HIGH),
-                SensorRowData("Air Temp", "28°C", SensorLevel.NORMAL)
-            )
-
-            dummySensors.forEachIndexed { index, sensor ->
-                SensorTableRow(sensor = sensor)
-                if (index < dummySensors.lastIndex) {
-                    HorizontalDivider(
-                        color = Border.copy(alpha = 0.5f),
-                        thickness = 0.5.dp,
-                        modifier = Modifier.padding(vertical = 0.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SensorTableRow(sensor: SensorRowData) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Icon + name
-        Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .background(GreenBgLight, RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("·", fontSize = 14.sp, color = GreenPrimary)
-            }
-            Text(
-                sensor.name,
+                text = description,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = Black
+                color = Color(0xFF5F5E5A), // --body var from design
+                lineHeight = 16.5.sp       // ~1.5 line-height
             )
         }
-
-        // Value
-        Text(
-            sensor.value,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = GrayBody,
-            modifier = Modifier.padding(end = 10.dp)
-        )
-
-        // Chip
-        SensorChip(level = sensor.level)
-    }
-}
-
-@Composable
-fun SensorChip(level: SensorLevel) {
-    val (bg, bd, tx, label) = when (level) {
-        SensorLevel.NORMAL -> arrayOf(GreenBgLight, GreenLight, GreenDark, "Normal")
-        SensorLevel.LOW -> arrayOf(InfoBg, InfoBorder, Info, "Low")
-        SensorLevel.HIGH -> arrayOf(DangerBg, DangerBorder, Danger, "High")
-    }
-    Box(
-        modifier = Modifier
-            .background(bg as Color, RoundedCornerShape(5.dp))
-            .border(1.dp, bd as Color, RoundedCornerShape(5.dp))
-            .padding(horizontal = 7.dp, vertical = 2.dp)
-    ) {
-        Text(
-            label as String,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Medium,
-            color = tx as Color,
-            letterSpacing = 0.4.sp
-        )
     }
 }
 
@@ -944,13 +1070,13 @@ fun PossibleConditionsCard(causes: List<String>?) {
 @Composable
 fun SymptomDescriptionCard(symptom: String) {
     val description = when (symptom.lowercase()) {
-        "yellowing", "yellowing leaves" ->
+        "yellowing", "yellowing_leaves" ->
             "A loss of green pigment (chlorophyll) where leaves turn pale yellow or pale green. Pattern matters: uniform vs. blotchy vs. between-vein yellowing each point to different causes. Sensor data would help narrow the cause to one specific condition."
 
-        "curling", "leaf curling" ->
+        "curling", "leaf_curling" ->
             "Leaf edges roll inward or downward, reducing surface area to conserve moisture. Can indicate heat, drought, or pest activity. Sensor data helps distinguish between water stress and environmental causes."
 
-        "spots", "leaf spots" ->
+        "spots", "leaf_spots" ->
             "Brown or black blemishes on the leaf surface, which may indicate fungal infection, bacterial disease, or pest damage. Sensor data is helpful to rule out environmental stress."
 
         else ->
@@ -1064,7 +1190,7 @@ fun LockedRecommendationsCard() {
 fun OutOfScopeContent(
     confidencePct: Int,
     bitmap: android.graphics.Bitmap?,
-    heatmapOverlay: android.graphics.Bitmap?, // ← NEW param
+    heatmapOverlay: android.graphics.Bitmap?,
     padding: PaddingValues
 ) {
     Column(
@@ -1075,8 +1201,7 @@ fun OutOfScopeContent(
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Image — reuses LeafImageCard; gatekeeper heatmap shown here too
-        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay) // ← replaces the old inline Box
+        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay)
 
         // Rejection hero
         Column(
