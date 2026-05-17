@@ -14,8 +14,11 @@
     import com.example.siliguide.core.ml.LeafClassifier
     import com.example.siliguide.core.ml.Prediction
     import com.example.siliguide.domain.engine.RuleResult
+    import com.example.siliguide.domain.engine.SiliGuideThresholds
+    import com.example.siliguide.domain.engine.ThresholdEngine
     import com.example.siliguide.domain.usecase.AnalyzePlantUseCase
     import com.example.siliguide.domain.usecase.FetchSensorsUseCase
+    import com.example.siliguide.domain.model.SensorResponse
     import dagger.hilt.android.lifecycle.HiltViewModel
     import dagger.hilt.android.qualifiers.ApplicationContext
     import kotlinx.coroutines.Dispatchers
@@ -46,6 +49,12 @@
         var heatmapOverlay by mutableStateOf<Bitmap?>(null)
             private set
 
+        var sensorUiState by mutableStateOf<List<SensorRowData>>(emptyList())
+            private set
+
+        var predictionName by mutableStateOf<String?>(null)
+            private set
+
         fun analyzeImage(bitmap: Bitmap) {
             isAnalyzing = true
             analysisError = null
@@ -55,6 +64,10 @@
             prediction = null
             ruleResult = null
             heatmapOverlay = null
+
+            sensorUiState = emptyList()
+
+            predictionName = null
 
             viewModelScope.launch(Dispatchers.Default) {
                 try {
@@ -97,7 +110,13 @@
 
                         withContext(Dispatchers.Main) {
                             prediction = finalResult
+                            predictionName = formatPrediction(finalResult.label)
                             heatmapOverlay = generatedOverlay // Pass the generated image to the UI
+
+                            // Map the raw data into UI State
+                            if (sensorData != null) {
+                                sensorUiState = buildSensorUiState(sensorData)
+                            }
 
                             // 4. Pass results to Rule Engine
                             ruleResult = analyzePlantUseCase(finalResult.label, sensorData)
@@ -126,5 +145,32 @@
                     }
                 }
             }
+        }
+
+
+        // Strict MVVM Mapping: Turns Raw Data into UI-ready rows
+        private fun buildSensorUiState(data: SensorResponse): List<SensorRowData> {
+            return listOf(
+                SensorRowData("Soil Temp", "${data.soil.temperature}°C", ThresholdEngine.evaluate(data.soil.temperature, SiliGuideThresholds.SOIL_TEMP), SensorIconType.SOIL_TEMP),
+                SensorRowData("Soil pH", "${data.soil.ph}", ThresholdEngine.evaluate(data.soil.ph, SiliGuideThresholds.SOIL_PH), SensorIconType.SOIL_PH),
+                SensorRowData("Soil EC", "${data.soil.ec} µS/cm", ThresholdEngine.evaluate(data.soil.ec.toDouble(), SiliGuideThresholds.SOIL_EC), SensorIconType.SOIL_EC),
+                SensorRowData("Soil Moisture", "${data.soil.moisture}%", ThresholdEngine.evaluate(data.soil.moisture, SiliGuideThresholds.SOIL_MOISTURE), SensorIconType.SOIL_MOISTURE),
+                SensorRowData("Soil Nitrogen (N)", "${data.soil.nitrogen} mg/kg", ThresholdEngine.evaluate(data.soil.nitrogen.toDouble(), SiliGuideThresholds.NITROGEN), SensorIconType.LETTER_N),
+                SensorRowData("Soil Phosphorus (P)", "${data.soil.phosphorus} mg/kg", ThresholdEngine.evaluate(data.soil.phosphorus.toDouble(), SiliGuideThresholds.PHOSPHORUS), SensorIconType.LETTER_P),
+                SensorRowData("Potassium (K)", "${data.soil.potassium} mg/kg", ThresholdEngine.evaluate(data.soil.potassium.toDouble(), SiliGuideThresholds.POTASSIUM), SensorIconType.LETTER_K),
+                SensorRowData("Light", "${data.environment.light} lux", ThresholdEngine.evaluate(data.environment.light.toDouble(), SiliGuideThresholds.LIGHT_INTENSITY), SensorIconType.LIGHT),
+                SensorRowData("Air Temp", "${data.environment.airTemperature}°C", ThresholdEngine.evaluate(data.environment.airTemperature, SiliGuideThresholds.AIR_TEMP), SensorIconType.AIR_TEMP)
+            )
+        }
+
+        private fun formatPrediction(string: String): String {
+            val formattedPrediction = when (string.lowercase()) {
+                "curling" -> "Leaf Curling"
+                "healthy" -> "Healthy Leaf"
+                "spots" -> "Leaf Spots"
+                "yellowing" -> "Yellowing Leaf"
+                else -> "Unknown"
+            }
+            return formattedPrediction
         }
     }
