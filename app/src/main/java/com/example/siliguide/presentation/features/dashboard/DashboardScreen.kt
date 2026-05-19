@@ -811,10 +811,6 @@ fun BottomNavSection(
                         if (isAddMenuOpen) GreenDark
                         else GreenPrimary
                     )
-                    .shadow(
-                        elevation = if (isAddMenuOpen) 12.dp else 4.dp,
-                        shape = CircleShape
-                    )
                     .clickable { onAddClick() },
                 contentAlignment = Alignment.Center
             ) {
