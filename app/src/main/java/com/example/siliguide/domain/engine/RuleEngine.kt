@@ -326,7 +326,7 @@ object RuleEngine {
 
             "healthy" -> RuleResult(
                 condition        = "Healthy",
-                symptoms         = listOf(
+                characteristics         = listOf(
                     "Uniform, vibrant green to dark emerald color",
                     "Smooth, continuous leaf margins",
                     "Flat, turgid (firm) leaf surface",
@@ -345,7 +345,7 @@ object RuleEngine {
 
             "curling", "leaf_curling" -> RuleResult(
                 condition        = "Curling",
-                symptoms         = listOf(
+                characteristics         = listOf(
                     "Upward cupping or rolling of leaf margins",
                     "Downward curling or severe twisting",
                     "Puckering or crinkling of leaf surface"
@@ -367,7 +367,7 @@ object RuleEngine {
 
             "spots", "leaf_spots" -> RuleResult(
                 condition        = "Spots",
-                symptoms         = listOf(
+                characteristics         = listOf(
                     "Frog-eye spots: light gray/white center with dark brown margin",
                     "Water-soaked lesions that dry out and turn black or brown",
                     "Concentric rings forming target-like patterns",
@@ -390,7 +390,7 @@ object RuleEngine {
 
             "yellowing", "yellowing_leaves" -> RuleResult(
                 condition        = "Yellowing",
-                symptoms         = listOf(
+                characteristics         = listOf(
                     "Chlorosis: entire leaf turns pale green or uniform yellow (starts on oldest leaves)",
                     "Interveinal chlorosis: tissue between veins yellows while veins stay green",
                     "Mottling/Mosaic: patchy irregular yellow and light green patterns"
@@ -412,7 +412,7 @@ object RuleEngine {
 
             else -> RuleResult(
                 condition        = "Unknown Condition",
-                symptoms         = listOf(prediction),
+                characteristics         = listOf(prediction),
                 possibleCauses   = listOf("Unable to determine cause without sensor data."),
                 recommendations  = listOf(
                     "Monitor the plant closely.",
