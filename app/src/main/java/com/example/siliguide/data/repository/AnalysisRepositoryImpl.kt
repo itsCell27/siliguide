@@ -56,7 +56,7 @@ class AnalysisRepositoryImpl @Inject constructor(
             soil_ph = session.soilPh,
             plant_condition = session.plantCondition,
             possible_causes = session.possibleCauses,
-            symptoms = session.symptoms,
+            characteristics = session.characteristics,
             recommended_actions = session.recommendedActions,
             is_partial = if (session.isPartial) 1L else 0L
         )
@@ -66,13 +66,13 @@ class AnalysisRepositoryImpl @Inject constructor(
         sessionId: String,
         plantCondition: String?,
         possibleCauses: String?,
-        symptoms: String?,
+        characteristics: String?,
         recommendedActions: String?
     ) {
         queries.updateSession(
             plant_condition = plantCondition,
             possible_causes = possibleCauses,
-            symptoms = symptoms,
+            characteristics = characteristics,
             recommended_actions = recommendedActions,
             session_id = sessionId
         )

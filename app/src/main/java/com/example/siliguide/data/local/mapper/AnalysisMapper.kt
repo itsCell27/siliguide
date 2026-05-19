@@ -23,7 +23,7 @@ fun AnalysisSessions.toDomainModel(): AnalysisSession {
         soilPh = soil_ph,
         plantCondition = plant_condition,
         possibleCauses = possible_causes,
-        symptoms = symptoms,
+        characteristics = characteristics,
         recommendedActions = recommended_actions,
         isPartial = is_partial == 1L
     )

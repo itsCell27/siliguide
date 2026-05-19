@@ -46,7 +46,7 @@ CREATE TABLE analysis_sessions (
     soil_ph REAL,
     plant_condition TEXT,
     possible_causes TEXT,
-    symptoms TEXT,
+    characteristics TEXT,
     recommended_actions TEXT,
     is_partial INTEGER NOT NULL DEFAULT 0
 );
@@ -133,13 +133,13 @@ INSERT INTO analysis_sessions (
     session_id, plant_id, device_id, session_timestamp, image_path, predicted_class, 
     confidence, air_temp, light_intensity, nitrogen, phosphorus, potassium, 
     electrical_conductivity, soil_moisture, soil_temp, soil_ph, plant_condition, 
-    possible_causes, symptoms, recommended_actions, is_partial
+    possible_causes, characteristics, recommended_actions, is_partial
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateSession:
 UPDATE analysis_sessions
-SET plant_condition = ?, possible_causes = ?, symptoms = ?, recommended_actions = ?
+SET plant_condition = ?, possible_causes = ?, characteristics = ?, recommended_actions = ?
 WHERE session_id = ?;
 
 deleteSession:

@@ -19,7 +19,7 @@ data class AnalysisSession(
     val soilPh: Double?,
     val plantCondition: String?,
     val possibleCauses: String?,
-    val symptoms: String?,
+    val characteristics: String?,
     val recommendedActions: String?,
     val isPartial: Boolean
 )

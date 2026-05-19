@@ -12,7 +12,7 @@ interface AnalysisRepository {
         sessionId: String,
         plantCondition: String?,
         possibleCauses: String?,
-        symptoms: String?,
+        characteristics: String?,
         recommendedActions: String?
     )
     suspend fun deleteSession(sessionId: String)

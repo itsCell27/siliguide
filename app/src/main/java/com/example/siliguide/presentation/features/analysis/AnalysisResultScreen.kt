@@ -243,17 +243,6 @@ fun ResultBottomBar(
                 color = White
             )
         }
-        TextButton(
-            onClick = onSecondary,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = if (isOutOfScope) "Save as note instead" else "Analyze Another Leaf",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = GreenPrimary
-            )
-        }
     }
 }
 
@@ -300,7 +289,7 @@ fun ResultContent(
             )
         } else {
             PossibleConditionsCard(causes = result.possibleCauses)
-            SymptomDescriptionCard(symptom = result.condition ?: "Unknown")
+            CharacteristicsDescriptionCard(prediction = predictedClass, characteristics = result.characteristics)
         }
 
         // Draw Sensor Readings if state is available
@@ -1068,20 +1057,7 @@ fun PossibleConditionsCard(causes: List<String>?) {
 }
 
 @Composable
-fun SymptomDescriptionCard(symptom: String) {
-    val description = when (symptom.lowercase()) {
-        "yellowing", "yellowing_leaves" ->
-            "A loss of green pigment (chlorophyll) where leaves turn pale yellow or pale green. Pattern matters: uniform vs. blotchy vs. between-vein yellowing each point to different causes. Sensor data would help narrow the cause to one specific condition."
-
-        "curling", "leaf_curling" ->
-            "Leaf edges roll inward or downward, reducing surface area to conserve moisture. Can indicate heat, drought, or pest activity. Sensor data helps distinguish between water stress and environmental causes."
-
-        "spots", "leaf_spots" ->
-            "Brown or black blemishes on the leaf surface, which may indicate fungal infection, bacterial disease, or pest damage. Sensor data is helpful to rule out environmental stress."
-
-        else ->
-            "Visual symptom detected. Connect an IoT device to get sensor readings for a more accurate diagnosis."
-    }
+fun CharacteristicsDescriptionCard(prediction: String, characteristics: List<String>) {
 
     Column(
         modifier = Modifier
@@ -1096,7 +1072,7 @@ fun SymptomDescriptionCard(symptom: String) {
                 .padding(horizontal = 14.dp, vertical = 11.dp)
         ) {
             Text(
-                "SYMPTOM DESCRIPTION",
+                "CHARACTERISTICS",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = Black,
@@ -1106,25 +1082,46 @@ fun SymptomDescriptionCard(symptom: String) {
         HorizontalDivider(color = Border)
 
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
+            // Prediction tag pill
             Box(
                 modifier = Modifier
                     .background(GreenBgLight, RoundedCornerShape(5.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Text(
-                    symptom,
+                    prediction,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     color = GreenDark
                 )
             }
-            Spacer(modifier = Modifier.height(7.dp))
-            Text(
-                description,
-                fontSize = 11.sp,
-                color = GrayBody,
-                lineHeight = 16.sp
-            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Bullet list
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                characteristics.forEach { item ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Green dot bullet
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .size(5.dp)
+                                .background(GreenMid, CircleShape) // use your green-400 token
+                        )
+                        Text(
+                            text = item,
+                            fontSize = 11.sp,
+                            color = GrayBody,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
         }
     }
 }
