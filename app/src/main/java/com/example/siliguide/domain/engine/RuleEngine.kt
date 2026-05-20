@@ -71,6 +71,7 @@ object RuleEngine {
                 // R-02: Heat & Light Stress
                 airTemp == ThresholdLevel.HIGH && light == ThresholdLevel.HIGH -> RuleResult(
                     condition        = "Heat & Light Stress",
+                    conditionDescription = "High ambient temperature combined with intense light is causing excessive transpiration.",
                     recommendations  = listOf(
                         "Provide temporary shade using a 30–50% shade net.",
                         "Move the plant away from direct midday sun.",
@@ -82,6 +83,7 @@ object RuleEngine {
                 // R-01: Underwatering
                 moisture == ThresholdLevel.LOW -> RuleResult(
                     condition        = "Underwatering / Drought Stress",
+                    conditionDescription = "Soil moisture has dropped below the optimal threshold, causing leaves to lose turgor pressure.",
                     recommendations  = listOf(
                         "Water immediately, applying water gradually to the root zone.",
                         "Continue until soil moisture returns to the 40%–70% range.",
@@ -112,6 +114,7 @@ object RuleEngine {
                 // R-05: NPK all low — most severe deficiency, check before individual
                 nitrogen == ThresholdLevel.LOW && phosphorus == ThresholdLevel.LOW && potassium == ThresholdLevel.LOW -> RuleResult(
                     condition        = "General Nutrient Deficiency (NPK)",
+                    conditionDescription = "The soil lacks overall macronutrients, impacting the plant's metabolic processes.",
                     recommendations  = listOf(
                         "Apply balanced NPK fertilizer.",
                         "Feed the plant with a complete, balanced fertilizer.",
@@ -149,6 +152,7 @@ object RuleEngine {
                 // R-03: Overwatering
                 moisture == ThresholdLevel.HIGH -> RuleResult(
                     condition        = "Overwatering / Root Hypoxia",
+                    conditionDescription = "Excess water in the soil is suffocating the roots, preventing oxygen uptake.",
                     recommendations  = listOf(
                         "Stop watering immediately.",
                         "Check that all drainage holes are clear and functional.",
@@ -160,6 +164,7 @@ object RuleEngine {
                 // R-04: Nitrogen deficiency
                 nitrogen == ThresholdLevel.LOW -> RuleResult(
                     condition        = "Nitrogen Deficiency",
+                    conditionDescription = "Mobile nitrogen is being diverted from older leaves to new growth, causing chlorosis.",
                     recommendations  = listOf(
                         "Apply a mild, balanced liquid fertilizer or compost tea.",
                         "Avoid heavy synthetic nitrogen (like Urea) if the plant is currently flowering, as excess nitrogen causes blossom drop."
@@ -219,6 +224,7 @@ object RuleEngine {
                 // R-06: Fungal infection — hot and wet
                 moisture == ThresholdLevel.HIGH && airTemp == ThresholdLevel.HIGH -> RuleResult(
                     condition        = "Fungal Infection Risk",
+                    conditionDescription = "High-moisture, high-temperature microclimates accelerate fungal pathogen proliferation.",
                     recommendations  = listOf(
                         "Improve airflow and reduce moisture.",
                         "Prune dense foliage and lower leaves.",
@@ -254,6 +260,7 @@ object RuleEngine {
                 // R-07: Salt/Fertilizer burn
                 ec == ThresholdLevel.HIGH -> RuleResult(
                     condition        = "Salt / Fertilizer Burn",
+                    conditionDescription = "Elevated Electrical Conductivity (EC) indicates an excessive concentration of soluble salts in the growing medium, inducing osmotic stress.",
                     recommendations  = listOf(
                         "Flush the soil.",
                         "Pour a heavy volume of clean, unfertilized water through the soil to leach out excess salts until the EC level drops.",
