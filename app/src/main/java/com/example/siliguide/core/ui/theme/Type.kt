@@ -30,6 +30,14 @@ val Typography = Typography(
         letterSpacing = (-0.3).sp
     ),
 
+    displayMedium = TextStyle(
+        fontFamily = Fraunces,
+        fontWeight = FontWeight.Bold,
+        fontSize = 34.sp,
+        letterSpacing = (-0.5).sp,
+        lineHeight = 34.sp
+    ),
+
     headlineLarge = TextStyle(
         fontFamily = Fraunces,
         fontWeight = FontWeight.Bold,
@@ -56,6 +64,12 @@ val Typography = Typography(
         fontFamily = DMSans,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp
+    ),
+
+    titleSmall = TextStyle(
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp
     ),
 
     bodyMedium = TextStyle(
