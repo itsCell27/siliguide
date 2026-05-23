@@ -1244,30 +1244,30 @@ fun OutOfScopeContent(
                 textAlign = TextAlign.Center,
                 lineHeight = 16.sp
             )
-            // Confidence pill
-            Row(
-                modifier = Modifier
-                    .padding(top = 4.dp)
-                    .background(White, CircleShape)
-                    .border(1.dp, DangerBorder, CircleShape)
-                    .padding(horizontal = 9.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(Danger)
-                )
-                Text(
-                    "Confidence $confidencePct%",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Danger,
-                    letterSpacing = 0.4.sp
-                )
-            }
+//            // Confidence pill
+//            Row(
+//                modifier = Modifier
+//                    .padding(top = 4.dp)
+//                    .background(White, CircleShape)
+//                    .border(1.dp, DangerBorder, CircleShape)
+//                    .padding(horizontal = 9.dp, vertical = 3.dp),
+//                verticalAlignment = Alignment.CenterVertically,
+//                horizontalArrangement = Arrangement.spacedBy(5.dp)
+//            ) {
+//                Box(
+//                    modifier = Modifier
+//                        .size(6.dp)
+//                        .clip(CircleShape)
+//                        .background(Danger)
+//                )
+//                Text(
+//                    "Confidence $confidencePct%",
+//                    fontSize = 10.sp,
+//                    fontWeight = FontWeight.Medium,
+//                    color = Danger,
+//                    letterSpacing = 0.4.sp
+//                )
+//            }
         }
 
         // Why we couldn't classify

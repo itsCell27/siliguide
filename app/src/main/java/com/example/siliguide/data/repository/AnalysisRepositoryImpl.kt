@@ -1,9 +1,11 @@
 package com.example.siliguide.data.repository
 
-import com.example.siliguide.data.local.SiliGuideDatabaseManager
+import com.example.siliguide.data.local.sqldelight.SiliGuideDatabaseManager
 import com.example.siliguide.data.local.mapper.toDomainModel
 import com.example.siliguide.domain.model.AnalysisSession
 import com.example.siliguide.domain.repository.AnalysisRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class AnalysisRepositoryImpl @Inject constructor(
@@ -12,85 +14,93 @@ class AnalysisRepositoryImpl @Inject constructor(
 
     private val queries = dbManager.queries
 
+    override suspend fun saveSession(session: AnalysisSession) {
+        withContext(Dispatchers.IO) {
+            queries.insertSession(
+                session_id = session.sessionId,
+                plant_id = session.plantId,
+                device_id = session.deviceId,
+                user_id = session.userId,
+                session_timestamp = session.sessionTimestamp,
+                image_path = session.imagePath,
+                predicted_class = session.predictedClass,
+                confidence = session.confidence,
+                plant_condition = session.plantCondition,
+                possible_causes = session.possibleCauses,
+                characteristics = session.characteristics,
+                recommended_actions = session.recommendedActions,
+                is_partial = if (session.isPartial) 1L else 0L,
+                soil_moisture = session.soilMoisture,
+                soil_ph = session.soilPh,
+                soil_temp = session.soilTemp,
+                electrical_conductivity = session.electricalConductivity?.toLong(),
+                nitrogen = session.nitrogen?.toLong(),
+                phosphorus = session.phosphorus?.toLong(),
+                potassium = session.potassium?.toLong(),
+                light_intensity = session.lightIntensity?.toLong(),
+                air_temp = session.airTemp,
+                is_synced = if (session.isSynced) 1L else 0L
+            )
+        }
+    }
+
     override suspend fun getSessionsByPlantId(plantId: String): List<AnalysisSession> {
-        return queries.getSessionsByPlantId(plantId)
-            .executeAsList()
-            .map { it.toDomainModel() }
+        return withContext(Dispatchers.IO) {
+            queries.getSessionsByPlant(plantId)
+                .executeAsList()
+                .map { it.toDomainModel() }
+        }
+    }
+
+    override suspend fun getSessionsByUser(userId: String): List<AnalysisSession> {
+        return withContext(Dispatchers.IO) {
+            queries.getSessionsByUser(userId)
+                .executeAsList()
+                .map { it.toDomainModel() }
+        }
     }
 
     override suspend fun getSessionById(sessionId: String): AnalysisSession? {
-        return queries.getSessionById(sessionId)
-            .executeAsOneOrNull()
-            ?.toDomainModel()
+        return withContext(Dispatchers.IO) {
+            queries.getSessionById(sessionId)
+                .executeAsOneOrNull()
+                ?.toDomainModel()
+        }
     }
 
     override suspend fun getLatestSessionByPlantId(plantId: String): AnalysisSession? {
-        return queries.getLatestSessionByPlantId(plantId)
-            .executeAsOneOrNull()
-            ?.toDomainModel()
+        return withContext(Dispatchers.IO) {
+            queries.getLatestSessionForPlant(plantId)
+                .executeAsOneOrNull()
+                ?.toDomainModel()
+        }
     }
 
-    override suspend fun getAllSessions(): List<AnalysisSession> {
-        return queries.getAllSessions()
-            .executeAsList()
-            .map { it.toDomainModel() }
+    override suspend fun getPartialSessionsByUser(userId: String): List<AnalysisSession> {
+        return withContext(Dispatchers.IO) {
+            queries.getPartialAnalysisSessionsByUser(userId)
+                .executeAsList()
+                .map { it.toDomainModel() }
+        }
     }
 
-    override suspend fun saveSession(session: AnalysisSession) {
-        queries.insertSession(
-            session_id = session.sessionId,
-            plant_id = session.plantId,
-            device_id = session.deviceId,
-            session_timestamp = session.sessionTimestamp,
-            image_path = session.imagePath,
-            predicted_class = session.predictedClass,
-            confidence = session.confidence,
-            air_temp = session.airTemp,
-            light_intensity = session.lightIntensity,
-            nitrogen = session.nitrogen?.toLong(),
-            phosphorus = session.phosphorus?.toLong(),
-            potassium = session.potassium?.toLong(),
-            electrical_conductivity = session.electricalConductivity?.toLong(),
-            soil_moisture = session.soilMoisture,
-            soil_temp = session.soilTemp,
-            soil_ph = session.soilPh,
-            plant_condition = session.plantCondition,
-            possible_causes = session.possibleCauses,
-            characteristics = session.characteristics,
-            recommended_actions = session.recommendedActions,
-            is_partial = if (session.isPartial) 1L else 0L
-        )
+    override suspend fun getCompleteSessionsByUser(userId: String): List<AnalysisSession> {
+        return withContext(Dispatchers.IO) {
+            queries.getCompleteAnalysisSessionsByUser(userId)
+                .executeAsList()
+                .map { it.toDomainModel() }
+        }
     }
 
-    override suspend fun updateSession(
-        sessionId: String,
-        plantCondition: String?,
-        possibleCauses: String?,
-        characteristics: String?,
-        recommendedActions: String?
-    ) {
-        queries.updateSession(
-            plant_condition = plantCondition,
-            possible_causes = possibleCauses,
-            characteristics = characteristics,
-            recommended_actions = recommendedActions,
-            session_id = sessionId
-        )
+    override suspend fun markSessionSynced(sessionId: String) {
+        withContext(Dispatchers.IO) {
+            queries.markSessionSynced(sessionId)
+        }
     }
 
     override suspend fun deleteSession(sessionId: String) {
-        queries.deleteSession(sessionId)
-    }
-
-    override suspend fun getPartialSessionsByPlantId(plantId: String): List<AnalysisSession> {
-        return queries.getPartialDiagnosisSessions(plantId)
-            .executeAsList()
-            .map { it.toDomainModel() }
-    }
-
-    override suspend fun getCompleteSessionsByPlantId(plantId: String): List<AnalysisSession> {
-        return queries.getCompleteDiagnosisSessions(plantId)
-            .executeAsList()
-            .map { it.toDomainModel() }
+        withContext(Dispatchers.IO) {
+            queries.deleteSession(sessionId)
+        }
     }
 }

@@ -1,30 +1,32 @@
 package com.example.siliguide.data.local.mapper
 
 import com.example.siliguide.domain.model.AnalysisSession
-import com.example.siliguide.data.local.Analysis_sessions as AnalysisSessions
+import com.example.siliguide.data.local.Analysis_sessions
 
-fun AnalysisSessions.toDomainModel(): AnalysisSession {
+fun Analysis_sessions.toDomainModel(): AnalysisSession {
     return AnalysisSession(
         sessionId = session_id,
         plantId = plant_id,
         deviceId = device_id,
+        userId = user_id, // Map new field
         sessionTimestamp = session_timestamp,
         imagePath = image_path,
         predictedClass = predicted_class,
         confidence = confidence,
-        airTemp = air_temp,
-        lightIntensity = light_intensity,
-        nitrogen = nitrogen?.toInt(),
-        phosphorus = phosphorus?.toInt(),
-        potassium = potassium?.toInt(),
-        electricalConductivity = electrical_conductivity?.toInt(),
-        soilMoisture = soil_moisture,
-        soilTemp = soil_temp,
-        soilPh = soil_ph,
         plantCondition = plant_condition,
         possibleCauses = possible_causes,
         characteristics = characteristics,
         recommendedActions = recommended_actions,
-        isPartial = is_partial == 1L
+        isPartial = is_partial == 1L,
+        soilMoisture = soil_moisture,
+        soilPh = soil_ph,
+        soilTemp = soil_temp,
+        electricalConductivity = electrical_conductivity?.toInt(),
+        nitrogen = nitrogen?.toInt(),
+        phosphorus = phosphorus?.toInt(),
+        potassium = potassium?.toInt(),
+        lightIntensity = light_intensity?.toInt(),
+        airTemp = air_temp,
+        isSynced = is_synced == 1L // Map new field
     )
 }
