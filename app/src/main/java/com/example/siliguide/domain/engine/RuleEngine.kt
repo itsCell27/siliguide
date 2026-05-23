@@ -104,7 +104,7 @@ object RuleEngine {
                     isUsingSensors   = true
                 )
 
-                else -> fallbackRule(prediction)
+                else -> fallbackRuleWithSensor(prediction)
             }
 
             // ── YELLOWING ────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ object RuleEngine {
                     isUsingSensors   = true
                 )
 
-                else -> fallbackRule(prediction)
+                else -> fallbackRuleWithSensor(prediction)
             }
 
             // ── SPOTS ────────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ object RuleEngine {
                     isUsingSensors   = true
                 )
 
-                else -> fallbackRule(prediction)
+                else -> fallbackRuleWithSensor(prediction)
             }
 
             // ── HEALTHY ──────────────────────────────────────────────────────
@@ -320,10 +320,112 @@ object RuleEngine {
                     isUsingSensors   = true
                 )
 
-                else -> fallbackRule(prediction)
+                else -> fallbackRuleWithSensor(prediction)
             }
 
-            else -> fallbackRule(prediction)
+            else -> fallbackRuleWithSensor(prediction)
+        }
+    }
+
+    private fun fallbackRuleWithSensor(prediction: String): RuleResult {
+        return when (prediction.lowercase()) {
+
+            "healthy" -> RuleResult(
+                condition        = null,
+                characteristics         = listOf(
+                    "Uniform, vibrant green to dark emerald color",
+                    "Smooth, continuous leaf margins",
+                    "Flat, turgid (firm) leaf surface",
+                    "Clear, unbroken venation pattern"
+                ),
+                possibleCauses   = listOf(
+                    "Adequate macronutrient (N, P, K) and micronutrient balance",
+                    "Optimal soil moisture and temperature conditions"
+                ),
+                recommendations  = listOf(
+                    "No action needed based on visual inspection.",
+                    "Connect an IoT device to confirm all sensor readings are optimal."
+                ),
+                isUsingSensors   = true
+            )
+
+            "curling", "leaf_curling" -> RuleResult(
+                condition        = null,
+                characteristics         = listOf(
+                    "Upward cupping or rolling of leaf margins",
+                    "Downward curling or severe twisting",
+                    "Puckering or crinkling of leaf surface"
+                ),
+                possibleCauses   = listOf(
+                    "Heat & Drought Stress: extreme heat (>35°C) and dry soil cause protective curling",
+                    "Pests: Thrips, Aphids, or Broad Mites draining sap from young leaves",
+                    "Virus: Pepper Leaf Curl Virus (PepLCV) / Chili Leaf Curl Virus (ChiLCV) via Whiteflies",
+                    "Herbicide drift from nearby chemical sprays",
+                    "Cold stress: temperatures below 18°C cause drooping and curling"
+                ),
+                recommendations  = listOf(
+                    "Check soil moisture by pressing a finger 2–3 cm into the soil.",
+                    "Inspect leaf undersides for tiny insects (Thrips, Aphids, Mites).",
+                    "Connect an IoT device for precise soil moisture and temperature readings."
+                ),
+                isUsingSensors   = true
+            )
+
+            "spots", "leaf_spots" -> RuleResult(
+                condition        = null,
+                characteristics         = listOf(
+                    "Frog-eye spots: light gray/white center with dark brown margin",
+                    "Water-soaked lesions that dry out and turn black or brown",
+                    "Concentric rings forming target-like patterns",
+                    "Shot-hole effect: dead tissue falls out leaving holes"
+                ),
+                possibleCauses   = listOf(
+                    "Fungal infection: Cercospora capsici (frog-eye spots) or Colletotrichum (Anthracnose)",
+                    "Bacterial infection: Xanthomonas campestris in high-humidity conditions",
+                    "Sunscald from extreme UV exposure",
+                    "Fertilizer or pesticide burn",
+                    "Rare: Calcium deficiency causing localized necrosis on new growth"
+                ),
+                recommendations  = listOf(
+                    "Avoid wetting leaves when watering — water at the soil base only.",
+                    "Remove and dispose of heavily spotted leaves.",
+                    "Connect an IoT device to check humidity and soil moisture levels."
+                ),
+                isUsingSensors   = true
+            )
+
+            "yellowing", "yellowing_leaves" -> RuleResult(
+                condition        = null,
+                characteristics         = listOf(
+                    "Chlorosis: entire leaf turns pale green or uniform yellow (starts on oldest leaves)",
+                    "Interveinal chlorosis: tissue between veins yellows while veins stay green",
+                    "Mottling/Mosaic: patchy irregular yellow and light green patterns"
+                ),
+                possibleCauses   = listOf(
+                    "Nitrogen (N) Deficiency: general yellowing starting from the bottom of the plant",
+                    "Magnesium (Mg) or Iron (Fe) Deficiency: interveinal chlorosis",
+                    "Overwatering (Hypoxia): waterlogged soil chokes roots, blocking nutrient uptake",
+                    "Viral infection: Cucumber Mosaic Virus (CMV) or Tobacco Mosaic Virus (TMV) causing mosaic patterns",
+                    "Severe drought eventually leads to yellowing and leaf drop"
+                ),
+                recommendations  = listOf(
+                    "Check soil moisture manually — soggy soil suggests overwatering.",
+                    "Inspect the pattern of yellowing: bottom-up → Nitrogen; interveinal → Magnesium/Iron; patchy → possible virus.",
+                    "Connect an IoT device for soil moisture, pH, and NPK readings to confirm the exact cause."
+                ),
+                isUsingSensors   = true
+            )
+
+            else -> RuleResult(
+                condition        = "Unknown Condition",
+                characteristics         = listOf(prediction),
+                possibleCauses   = listOf("Unable to determine cause without sensor data."),
+                recommendations  = listOf(
+                    "Monitor the plant closely.",
+                    "Connect an IoT device for a full diagnosis."
+                ),
+                isUsingSensors   = true
+            )
         }
     }
 
