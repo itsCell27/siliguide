@@ -1,6 +1,7 @@
 package com.example.siliguide.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -11,6 +12,9 @@ import com.example.siliguide.presentation.features.dashboard.DashboardScreen
 import com.example.siliguide.presentation.features.analysis.CameraScreen
 import com.example.siliguide.presentation.features.analysis.CropAdjustScreen
 import com.example.siliguide.presentation.features.analysis.AnalysisResultScreen
+import com.example.siliguide.presentation.features.auth.AuthViewModel
+import com.example.siliguide.presentation.features.auth.GuestInfoScreen
+import com.example.siliguide.presentation.features.auth.WelcomeScreen
 import com.example.siliguide.presentation.features.iot.ConnectionMode
 import com.example.siliguide.presentation.features.iot.IoTSetupConnectionModeScreen
 import com.example.siliguide.presentation.features.iot.ap_setup.IoTSetupAPModeScreen
@@ -27,6 +31,33 @@ fun SiliGuideNavGraph(
         navController = navController,
         startDestination = startDestination
     ) {
+
+        // --- AUTHENTICATION ---
+        composable(route = Screen.Welcome.route) {
+            WelcomeScreen(
+                onLoginClick = { /* TODO */ },
+                onSignUpClick = { /* TODO */ },
+                onGuestClick = { navController.navigate(Screen.GuestInfo.route) }
+            )
+        }
+
+        composable(route = Screen.GuestInfo.route) {
+            val authViewModel: AuthViewModel = hiltViewModel()
+
+            GuestInfoScreen(
+                onContinueAsGuest = {
+                    authViewModel.continueAsGuest(
+                        onSuccess = {
+                            navController.navigate(Screen.Dashboard.route) {
+                                // Clear Welcome & Guest screens so user can't hit "Back" to login
+                                popUpTo(Screen.Welcome.route) { inclusive = true }
+                            }
+                        }
+                    )
+                },
+                onCreateAccount = { /* TODO: Route to SignUp */ }
+            )
+        }
 
         // --- DASHBOARD (HOME) ---
         composable(route = Screen.Dashboard.route) {

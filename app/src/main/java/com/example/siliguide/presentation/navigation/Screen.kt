@@ -4,6 +4,9 @@ import java.net.URLEncoder
 
 // A sealed class prevents typos by hardcoding our route names
 sealed class Screen(val route: String) {
+
+    object Welcome : Screen("welcome")
+    object GuestInfo : Screen("guest_info")
     object Dashboard : Screen("dashboard")
     object Camera : Screen("camera")
 
