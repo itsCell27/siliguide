@@ -55,6 +55,9 @@
         databases {
             create("SiliGuideDatabase") {
                 packageName.set("com.example.siliguide.data.local")
+
+                // UPGRADED: Forces a fully modern engine parsing model for Postgres-style queries
+                dialect("app.cash.sqldelight:sqlite-3-35-dialect:2.3.2")
             }
         }
     }
