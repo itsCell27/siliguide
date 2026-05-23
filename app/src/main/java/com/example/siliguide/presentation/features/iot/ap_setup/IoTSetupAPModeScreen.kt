@@ -320,10 +320,9 @@ fun IoTSetupAPModeScreen(
                         .fillMaxWidth()
                         .height(50.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = when {
-                            currentStep == 2 -> GreenPrimary
-                            isChecking -> GreenMid
-                            else -> GreenLight
+                        containerColor = when (currentStep) {
+                            2 -> GreenPrimary
+                            else -> if (isChecking) GreenMid else GreenLight
                         },
                         contentColor = White
                     ),
@@ -331,9 +330,8 @@ fun IoTSetupAPModeScreen(
                     enabled = !isChecking || currentStep == 2
                 ) {
                     Text(
-                        text = when {
-                            currentStep == 1 && isChecking -> "Checking device…"
-                            currentStep == 1 -> "Scan QR Code"
+                        text = when (currentStep) {
+                            1 -> if (isChecking) "Checking device…" else "Scan QR Code"
                             else -> "Save Device"
                         },
                         fontSize = 15.sp,
