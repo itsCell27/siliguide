@@ -8,8 +8,8 @@ import javax.inject.Inject
 class GetPlantsUseCase @Inject constructor(
     private val repository: PlantRepository
 ) {
-    operator fun invoke(): Flow<List<Plant>> {
+    operator fun invoke(userId: String): Flow<List<Plant>> {
         // Call the updated repository function
-        return repository.getAllPlants()
+        return repository.getPlantsByUser(userId)
     }
 }

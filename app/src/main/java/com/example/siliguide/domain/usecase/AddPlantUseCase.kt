@@ -8,17 +8,18 @@ import javax.inject.Inject
 class AddPlantUseCase @Inject constructor(
     private val repository: PlantRepository
 ) {
-    // 1. Removed userId parameter
-    suspend operator fun invoke(name: String, deviceId: String? = null) {
+    // Re-added userId requirement to establish relational context safely
+    suspend operator fun invoke(userId: String, name: String, deviceId: String? = null) {
 
-        // 2. Get standard Unix Epoch time in milliseconds (Long)
         val currentTimestamp = System.currentTimeMillis()
 
         val newPlant = Plant(
-            plantId = UUID.randomUUID().toString(), // Generate unique ID
+            plantId = UUID.randomUUID().toString(),
+            userId = userId, // Relates this plant to the active local account profile
             name = name,
-            dateCreated = currentTimestamp,         // 3. Pass the Long directly
+            dateCreated = currentTimestamp,
             lastAnalyzedAt = null,
+            isSynced = false, // Instantiated as un-synced until WorkManager fires online
             deviceId = deviceId
         )
         repository.insertPlant(newPlant)

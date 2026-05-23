@@ -80,7 +80,7 @@ fun PlantDetailScreen(
         SensorReading("Nitrogen (N)", "${latestSession?.nitrogen} mg/kg", ThresholdLevel.NORMAL),
         SensorReading("Phosphorus (P)", "${latestSession?.phosphorus} mg/kg", ThresholdLevel.NORMAL),
         SensorReading("Potassium (K)", "${latestSession?.potassium} mg/kg", ThresholdLevel.NORMAL),
-        SensorReading("Light Intensity", "${latestSession?.lightIntensity?.toInt()} lux", ThresholdLevel.NORMAL),
+        SensorReading("Light Intensity", "${latestSession?.lightIntensity} lux", ThresholdLevel.NORMAL),
         SensorReading("Air Temp", "${latestSession?.airTemp?.toInt()}°C", ThresholdLevel.NORMAL)
     )
 
