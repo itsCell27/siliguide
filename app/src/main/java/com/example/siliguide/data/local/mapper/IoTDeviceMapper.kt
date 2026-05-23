@@ -7,10 +7,12 @@ import com.example.siliguide.data.local.Iot_devices
 fun Iot_devices.toIotDomain(): IoTDevice {
     return IoTDevice(
         deviceId = device_id,
+        userId = user_id, // Add this
         deviceName = device_name,
         deviceIdentifier = device_identifier,
-        isActive = is_active == 1L, // Converts the SQLite Integer to Boolean
+        isActive = is_active == 1L,
         lastKnownIp = last_known_ip ?: "192.168.4.1",
-        connectionMode = connection_mode
+        connectionMode = connection_mode,
+        isSynced = is_synced == 1L // Add this: Converts SQLite Long to Boolean
     )
 }

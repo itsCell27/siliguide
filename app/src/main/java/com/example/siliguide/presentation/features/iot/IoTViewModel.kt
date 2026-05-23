@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.usecase.ConnectToDeviceWifiUseCase
+import com.example.siliguide.domain.usecase.DisconnectFromDeviceWifiUseCase
 import com.example.siliguide.domain.usecase.FetchSensorsUseCase
 import com.example.siliguide.domain.usecase.ParseWifiQrUseCase
 import com.example.siliguide.domain.usecase.SaveIoTDeviceUseCase
@@ -28,16 +29,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import android.net.ConnectivityManager
+import com.example.siliguide.domain.repository.AuthRepository
 
 @HiltViewModel
 class IoTViewModel @Inject constructor(
+    private val authRepository: AuthRepository,
     private val fetchSensorsUseCase: FetchSensorsUseCase,
     private val connectToDeviceWifiUseCase: ConnectToDeviceWifiUseCase,
+    private val disconnectFromDeviceWifiUseCase: DisconnectFromDeviceWifiUseCase,
     private val verifyDeviceConnectionUseCase: VerifyDeviceConnectionUseCase,
     private val parseWifiQrUseCase: ParseWifiQrUseCase,
-    private val saveIoTDeviceUseCase: SaveIoTDeviceUseCase, // Added this
-    @ApplicationContext private val context: Context
+    private val saveIoTDeviceUseCase: SaveIoTDeviceUseCase,
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     var sensorData by mutableStateOf<SensorResponse?>(null)
@@ -230,23 +233,26 @@ class IoTViewModel @Inject constructor(
     fun finalizeSetup(customName: String) {
         viewModelScope.launch {
             val id = connectedDeviceId ?: return@launch
-            val token = pairingToken ?: "" // This is the token from your firmware /info
+            val token = pairingToken ?: ""
+
+            // 2. Fetch the current userId
+            val userId = authRepository.getUserId() ?: return@launch
 
             val newDevice = IoTDevice(
                 deviceId = id,
+                userId = userId, // 3. Pass the userId here!
                 deviceName = customName,
-                deviceIdentifier = token, // Saved pairing token for future API calls
+                deviceIdentifier = token,
                 isActive = true,
-                lastKnownIp = "192.168.4.1", // Standard for AP mode
-                connectionMode = "AP"
+                lastKnownIp = "192.168.4.1",
+                connectionMode = "AP",
+                isSynced = false // Initial state
             )
 
             try {
                 saveIoTDeviceUseCase(newDevice)
-                Log.d("AP_DEBUG", "Device saved to database successfully.")
-                _setupComplete.emit(Unit) // Tell the UI to go to Dashboard
+                _setupComplete.emit(Unit)
             } catch (e: Exception) {
-                Log.d(e.toString(), "Error saving device to database.")
                 error = "Database Error: Could not save device."
             }
         }
@@ -262,26 +268,17 @@ class IoTViewModel @Inject constructor(
     }
 
     fun disconnectFromDeviceWifi() {
-        Log.d("AP_DEBUG", "Disconnecting from device WiFi...")
+        Log.d("AP_DEBUG", "Disconnecting from device WiFi using UseCase...")
 
-        viewModelScope.launch {
-            // Unbind app from network
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
-                    as ConnectivityManager
-            connectivityManager.bindProcessToNetwork(null)
+        // Use the UseCase to properly unbind and unregister the network callback
+        disconnectFromDeviceWifiUseCase()
 
-            // ALSO disconnect device from hotspot completely
-            val wifiManager = context.getSystemService(Context.WIFI_SERVICE)
-                    as android.net.wifi.WifiManager
-            wifiManager.disconnect()  // ← DISCONNECT DEVICE TOO
-
-            // Reset state
-            _apConnectionState.value = "IDLE"
-            connectedDeviceId = null
-            pairingToken = null
-            deviceName = ""
-            error = null
-        }
+        // Reset UI state
+        _apConnectionState.value = "IDLE"
+        connectedDeviceId = null
+        pairingToken = null
+        deviceName = ""
+        error = null
     }
 
 }

@@ -8,5 +8,5 @@ import javax.inject.Inject
 class GetIoTDevicesUseCase @Inject constructor(
     private val repository: IoTRepository
 ) {
-    operator fun invoke(): Flow<List<IoTDevice>> = repository.getAllDevices()
+    operator fun invoke(userId: String): Flow<List<IoTDevice>> = repository.getAllDevices(userId)
 }

@@ -7,6 +7,9 @@ import android.os.Build
 
 class WifiProvisioningManager {
 
+    // Keep track of the active network request
+    private var activeCallback: ConnectivityManager.NetworkCallback? = null
+
     fun connect(
         context: Context,
         ssid: String,
@@ -49,5 +52,19 @@ class WifiProvisioningManager {
         }
 
         connectivityManager.requestNetwork(request, callback)
+    }
+
+    fun disconnect(context: Context) {
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        // Tells the OS to stop routing app traffic through the specific IoT network
+        connectivityManager.bindProcessToNetwork(null)
+
+        // Tells the OS we are done with this specific network request
+        activeCallback?.let {
+            connectivityManager.unregisterNetworkCallback(it)
+            activeCallback = null
+        }
     }
 }

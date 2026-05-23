@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.map
 class Esp32Repository @Inject constructor(
     private val api: Esp32Api,
     private val wifiProvisioningManager: WifiProvisioningManager,
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     driver: SqlDriver
 ) : IoTRepository {
 
@@ -50,6 +50,10 @@ class Esp32Repository @Inject constructor(
         )
     }
 
+    override fun disconnectFromWifi() {
+        wifiProvisioningManager.disconnect(context)
+    }
+
     override suspend fun verifyDeviceConnection(): Result<DeviceInfoDto> {
         return try {
             val info = api.getDeviceInfo()
@@ -70,23 +74,29 @@ class Esp32Repository @Inject constructor(
         queries.deleteDevice(deviceId)
     }
 
-    override suspend fun saveDevice(device: IoTDevice) {
-        queries.insertDevice(
-            device_id = device.deviceId,
-            device_name = device.deviceName,
-            device_identifier = device.deviceIdentifier,
-            is_active = if (device.isActive) 1L else 0L,
-            last_known_ip = device.lastKnownIp,
-            connection_mode = device.connectionMode
-        )
-    }
-
-    override fun getAllDevices(): Flow<List<IoTDevice>> {
-        return queries.getAllDevices()
+    override fun getAllDevices(userId: String): Flow<List<IoTDevice>> {
+        return queries.getDevicesByUser(userId) // Now uses the scoped SQL query
             .asFlow()
             .mapToList(Dispatchers.IO)
             .map { sqlEntities ->
                 sqlEntities.map { it.toIotDomain() }
             }
+    }
+
+    override suspend fun saveDevice(device: IoTDevice) {
+        queries.insertDevice(
+            device_id = device.deviceId,
+            user_id = device.userId,
+            device_name = device.deviceName,
+            device_identifier = device.deviceIdentifier,
+            is_active = if (device.isActive) 1L else 0L,
+            last_known_ip = device.lastKnownIp,
+            connection_mode = device.connectionMode,
+            is_synced = if (device.isSynced) 1L else 0L // Convert Boolean to Long
+        )
+    }
+
+    override suspend fun markDeviceSynced(deviceId: String) {
+        queries.markDeviceSynced(deviceId)
     }
 }

@@ -19,10 +19,15 @@ interface IoTRepository {
         onFailure: () -> Unit
     )
 
+    fun disconnectFromWifi()
+
     // ADD THESE TWO LINES:
     suspend fun saveDevice(device: IoTDevice)
     suspend fun deleteDevice(deviceId: String)
 
-    // Add this to the interface
-    fun getAllDevices(): Flow<List<IoTDevice>>
+    // UPDATED: Now requires userId for multi-user isolation
+    fun getAllDevices(userId: String): Flow<List<IoTDevice>>
+
+    // ADDED: Crucial for the sync process
+    suspend fun markDeviceSynced(deviceId: String)
 }
