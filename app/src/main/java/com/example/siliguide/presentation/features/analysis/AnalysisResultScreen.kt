@@ -282,11 +282,18 @@ fun ResultContent(
         )
 
         // Plant condition or partial diagnosis
-        if (result.isUsingSensors) {
+        if (result.isUsingSensors && result.condition != null) {
             PlantConditionCard(
-                condition = result.condition ?: "Unknown",
+                condition = result.condition,
                 description = result.conditionDescription ?: "Unknown"
             )
+        } else if (result.isUsingSensors) {
+            PlantConditionCard(
+                condition = "Unknown Condition",
+                description = "Unknown"
+            )
+            PossibleConditionsCard(causes = result.possibleCauses)
+            CharacteristicsDescriptionCard(prediction = predictedClass, characteristics = result.characteristics)
         } else {
             PossibleConditionsCard(causes = result.possibleCauses)
             CharacteristicsDescriptionCard(prediction = predictedClass, characteristics = result.characteristics)
@@ -1172,7 +1179,7 @@ fun LockedRecommendationsCard() {
                 textAlign = TextAlign.Center
             )
             Text(
-                "Specific recommendations require live moisture, pH, and temperature readings.",
+                "Specific recommendations require sensor data readings.",
                 fontSize = 11.sp,
                 color = GrayMedium,
                 textAlign = TextAlign.Center,
