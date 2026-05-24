@@ -20,6 +20,39 @@ val Fraunces = FontFamily(
     Font(R.font.fraunces_bold, FontWeight.Bold)
 )
 
+// ── Custom standalone text styles (not in M3 Typography slots) ──────────────
+
+/** Uppercase section label — "IOT DEVICES", "MY PLANTS" */
+val SectionLabelStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp,
+    letterSpacing = 0.5.sp
+)
+
+/** Small "See all" / "Add one" link text */
+val SeeAllStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp,
+    letterSpacing = 0.sp
+)
+
+/** Bottom nav label */
+val NavLabelStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 10.sp,
+    letterSpacing = 0.sp
+)
+
+/** Active bottom nav label */
+val NavLabelActiveStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 10.sp,
+    letterSpacing = 0.sp
+)
 val Typography = Typography(
 
     // Large headings - Fraunces serif
