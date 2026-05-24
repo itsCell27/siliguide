@@ -166,6 +166,10 @@ class LabuyoLeafChecker(context: Context) {
             val g = (pixel shr 8 and 0xFF).toFloat()
             val b = (pixel and 0xFF).toFloat()
 
+            if (pixel == intValues[0]) {
+                Log.d("SiliGuide_Debug", "Pixel[0]: R=$r, G=$g, B=$b")
+            }
+
             // Raw 0-255 — MobileNetV3Small expects unscaled pixel values
             buffer.putFloat(r)
             buffer.putFloat(g)
