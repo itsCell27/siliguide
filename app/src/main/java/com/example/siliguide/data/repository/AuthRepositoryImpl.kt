@@ -17,14 +17,16 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun createGuestSession(): String {
         val guestId = UUID.randomUUID().toString()
+        val guestName = "Guest #${(1000..9999).random()}"
 
         // 1. Database
         dbManager.queries.insertUser(
             user_id = guestId,
-            display_name = "Guest",
+            display_name = guestName,
             email = null,
             auth_provider = "GUEST",
-            is_guest = 1L
+            is_guest = 1L,
+            created_at = System.currentTimeMillis()
         )
 
         // 2. Session (Uses the model!)
