@@ -47,7 +47,12 @@
             resources {
                 excludes += "/META-INF/{AL2.0,LGPL2.1}"
             }
+
+            jniLibs {
+                useLegacyPackaging = true
+            }
         }
+
     }
 
     // SQLDelight Local Database Configuration
@@ -89,9 +94,11 @@
         // For QR Code Scanning and Decoding
         implementation(libs.barcode.scanning)
 
-        // Machine Learning (TFLite)
-        implementation(libs.tensorflow.lite)
-        //implementation(libs.tensorflow.lite.support)
+        // Machine Learning
+        implementation("com.google.ai.edge.litert:litert:2.1.5")
+        implementation("com.google.ai.edge.litert:litert-support:1.4.2") {
+            exclude(group = "com.google.ai.edge.litert", module = "litert-support-api")
+        }
 
         // Authentication (Credential Manager)
         implementation(libs.androidx.credentials)
