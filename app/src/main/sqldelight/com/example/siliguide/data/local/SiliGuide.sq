@@ -12,7 +12,8 @@ CREATE TABLE users (
     display_name  TEXT NOT NULL,
     email         TEXT,
     auth_provider TEXT NOT NULL, -- EMAIL | GOOGLE | GUEST
-    is_guest      INTEGER NOT NULL DEFAULT 0
+    is_guest      INTEGER NOT NULL DEFAULT 0,
+    created_at    INTEGER NOT NULL
 );
 
 CREATE TABLE iot_devices (
@@ -23,7 +24,8 @@ CREATE TABLE iot_devices (
     is_active          INTEGER NOT NULL DEFAULT 1,
     last_known_ip      TEXT,          -- NULL if never connected via LAN
     connection_mode    TEXT NOT NULL, -- AP | LAN
-    is_synced          INTEGER NOT NULL DEFAULT 0
+    is_synced          INTEGER NOT NULL DEFAULT 0,
+    date_added         INTEGER NOT NULL
 );
 
 CREATE TABLE plants (
@@ -68,13 +70,14 @@ CREATE TABLE analysis_sessions (
 -- ============================================================
 
 insertUser:
-INSERT INTO users (user_id, display_name, email, auth_provider, is_guest)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO users (user_id, display_name, email, auth_provider, is_guest, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     display_name = excluded.display_name,
     email = excluded.email,
     auth_provider = excluded.auth_provider,
-    is_guest = excluded.is_guest;
+    is_guest = excluded.is_guest,
+    created_at = excluded.created_at;
 
 getUserById:
 SELECT * FROM users WHERE user_id = ?;
@@ -103,8 +106,8 @@ UPDATE users SET email = ? WHERE user_id = ?;
 -- ============================================================
 
 insertDevice:
-INSERT INTO iot_devices (device_id, user_id, device_name, device_identifier, is_active, last_known_ip, connection_mode, is_synced)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO iot_devices (device_id, user_id, device_name, device_identifier, is_active, last_known_ip, connection_mode, is_synced, date_added)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(device_id) DO UPDATE SET
     user_id = excluded.user_id,
     device_name = excluded.device_name,
@@ -112,7 +115,8 @@ ON CONFLICT(device_id) DO UPDATE SET
     is_active = excluded.is_active,
     last_known_ip = excluded.last_known_ip,
     connection_mode = excluded.connection_mode,
-    is_synced = excluded.is_synced;
+    is_synced = excluded.is_synced,
+    date_added = excluded.date_added;
 
 getDevicesByUser:
 SELECT * FROM iot_devices WHERE user_id = ? ORDER BY device_name ASC;
