@@ -9,7 +9,7 @@ class AddPlantUseCase @Inject constructor(
     private val repository: PlantRepository
 ) {
     // Re-added userId requirement to establish relational context safely
-    suspend operator fun invoke(userId: String, name: String, deviceId: String? = null) {
+    suspend operator fun invoke(userId: String, name: String, deviceId: String? = null) : String {
 
         val currentTimestamp = System.currentTimeMillis()
 
@@ -23,5 +23,7 @@ class AddPlantUseCase @Inject constructor(
             deviceId = deviceId
         )
         repository.insertPlant(newPlant)
+
+        return newPlant.plantId
     }
 }

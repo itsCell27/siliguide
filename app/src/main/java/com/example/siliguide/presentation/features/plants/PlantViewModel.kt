@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+
 @HiltViewModel
 class PlantViewModel @Inject constructor(
     private val authRepository: AuthRepository, // Inject this to get current userId
@@ -24,7 +25,11 @@ class PlantViewModel @Inject constructor(
     private val getAnalysisSessionsByPlantUseCase: GetAnalysisSessionsByPlantUseCase
 ) : ViewModel() {
 
-    // 1. Reactive Plant Stream: Automatically scoped to the current userId
+    // Add this state to store the ID of the newly created plant
+    private val _createdPlantId = MutableStateFlow<String?>(null)
+    val createdPlantId: StateFlow<String?> = _createdPlantId.asStateFlow()
+
+    // Reactive Plant Stream: Automatically scoped to the current userId
     @OptIn(ExperimentalCoroutinesApi::class)
     val plants: StateFlow<List<Plant>> = authRepository.getUserIdFlow()
         .flatMapLatest { userId ->
@@ -62,16 +67,23 @@ class PlantViewModel @Inject constructor(
         }
     }
 
-    // 2. Updated addPlant to include userId from the repository
+    // Updated addPlant to include userId from the repository
     fun addPlant(name: String, deviceId: String? = null) {
         viewModelScope.launch {
-            val userId = authRepository.getUserIdFlow().first()
+            val userId = authRepository.getUserId()
             if (userId != null) {
-                addPlantUseCase(
-                    userId = userId, // Pass the ID
-                    name = name,
-                    deviceId = deviceId
-                )
+                // 1. Insert the plant
+                val newPlantId = addPlantUseCase(userId, name, deviceId)
+
+                // 2. YOUR IDEA: Verify it exists in the DB before updating the state
+                // This ensures that when the UI sees 'createdPlantId', the record is 100% there.
+                val verifiedPlant = getPlantByIdUseCase(newPlantId)
+
+                if (verifiedPlant != null) {
+                    _createdPlantId.value = newPlantId
+                } else {
+                    // Optional: handle retry or error if DB is extremely slow
+                }
             }
         }
     }

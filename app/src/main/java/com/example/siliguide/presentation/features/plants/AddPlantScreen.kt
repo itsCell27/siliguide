@@ -28,8 +28,11 @@ import com.example.siliguide.core.ui.theme.*
 fun AddPlantScreen(
     viewModel: PlantViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onNavigateToCamera: () -> Unit
+    onNavigateToCamera: (String) -> Unit
 ) {
+    // new created plant id
+    val createdPlantId by viewModel.createdPlantId.collectAsState()
+
     var plantName by remember { mutableStateOf("") }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     var selectedDeviceName by remember { mutableStateOf("") }
@@ -133,7 +136,9 @@ fun AddPlantScreen(
                 NextStepsSheetContent(
                     onAnalyze = {
                         showNextSheet = false
-                        onNavigateToCamera()
+                        createdPlantId?.let { id ->
+                            onNavigateToCamera(id)
+                        }
                     },
                     onFinish = {
                         showNextSheet = false
