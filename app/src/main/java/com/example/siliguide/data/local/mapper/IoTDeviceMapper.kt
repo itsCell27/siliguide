@@ -13,6 +13,7 @@ fun Iot_devices.toIotDomain(): IoTDevice {
         isActive = is_active == 1L,
         lastKnownIp = last_known_ip ?: "192.168.4.1",
         connectionMode = connection_mode,
-        isSynced = is_synced == 1L // Add this: Converts SQLite Long to Boolean
+        isSynced = is_synced == 1L, // Add this: Converts SQLite Long to Boolean
+        dateAdded = date_added
     )
 }

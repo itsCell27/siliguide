@@ -246,7 +246,8 @@ class IoTViewModel @Inject constructor(
                 isActive = true,
                 lastKnownIp = "192.168.4.1",
                 connectionMode = "AP",
-                isSynced = false // Initial state
+                isSynced = false, // Initial state
+                dateAdded = System.currentTimeMillis()
             )
 
             try {

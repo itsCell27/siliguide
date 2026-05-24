@@ -8,5 +8,6 @@ data class IoTDevice(
     val isActive: Boolean,
     val lastKnownIp: String,      // Will be 192.168.4.1 for AP mode
     val connectionMode: String,    // "AP"
-    val isSynced: Boolean = false
+    val isSynced: Boolean = false,
+    val dateAdded: Long
 )
