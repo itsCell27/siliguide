@@ -40,6 +40,7 @@ import androidx.core.graphics.scale
 @Composable
 fun CropAdjustScreen(
     rawImageUri: String,
+    plantId: String? = null,
     onCropped: (String) -> Unit,
     onCancel: () -> Unit
 ) {

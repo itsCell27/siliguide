@@ -70,6 +70,7 @@ enum class SensorIconType {
 @Composable
 fun AnalysisResultScreen(
     imageUri: String,
+    plantId: String? = null,
     viewModel: AnalysisViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onSaveAsNote: () -> Unit

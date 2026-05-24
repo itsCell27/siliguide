@@ -76,14 +76,12 @@ fun SiliGuideNavGraph(
         composable(route = Screen.AddPlant.route) {
             AddPlantScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToCamera = { navController.navigate(Screen.Camera.route)}
+                onNavigateToCamera = { plantId ->
+                    // pass new plant id to camera
+                    navController.navigate(Screen.Camera.createRoute(plantId))
+                }
             )
         }
-
-        composable(
-            route = Screen.PlantDetail.route,
-            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
-        ) { /* PlantDetailScreen() */ }
 
         // --- IOT SETUP WIZARD ---
         composable(route = Screen.IoTSetup.route) {
@@ -127,30 +125,38 @@ fun SiliGuideNavGraph(
         }
 
         // --- ANALYSIS PIPELINE ---
-        composable(route = Screen.Camera.route) {
+        composable(
+            route = Screen.Camera.route,
+            arguments = listOf(
+                navArgument("plantId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
+            val plantId = backStackEntry.arguments?.getString("plantId")
             CameraScreen(
                 onBack = { navController.popBackStack() },
                 onImageCaptured = { rawUriString ->
-                    // Camera gives us a raw image. Send it to the Crop screen
-                    navController.navigate(Screen.CropAdjust.createRoute(rawUriString))
+                    navController.navigate(Screen.CropAdjust.createRoute(rawUriString, plantId))
                 }
             )
         }
 
         composable(
             route = Screen.CropAdjust.route,
-            arguments = listOf(navArgument("imageUri") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("imageUri") { type = NavType.StringType },
+                navArgument("plantId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
         ) { backStackEntry ->
             val encodedUri = backStackEntry.arguments?.getString("imageUri") ?: ""
             val decodedUri = URLDecoder.decode(encodedUri, "UTF-8")
+            val plantId = backStackEntry.arguments?.getString("plantId")
 
             CropAdjustScreen(
                 rawImageUri = decodedUri,
                 onCancel = { navController.popBackStack() },
                 onCropped = { croppedUriString ->
-                    // Crop screen gives us the final image. Send it to Analysis
-                    navController.navigate(Screen.AnalysisResult.createRoute(croppedUriString)) {
-                        // Pop the camera and crop screens off the backstack so the user can't hit "back" into them
+                    navController.navigate(Screen.AnalysisResult.createRoute(croppedUriString, plantId)) {
+                        // Keep the backstack clean
                         popUpTo(Screen.Camera.route) { inclusive = true }
                     }
                 }
@@ -159,19 +165,34 @@ fun SiliGuideNavGraph(
 
         composable(
             route = Screen.AnalysisResult.route,
-            arguments = listOf(navArgument("imageUri") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("imageUri") { type = NavType.StringType },
+                navArgument("plantId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
         ) { backStackEntry ->
             val encodedUri = backStackEntry.arguments?.getString("imageUri") ?: ""
             val decodedUri = URLDecoder.decode(encodedUri, "UTF-8")
+            val plantId = backStackEntry.arguments?.getString("plantId")
 
             AnalysisResultScreen(
                 imageUri = decodedUri,
-                onNavigateBack = {
-                    navController.popBackStack()
+                onNavigateBack = {if (plantId != null) {
+                        // Try to pop back to Detail (works if we came from Detail)
+                        val popped = navController.popBackStack(Screen.PlantDetail.route, false)
+
+                        // If it failed (popped == false), it means we came from "Add Plant"
+                        if (!popped) {
+                            // Navigate forward to Detail instead
+                            navController.navigate(Screen.PlantDetail.createRoute(plantId)) {
+                                // Remove the "Add Plant" screens from history
+                                popUpTo(Screen.Dashboard.route) { inclusive = false }
+                            }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
                 },
-                onSaveAsNote = {
-                    // Trigger SaveAnalysisUseCase here later
-                }
+                onSaveAsNote = { /* ... */ }
             )
         }
 
@@ -183,7 +204,9 @@ fun SiliGuideNavGraph(
             PlantDetailScreen(
                 plantId = plantId,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAnalysis = { navController.navigate(Screen.Camera.route) }
+                onNavigateToAnalysis = {
+                    navController.navigate(Screen.Camera.createRoute(plantId))
+                }
             )
         }
 

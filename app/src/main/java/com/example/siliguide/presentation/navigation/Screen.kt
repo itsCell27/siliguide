@@ -8,20 +8,26 @@ sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
     object GuestInfo : Screen("guest_info")
     object Dashboard : Screen("dashboard")
-    object Camera : Screen("camera")
-
-    // Some screens need to pass data, like the URI of the photo we just took
-    object CropAdjust : Screen("crop_adjust/{imageUri}") {
-        fun createRoute(imageUri: String): String {
-            val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
-            return "crop_adjust/$encodedUri"
+    // Updated to include optional plantId
+    object Camera : Screen("camera?plantId={plantId}") {
+        fun createRoute(plantId: String? = null): String {
+            return if (plantId != null) "camera?plantId=$plantId" else "camera"
         }
     }
 
-    object AnalysisResult : Screen("analysis_result/{imageUri}") {
-        fun createRoute(imageUri: String): String {
+    // Updated to include optional plantId
+    object CropAdjust : Screen("crop_adjust/{imageUri}?plantId={plantId}") {
+        fun createRoute(imageUri: String, plantId: String? = null): String {
             val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
-            return "analysis_result/$encodedUri"
+            return if (plantId != null) "crop_adjust/$encodedUri?plantId=$plantId" else "crop_adjust/$encodedUri"
+        }
+    }
+
+    // Updated to include optional plantId
+    object AnalysisResult : Screen("analysis_result/{imageUri}?plantId={plantId}") {
+        fun createRoute(imageUri: String, plantId: String? = null): String {
+            val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
+            return if (plantId != null) "analysis_result/$encodedUri?plantId=$plantId" else "analysis_result/$encodedUri"
         }
     }
 

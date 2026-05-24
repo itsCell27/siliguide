@@ -35,6 +35,7 @@ import java.io.File
 
 @Composable
 fun CameraScreen(
+    plantId: String? = null,
     onImageCaptured: (String) -> Unit, // Now passes a URI String
     onBack: () -> Unit
 ) {
