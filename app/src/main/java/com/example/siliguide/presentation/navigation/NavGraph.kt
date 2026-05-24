@@ -133,7 +133,23 @@ fun SiliGuideNavGraph(
         ) { backStackEntry ->
             val plantId = backStackEntry.arguments?.getString("plantId")
             CameraScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    if (plantId != null) {
+                        // Try to pop back to Detail (works if we came from Detail)
+                        val popped = navController.popBackStack(Screen.PlantDetail.route, false)
+
+                        // If it failed (popped == false), it means we came from "Add Plant"
+                        if (!popped) {
+                            // Navigate forward to Detail instead
+                            navController.navigate(Screen.PlantDetail.createRoute(plantId)) {
+                                // Remove the "Add Plant" screens from history
+                                popUpTo(Screen.Dashboard.route) { inclusive = false }
+                            }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                },
                 onImageCaptured = { rawUriString ->
                     navController.navigate(Screen.CropAdjust.createRoute(rawUriString, plantId))
                 }
@@ -176,7 +192,8 @@ fun SiliGuideNavGraph(
 
             AnalysisResultScreen(
                 imageUri = decodedUri,
-                onNavigateBack = {if (plantId != null) {
+                onNavigateBack = {
+                    if (plantId != null) {
                         // Try to pop back to Detail (works if we came from Detail)
                         val popped = navController.popBackStack(Screen.PlantDetail.route, false)
 
