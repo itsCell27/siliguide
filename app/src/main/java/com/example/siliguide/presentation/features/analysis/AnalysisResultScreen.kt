@@ -41,11 +41,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.res.painterResource
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.engine.RuleResult
 import com.example.siliguide.domain.engine.ThresholdLevel
+import com.example.siliguide.R
 
 data class SensorRowData(
     val name: String,
@@ -1349,13 +1351,15 @@ fun SupportedSymptomsCard() {
                     modifier = Modifier.weight(1f),
                     title = "Healthy",
                     tag = "OK",
-                    desc = "Vibrant green, intact, no spotting or curling"
+                    desc = "Vibrant green, intact, no spotting or curling",
+                    imageResId = R.drawable.healthy
                 )
                 ScopeTile(
                     modifier = Modifier.weight(1f),
                     title = "Curling",
                     tag = "!",
-                    desc = "Edges roll inward or downward"
+                    desc = "Edges roll inward or downward",
+                    imageResId = R.drawable.curling
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1363,13 +1367,15 @@ fun SupportedSymptomsCard() {
                     modifier = Modifier.weight(1f),
                     title = "Spots",
                     tag = "!",
-                    desc = "Brown/black blemishes on leaf surface"
+                    desc = "Brown/black blemishes on leaf surface",
+                    imageResId = R.drawable.spots
                 )
                 ScopeTile(
                     modifier = Modifier.weight(1f),
                     title = "Yellowing",
                     tag = "!",
-                    desc = "Loss of green pigment, pale or yellow"
+                    desc = "Loss of green pigment, pale or yellow",
+                    imageResId = R.drawable.yellowing
                 )
             }
         }
@@ -1381,7 +1387,8 @@ fun ScopeTile(
     modifier: Modifier,
     title: String,
     tag: String,
-    desc: String
+    desc: String,
+    imageResId: Int
 ) {
     Column(
         modifier = modifier
@@ -1399,7 +1406,12 @@ fun ScopeTile(
                 .background(LeafBgDark),
             contentAlignment = Alignment.Center
         ) {
-            Text("🌿", fontSize = 28.sp)
+            Image(
+                painter = painterResource(id = imageResId),
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(0.7f), // Scale the icon
+                contentScale = ContentScale.Fit
+            )
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
