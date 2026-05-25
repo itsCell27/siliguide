@@ -6,6 +6,7 @@ import com.example.siliguide.domain.model.Plant
 import com.example.siliguide.domain.model.AnalysisSession
 import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.usecase.AddPlantUseCase
+import com.example.siliguide.domain.usecase.DeletePlantByIdUseCase
 import com.example.siliguide.domain.usecase.GetPlantsUseCase
 import com.example.siliguide.domain.usecase.GetAnalysisSessionsByPlantUseCase
 import com.example.siliguide.domain.usecase.GetPlantByIdUseCase
@@ -22,7 +23,8 @@ class PlantViewModel @Inject constructor(
     private val addPlantUseCase: AddPlantUseCase,
     private val getPlantsUseCase: GetPlantsUseCase,
     private val getPlantByIdUseCase: GetPlantByIdUseCase,
-    private val getAnalysisSessionsByPlantUseCase: GetAnalysisSessionsByPlantUseCase
+    private val getAnalysisSessionsByPlantUseCase: GetAnalysisSessionsByPlantUseCase,
+    private val deletePlantByIdUseCase: DeletePlantByIdUseCase
 ) : ViewModel() {
 
     // Add this state to store the ID of the newly created plant
@@ -84,6 +86,22 @@ class PlantViewModel @Inject constructor(
                 } else {
                     // Optional: handle retry or error if DB is extremely slow
                 }
+            }
+        }
+    }
+
+    fun deletePlant(plantId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                deletePlantByIdUseCase(plantId)
+                // If the deleted plant was the one currently loaded, clear the state
+                if (_plantState.value?.plantId == plantId) {
+                    _plantState.value = null
+                }
+                onComplete() // Callback to handle navigation (e.g., pop back to Dashboard)
+            } catch (e: Exception) {
+                // Handle error if necessary
+                e.printStackTrace()
             }
         }
     }

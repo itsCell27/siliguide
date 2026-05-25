@@ -37,17 +37,17 @@ class Esp32Api {
         }
     }
 
-    suspend fun getSensorData(): SensorResponseDto {
+    suspend fun getSensorData(host: String = "192.168.4.1"): SensorResponseDto {
         // Note: In a later refactor, we will make "192.168.4.1" dynamic
         // based on your LAN/AP connection mode!
         return client
-            .get("http://192.168.4.1/data")
+            .get("http://$host/data")
             .body()
     }
 
-    suspend fun getDeviceInfo(): DeviceInfoDto {
+    suspend fun getDeviceInfo(host: String = "192.168.4.1"): DeviceInfoDto {
         return client
-            .get("http://192.168.4.1/info")
+            .get("http://$host/info")
             .body()
     }
 }

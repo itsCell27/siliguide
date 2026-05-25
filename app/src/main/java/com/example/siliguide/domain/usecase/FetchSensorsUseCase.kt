@@ -8,8 +8,8 @@ class FetchSensorsUseCase @Inject constructor(
     private val repository: IoTRepository
 ) {
     // The 'operator fun invoke' allows us to call the class like a function
-    suspend operator fun invoke(): SensorResponse {
+    suspend operator fun invoke(deviceId: String? = null): SensorResponse {
         // You could add business logic here later (e.g., checking if the data is valid)
-        return repository.getSensors()
+        return repository.getSensors(deviceId)
     }
 }

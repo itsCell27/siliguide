@@ -30,8 +30,33 @@ class Esp32Repository @Inject constructor(
     private val database = SiliGuideDatabase(driver)
     private val queries = database.siliGuideQueries
 
-    override suspend fun getSensors(): SensorResponse {
-        val dto = api.getSensorData()
+    override suspend fun getSensors(deviceId: String?): SensorResponse {
+        // 1. Determine which IP to use
+        val targetIp = if (deviceId != null) {
+            val device = getDeviceById(deviceId)
+            device?.lastKnownIp ?: "192.168.4.1"
+        } else {
+            "192.168.4.1"
+        }
+
+        // 2. OPTIONAL: Identity Verification (Highly Recommended)
+        // Verify that the device at 'targetIp' is actually the 'deviceId' we want
+        if (deviceId != null && targetIp != "192.168.4.1") {
+            try {
+                val info = api.getDeviceInfo(targetIp)
+                if (info.deviceId != deviceId) {
+                    // If the hardware ID doesn't match our DB record,
+                    // the IP might have changed or it's the wrong device.
+                    throw Exception("Device mismatch: Expected $deviceId but found ${info.deviceId}")
+                }
+            } catch (e: Exception) {
+                // Handle connection failure or mismatch
+                throw Exception("Failed to verify IoT device at $targetIp: ${e.message}")
+            }
+        }
+
+        // 3. Fetch the data
+        val dto = api.getSensorData(targetIp)
         return dto.toDomain()
     }
 
@@ -69,6 +94,12 @@ class Esp32Repository @Inject constructor(
     }
 
     // --- DATABASE OPERATIONS ---
+
+    override suspend fun getDeviceById(deviceId: String): IoTDevice? {
+        return queries.getDeviceById(deviceId)
+            .executeAsOneOrNull()
+            ?.toIotDomain()
+    }
 
     override suspend fun deleteDevice(deviceId: String) {
         queries.deleteDevice(deviceId)

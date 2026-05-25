@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.example.siliguide.domain.repository.AuthRepository
+import com.example.siliguide.domain.usecase.GetIoTDeviceByIdUseCase
 
 @HiltViewModel
 class IoTViewModel @Inject constructor(
@@ -40,6 +41,7 @@ class IoTViewModel @Inject constructor(
     private val verifyDeviceConnectionUseCase: VerifyDeviceConnectionUseCase,
     private val parseWifiQrUseCase: ParseWifiQrUseCase,
     private val saveIoTDeviceUseCase: SaveIoTDeviceUseCase,
+    private val getIoTDeviceByIdUseCase: GetIoTDeviceByIdUseCase,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -121,7 +123,7 @@ class IoTViewModel @Inject constructor(
                 sensorData = fetchSensorsUseCase()
             } catch (e: Exception) {
                 error = "ESP32 not connected: ${e.message}"
-                // Optional: If the connection breaks completely, stop the loop to save battery
+                // If the connection breaks completely, stop the loop to save battery
                 // stopLiveMonitoring()
             }
 
@@ -235,12 +237,26 @@ class IoTViewModel @Inject constructor(
             val id = connectedDeviceId ?: return@launch
             val token = pairingToken ?: ""
 
-            // 2. Fetch the current userId
+            // Fetch the current userId
             val userId = authRepository.getUserId() ?: return@launch
+
+            // Check if exists
+            val existingDevice = getIoTDeviceByIdUseCase(id)
+            if (existingDevice != null) {
+                if (existingDevice.userId == userId) {
+                    // Scenario A: Device already belongs to this user
+                    // Maybe just update the name?
+                    Log.d("IoTViewModel", "Device already registered to this user. Updating name.")
+                } else {
+                    // Scenario B: Device belongs to someone else (Security check)
+                    error = "This device is already registered to another account."
+                    return@launch
+                }
+            }
 
             val newDevice = IoTDevice(
                 deviceId = id,
-                userId = userId, // 3. Pass the userId here!
+                userId = userId,
                 deviceName = customName,
                 deviceIdentifier = token,
                 isActive = true,
@@ -255,6 +271,7 @@ class IoTViewModel @Inject constructor(
                 _setupComplete.emit(Unit)
             } catch (e: Exception) {
                 error = "Database Error: Could not save device."
+                e.printStackTrace()
             }
         }
     }

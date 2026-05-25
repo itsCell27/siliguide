@@ -279,14 +279,14 @@ fun IoTDevicesSection(devices: List<IoTDevice>, onAddDevice: () -> Unit) {
                 style = SectionLabelStyle,
                 color = GrayMedium
             )
-            if (devices.isNotEmpty()) {
-                Text(
-                    text = "See all",
-                    style = SeeAllStyle,
-                    color = GreenPrimary,
-                    modifier = Modifier.clickable { onAddDevice() }
-                )
-            }
+//            if (devices.isNotEmpty()) {
+//                Text(
+//                    text = "See all",
+//                    style = SeeAllStyle,
+//                    color = GreenPrimary,
+//                    modifier = Modifier.clickable { onAddDevice() }
+//                )
+//            }
         }
 
         if (devices.isEmpty()) {

@@ -7,10 +7,12 @@ import kotlinx.coroutines.flow.Flow
 
 // The Domain layer defines WHAT it needs, not HOW to get it.
 interface IoTRepository {
-    suspend fun getSensors(): SensorResponse
+    suspend fun getSensors(deviceId: String? = null): SensorResponse
 
     // Returns the deviceId if successful, or an Exception if it fails
     suspend fun verifyDeviceConnection(): Result<DeviceInfoDto>
+
+    suspend fun getDeviceById(deviceId: String): IoTDevice?
 
     fun connectToDeviceWifi(
         ssid: String,

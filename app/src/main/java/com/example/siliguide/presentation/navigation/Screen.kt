@@ -8,26 +8,43 @@ sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
     object GuestInfo : Screen("guest_info")
     object Dashboard : Screen("dashboard")
-    // Updated to include optional plantId
-    object Camera : Screen("camera?plantId={plantId}") {
-        fun createRoute(plantId: String? = null): String {
-            return if (plantId != null) "camera?plantId=$plantId" else "camera"
+
+    object PreAnalysis : Screen("pre_analysis/{plantId}") {
+        fun createRoute(plantId: String) = "pre_analysis/$plantId"
+    }
+
+    // Updated to include optional plantId AND optional deviceId
+    object Camera : Screen("camera?plantId={plantId}&deviceId={deviceId}") {
+        fun createRoute(plantId: String? = null, deviceId: String? = null): String {
+            val base = "camera"
+            val params = mutableListOf<String>()
+            plantId?.let { params.add("plantId=$it") }
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
         }
     }
 
-    // Updated to include optional plantId
-    object CropAdjust : Screen("crop_adjust/{imageUri}?plantId={plantId}") {
-        fun createRoute(imageUri: String, plantId: String? = null): String {
+    // Updated to include optional plantId AND optional deviceId
+    object CropAdjust : Screen("crop_adjust/{imageUri}?plantId={plantId}&deviceId={deviceId}") {
+        fun createRoute(imageUri: String, plantId: String? = null, deviceId: String? = null): String {
             val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
-            return if (plantId != null) "crop_adjust/$encodedUri?plantId=$plantId" else "crop_adjust/$encodedUri"
+            val base = "crop_adjust/$encodedUri"
+            val params = mutableListOf<String>()
+            plantId?.let { params.add("plantId=$it") }
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
         }
     }
 
-    // Updated to include optional plantId
-    object AnalysisResult : Screen("analysis_result/{imageUri}?plantId={plantId}") {
-        fun createRoute(imageUri: String, plantId: String? = null): String {
+    // Updated to include optional plantId AND optional deviceId
+    object AnalysisResult : Screen("analysis_result/{imageUri}?plantId={plantId}&deviceId={deviceId}") {
+        fun createRoute(imageUri: String, plantId: String? = null, deviceId: String? = null): String {
             val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
-            return if (plantId != null) "analysis_result/$encodedUri?plantId=$plantId" else "analysis_result/$encodedUri"
+            val base = "analysis_result/$encodedUri"
+            val params = mutableListOf<String>()
+            plantId?.let { params.add("plantId=$it") }
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
         }
     }
 

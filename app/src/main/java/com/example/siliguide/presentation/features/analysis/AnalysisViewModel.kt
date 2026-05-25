@@ -6,6 +6,7 @@
     import androidx.compose.runtime.getValue
     import androidx.compose.runtime.mutableStateOf
     import androidx.compose.runtime.setValue
+    import androidx.lifecycle.SavedStateHandle
     import androidx.lifecycle.ViewModel
     import androidx.lifecycle.viewModelScope
     import com.example.siliguide.core.ml.GatekeeperResult
@@ -13,23 +14,33 @@
     import com.example.siliguide.core.ml.LabuyoLeafChecker
     import com.example.siliguide.core.ml.LeafClassifier
     import com.example.siliguide.core.ml.Prediction
+    import com.example.siliguide.data.local.storage.InternalImageStorage
     import com.example.siliguide.domain.engine.RuleResult
     import com.example.siliguide.domain.engine.SiliGuideThresholds
     import com.example.siliguide.domain.engine.ThresholdEngine
+    import com.example.siliguide.domain.model.AnalysisSession
     import com.example.siliguide.domain.usecase.AnalyzePlantUseCase
     import com.example.siliguide.domain.usecase.FetchSensorsUseCase
     import com.example.siliguide.domain.model.SensorResponse
+    import com.example.siliguide.domain.repository.AuthRepository
+    import com.example.siliguide.domain.usecase.SaveAnalysisSessionUseCase
+    import com.example.siliguide.presentation.features.auth.AuthViewModel
     import dagger.hilt.android.lifecycle.HiltViewModel
     import dagger.hilt.android.qualifiers.ApplicationContext
     import kotlinx.coroutines.Dispatchers
     import kotlinx.coroutines.launch
     import kotlinx.coroutines.withContext
+    import java.util.UUID
     import javax.inject.Inject
 
     @HiltViewModel
     class AnalysisViewModel @Inject constructor(
         private val analyzePlantUseCase: AnalyzePlantUseCase,
         private val fetchSensorsUseCase: FetchSensorsUseCase,
+        private val saveAnalysisSessionUseCase: SaveAnalysisSessionUseCase,
+        private val authRepository: AuthRepository,
+        private val savedStateHandle: SavedStateHandle,
+        private val internalImageStorage: InternalImageStorage,
         @param:ApplicationContext private val context: Context
     ) : ViewModel() {
 
@@ -54,6 +65,11 @@
 
         var predictionName by mutableStateOf<String?>(null)
             private set
+
+        private var lastSensorData: SensorResponse? = null
+
+        // Retrieve the ID from the navigation arguments
+        private val deviceId: String? = savedStateHandle["deviceId"]
 
         fun analyzeImage(bitmap: Bitmap) {
             isAnalyzing = true
@@ -100,7 +116,7 @@
 
                         // 3. Try to get Sensor Data
                         val sensorData = try {
-                            val data = fetchSensorsUseCase()
+                            val data = fetchSensorsUseCase(deviceId)
                             Log.d("AnalysisViewModel", "Sensor Data Received: $data")
                             data
                         } catch (e: Exception) {
@@ -116,6 +132,7 @@
                             // Map the raw data into UI State
                             if (sensorData != null) {
                                 sensorUiState = buildSensorUiState(sensorData)
+                                lastSensorData = sensorData
                             }
 
                             // 4. Pass results to Rule Engine
@@ -143,6 +160,62 @@
                         analysisError = "Analysis failed: ${e.localizedMessage}"
                         isAnalyzing = false
                     }
+                }
+            }
+        }
+
+        /**
+         * Packages the current analysis state into a session and saves it to the local database.
+         */
+        fun saveCurrentAnalysis(plantId: String, imagePath: String, onSuccess: () -> Unit) {
+            val currentRuleResult = ruleResult ?: return
+            val currentPrediction = prediction ?: return
+            val sessionId = UUID.randomUUID().toString()
+
+            viewModelScope.launch {
+                val userId = authRepository.getUserId() ?: return@launch
+
+                val permanentPath = withContext(Dispatchers.IO) {
+                    internalImageStorage.saveImagePermanently(imagePath, sessionId)
+                } ?: imagePath
+                val session = AnalysisSession(
+                    sessionId = sessionId,
+                    plantId = plantId,
+                    deviceId = this@AnalysisViewModel.deviceId,
+                    userId = userId,
+                    sessionTimestamp = System.currentTimeMillis(),
+                    imagePath = permanentPath,
+                    predictedClass = currentPrediction.label,
+                    confidence = currentPrediction.confidence.toDouble(),
+
+                    // Data from Rule Engine
+                    plantCondition = currentRuleResult.condition,
+                    possibleCauses = currentRuleResult.possibleCauses.joinToString(", "),
+                    characteristics = currentRuleResult.characteristics.joinToString(", "),
+                    recommendedActions = currentRuleResult.recommendations.joinToString(", "),
+
+                    // Sensor values
+                    soilMoisture = lastSensorData?.soil?.moisture,
+                    soilPh = lastSensorData?.soil?.ph,
+                    soilTemp = lastSensorData?.soil?.temperature,
+                    electricalConductivity = lastSensorData?.soil?.ec,
+                    nitrogen = lastSensorData?.soil?.nitrogen,
+                    phosphorus = lastSensorData?.soil?.phosphorus,
+                    potassium = lastSensorData?.soil?.potassium,
+                    lightIntensity = lastSensorData?.environment?.light,
+                    airTemp = lastSensorData?.environment?.airTemperature,
+
+                    isPartial = (lastSensorData == null), // It's partial if no sensor data was captured,
+                    isSynced = false
+                )
+
+                try {
+                    saveAnalysisSessionUseCase(session)
+                    withContext(Dispatchers.Main) {
+                        onSuccess()
+                    }
+                } catch (e: Exception) {
+                    Log.e("AnalysisViewModel", "Failed to save session", e)
                 }
             }
         }
