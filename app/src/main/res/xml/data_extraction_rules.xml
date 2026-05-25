@@ -9,7 +9,14 @@
         <include .../>
         <exclude .../>
         -->
+        <!--  REMOVE IF DATABASE SCHEMA IS FINALIZED  -->
+        <exclude domain="database" path="siliguide.db"/>
     </cloud-backup>
+
+    <!--  REMOVE IF DATABASE SCHEMA IS FINALIZED  -->
+    <device-transfer>
+        <exclude domain="database" path="siliguide.db"/>
+    </device-transfer>
     <!--
     <device-transfer>
         <include .../>
