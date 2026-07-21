@@ -3,6 +3,7 @@ package com.example.siliguide.presentation.features.analysis
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Log
+import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
@@ -15,6 +16,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.FlashAuto
+import androidx.compose.material.icons.outlined.FlashOff
+import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,12 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.siliguide.core.ui.theme.GreenDark
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -44,9 +50,15 @@ fun CameraScreen(
     val scope = rememberCoroutineScope() // Needed for background file copying
 
     var imageCaptureRef by remember { mutableStateOf<ImageCapture?>(null) }
+    var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
+
     var hasCameraPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
+
+    // Tap to focus state
+    var tapPoint by remember { mutableStateOf<Offset?>(null) }
+    var isFocusSuccessful by remember { mutableStateOf<Boolean?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -91,6 +103,15 @@ fun CameraScreen(
         if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    // Clear focus ring after a delay
+    LaunchedEffect(tapPoint) {
+        if (tapPoint != null) {
+            delay(1500)
+            tapPoint = null
+            isFocusSuccessful = null
+        }
+    }
+
     if (hasCameraPermission) {
         var cameraProvider: ProcessCameraProvider? by remember { mutableStateOf(null) }
 
@@ -102,6 +123,8 @@ fun CameraScreen(
             AndroidView(
                 factory = { ctx ->
                     val previewView = PreviewView(ctx)
+                    var cameraRef: Camera? = null // Reference to control focus
+
                     ProcessCameraProvider.getInstance(ctx).apply {
                         addListener({
                             val provider = get()
@@ -112,22 +135,65 @@ fun CameraScreen(
                             }
                             val imageCapture = ImageCapture.Builder()
                                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                .setFlashMode(flashMode)
                                 .build()
 
                             try {
                                 provider.unbindAll()
-                                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture)
+                                // Save the camera instance returned by bindToLifecycle
+                                cameraRef = provider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    CameraSelector.DEFAULT_BACK_CAMERA,
+                                    preview,
+                                    imageCapture
+                                )
                                 imageCaptureRef = imageCapture
                             } catch (e: Exception) {
                                 Log.e("Camera", "Binding failed", e)
                             }
                         }, ContextCompat.getMainExecutor(ctx))
                     }
+
+                    // --- TAP TO FOCUS IMPLEMENTATION ---
+                    previewView.setOnTouchListener { view, event ->
+                        if (event.action == MotionEvent.ACTION_UP) {
+                            // Convert screen tap coordinates to camera sensor coordinates
+                            val factory = previewView.meteringPointFactory
+                            val point = factory.createPoint(event.x, event.y)
+
+                            // Update UI state for the ring
+                            tapPoint = Offset(event.x, event.y)
+                            isFocusSuccessful = null
+
+                            // Create the action and execute it
+                            val action = FocusMeteringAction.Builder(point).build()
+                            val result = cameraRef?.cameraControl?.startFocusAndMetering(action)
+
+                            // Listen for focus completion
+                            result?.addListener({
+                                try {
+                                    val focusResult = result.get()
+                                    isFocusSuccessful = focusResult.isFocusSuccessful
+                                } catch (e: Exception) {
+                                    Log.e("Camera", "Focus metering failed", e)
+                                    isFocusSuccessful = false
+                                }
+                            }, ContextCompat.getMainExecutor(ctx))
+
+                            view.performClick() // Good practice for accessibility
+                        }
+                        true // Consume the touch event
+                    }
+
                     previewView
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                update = {
+                    imageCaptureRef?.flashMode = flashMode
+                }
             )
 
+            // Your existing overlay logic remains exactly the same!
             CameraOverlay(
                 onCapture = {
                     val imageCapture = imageCaptureRef ?: return@CameraOverlay
@@ -139,7 +205,6 @@ fun CameraScreen(
                         ContextCompat.getMainExecutor(context),
                         object : ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                // Camera Capture: Immediately pass the saved file URI to the crop screen!
                                 output.savedUri?.let { onImageCaptured(it.toString()) }
                                     ?: onImageCaptured(android.net.Uri.fromFile(file).toString())
                             }
@@ -150,15 +215,34 @@ fun CameraScreen(
                     )
                 },
                 onUpload = { galleryLauncher.launch("image/*") },
-                onBack = onBack
+                onBack = onBack,
+                tapPoint = tapPoint,
+                isFocusSuccessful = isFocusSuccessful,
+                flashMode = flashMode,
+                onFlashModeChange = {
+                    flashMode = when (flashMode) {
+                        ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_ON
+                        ImageCapture.FLASH_MODE_ON -> ImageCapture.FLASH_MODE_AUTO
+                        else -> ImageCapture.FLASH_MODE_OFF
+                    }
+                }
             )
         }
     }
 }
 
 @Composable
-fun CameraOverlay(onCapture: () -> Unit, onUpload: () -> Unit, onBack: () -> Unit) {
+fun CameraOverlay(
+    onCapture: () -> Unit,
+    onUpload: () -> Unit,
+    onBack: () -> Unit,
+    tapPoint: Offset? = null,
+    isFocusSuccessful: Boolean? = null,
+    flashMode: Int = ImageCapture.FLASH_MODE_OFF,
+    onFlashModeChange: () -> Unit = {}
+) {
     Box(modifier = Modifier.fillMaxSize()) {
+        // Back Button
         IconButton(
             onClick = onBack,
             modifier = Modifier
@@ -169,6 +253,22 @@ fun CameraOverlay(onCapture: () -> Unit, onUpload: () -> Unit, onBack: () -> Uni
             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Color.White)
         }
 
+        // Flash Button
+        IconButton(
+            onClick = onFlashModeChange,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(16.dp)
+        ) {
+            val icon = when (flashMode) {
+                ImageCapture.FLASH_MODE_ON -> Icons.Outlined.FlashOn
+                ImageCapture.FLASH_MODE_AUTO -> Icons.Outlined.FlashAuto
+                else -> Icons.Outlined.FlashOff
+            }
+            Icon(icon, contentDescription = "Flash Mode", tint = Color.White)
+        }
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             val boxSide = minOf(size.width, size.height) * 0.75f
             val left = (size.width - boxSide) / 2
@@ -176,6 +276,8 @@ fun CameraOverlay(onCapture: () -> Unit, onUpload: () -> Unit, onBack: () -> Uni
             val lineLength = 80f
             val right = left + boxSide
             val bottom = top + boxSide
+
+            // Draw Corner Brackets
             drawLine(Color.White, Offset(left, top), Offset(left + lineLength, top), strokeWidth = 6f)
             drawLine(Color.White, Offset(left, top), Offset(left, top + lineLength), strokeWidth = 6f)
             drawLine(Color.White, Offset(right, top), Offset(right - lineLength, top), strokeWidth = 6f)
@@ -184,6 +286,22 @@ fun CameraOverlay(onCapture: () -> Unit, onUpload: () -> Unit, onBack: () -> Uni
             drawLine(Color.White, Offset(left, bottom), Offset(left, bottom - lineLength), strokeWidth = 6f)
             drawLine(Color.White, Offset(right, bottom), Offset(right - lineLength, bottom), strokeWidth = 6f)
             drawLine(Color.White, Offset(right, bottom), Offset(right, bottom - lineLength), strokeWidth = 6f)
+
+            // Draw Tap-to-Focus Ring
+            tapPoint?.let { point ->
+                val color = when (isFocusSuccessful) {
+                    true -> Color.Green
+                    false -> Color.Red
+                    null -> Color(0xFFFFEB3B) // Yellowish-gold
+                }
+                val ringSize = 70.dp.toPx()
+                drawRect(
+                    color = color,
+                    topLeft = Offset(point.x - ringSize / 2, point.y - ringSize / 2),
+                    size = androidx.compose.ui.geometry.Size(ringSize, ringSize),
+                    style = Stroke(width = 2.dp.toPx())
+                )
+            }
         }
 
         Box(
