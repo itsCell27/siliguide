@@ -30,7 +30,7 @@ class LeafClassifier(context: Context) {
 
     init {
         try {
-            val fileDescriptor = context.assets.openFd("models/leaf_classifier_model2_dual_output_v3small.tflite")
+            val fileDescriptor = context.assets.openFd("models/leaf_classifier_model2.5_dual_output_v3small.tflite")
             val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
             val fileChannel = inputStream.channel
 
@@ -119,18 +119,34 @@ class LeafClassifier(context: Context) {
     }
 
     private fun preprocess(bitmap: Bitmap): ByteBuffer {
-        // FIX 3: Ensure ARGB_8888 before reading pixels
-        val argbBitmap = if (bitmap.config != Bitmap.Config.ARGB_8888) {
-            bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        // 1. Find the shortest edge to make a perfect square
+        val dimension = Math.min(bitmap.width, bitmap.height)
+
+        // 2. Calculate the starting X and Y to crop from the exact center
+        val xOffset = (bitmap.width - dimension) / 2
+        val yOffset = (bitmap.height - dimension) / 2
+
+        // 3. Create the squared image
+        val squaredBitmap = Bitmap.createBitmap(
+            bitmap,
+            xOffset,
+            yOffset,
+            dimension,
+            dimension
+        )
+
+        // Ensure ARGB_8888 before reading pixels
+        val argbBitmap = if (squaredBitmap.config != Bitmap.Config.ARGB_8888) {
+            squaredBitmap.copy(Bitmap.Config.ARGB_8888, false)
         } else {
-            bitmap
+            squaredBitmap
         }
 
         val resized = argbBitmap.scale(inputWidth, inputHeight)
 
         val input = ByteBuffer.allocateDirect(4 * inputWidth * inputHeight * 3)
         input.order(ByteOrder.nativeOrder())
-        // FIX 3 (KEY FIX): rewind before filling so the model reads from position 0
+        // rewind before filling so the model reads from position 0
         input.rewind()
 
         val intValues = IntArray(inputWidth * inputHeight)
@@ -151,11 +167,12 @@ class LeafClassifier(context: Context) {
             input.putFloat(b)
         }
 
-        // Recycle intermediate bitmaps
-        if (resized != bitmap && resized != argbBitmap) resized.recycle()
-        if (argbBitmap != bitmap) argbBitmap.recycle()
+        // Clean up memory to prevent OutOfMemory (OOM) crashes
+        if (squaredBitmap != bitmap) squaredBitmap.recycle()
+        if (argbBitmap != squaredBitmap && argbBitmap != bitmap) argbBitmap.recycle()
+        if (resized != argbBitmap && resized != bitmap) resized.recycle()
 
-        // FIX 3 (KEY FIX): rewind before returning so interpreter reads from the start
+        // rewind before returning so interpreter reads from the start
         input.rewind()
         return input
     }
