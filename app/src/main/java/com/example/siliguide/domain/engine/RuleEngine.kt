@@ -331,7 +331,7 @@ object RuleEngine {
         return when (prediction.lowercase()) {
 
             "healthy" -> RuleResult(
-                condition        = null,
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Uniform, vibrant green to dark emerald color",
                     "Smooth, continuous leaf margins",
@@ -350,7 +350,7 @@ object RuleEngine {
             )
 
             "curling", "leaf_curling" -> RuleResult(
-                condition        = null,
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Upward cupping or rolling of leaf margins",
                     "Downward curling or severe twisting",
@@ -372,7 +372,7 @@ object RuleEngine {
             )
 
             "spots", "leaf_spots" -> RuleResult(
-                condition        = null,
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Frog-eye spots: light gray/white center with dark brown margin",
                     "Water-soaked lesions that dry out and turn black or brown",
@@ -395,7 +395,7 @@ object RuleEngine {
             )
 
             "yellowing", "yellowing_leaves" -> RuleResult(
-                condition        = null,
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Chlorosis: entire leaf turns pale green or uniform yellow (starts on oldest leaves)",
                     "Interveinal chlorosis: tissue between veins yellows while veins stay green",
@@ -434,7 +434,7 @@ object RuleEngine {
         return when (prediction.lowercase()) {
 
             "healthy" -> RuleResult(
-                condition        = "Healthy",
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Uniform, vibrant green to dark emerald color",
                     "Smooth, continuous leaf margins",
@@ -453,7 +453,7 @@ object RuleEngine {
             )
 
             "curling", "leaf_curling" -> RuleResult(
-                condition        = "Curling",
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Upward cupping or rolling of leaf margins",
                     "Downward curling or severe twisting",
@@ -475,7 +475,7 @@ object RuleEngine {
             )
 
             "spots", "leaf_spots" -> RuleResult(
-                condition        = "Spots",
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Frog-eye spots: light gray/white center with dark brown margin",
                     "Water-soaked lesions that dry out and turn black or brown",
@@ -498,7 +498,7 @@ object RuleEngine {
             )
 
             "yellowing", "yellowing_leaves" -> RuleResult(
-                condition        = "Yellowing",
+                condition        = "Unknown Condition",
                 characteristics         = listOf(
                     "Chlorosis: entire leaf turns pale green or uniform yellow (starts on oldest leaves)",
                     "Interveinal chlorosis: tissue between veins yellows while veins stay green",
