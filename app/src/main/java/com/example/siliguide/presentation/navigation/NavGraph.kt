@@ -1,5 +1,10 @@
 package com.example.siliguide.presentation.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,6 +30,8 @@ import com.example.siliguide.presentation.features.plants.AddPlantScreen
 import com.example.siliguide.presentation.features.plants.PlantDetailScreen
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import com.example.siliguide.presentation.features.analysis.AnalysisViewModel
 import com.example.siliguide.presentation.features.analysis.PreAnalysisScreen
 import com.example.siliguide.presentation.features.analysis.PreAnalysisState
@@ -102,7 +109,7 @@ fun SiliGuideNavGraph(
                         }
                         ConnectionMode.LAN_MODE -> {
                             // Assumes you have a Screen.IoTSetupLAN route defined
-                            navController.navigate("iot_setup_lan")
+                            navController.navigate(Screen.IoTSetupLAN.route)
                         }
                     }
                 }
@@ -117,6 +124,15 @@ fun SiliGuideNavGraph(
                     navController.popBackStack(Screen.Dashboard.route, false)
                 }
             )
+        }
+
+        composable(Screen.IoTSetupLAN.route) {
+            // Replace this with your actual LAN Setup Screen Composable
+            Column() {
+                Button(onClick = { navController.popBackStack() }) {
+                    Text("Coming Soon, Go Back")
+                }
+            }
         }
 
         composable(Screen.QrScanner.route) {
