@@ -36,6 +36,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.core.net.toUri
 import androidx.core.graphics.scale
+import android.graphics.Canvas
+import android.graphics.Paint
 
 @Composable
 fun CropAdjustScreen(
@@ -205,7 +207,39 @@ private fun performManualCrop(bitmap: Bitmap, containerSize: IntSize, boxRect: a
     val top = points[1].toInt().coerceIn(0, bitmap.height - 1)
     val right = points[2].toInt().coerceIn(left + 1, bitmap.width)
     val bottom = points[3].toInt().coerceIn(top + 1, bitmap.height)
-    return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+    val cropped = Bitmap.createBitmap(
+        bitmap,
+        left,
+        top,
+        right - left,
+        bottom - top
+    )
+
+    android.util.Log.d(
+        "CropAdjust",
+        "Crop result = ${cropped.width} x ${cropped.height}"
+    )
+
+    // -----------------------------
+    // DEBUG: Draw a red border
+    // -----------------------------
+    val canvas = Canvas(cropped)
+
+    val paint = Paint().apply {
+        color = android.graphics.Color.RED
+        style = Paint.Style.STROKE
+        strokeWidth = 6f
+    }
+
+    canvas.drawRect(
+        0f,
+        0f,
+        cropped.width.toFloat(),
+        cropped.height.toFloat(),
+        paint
+    )
+
+    return cropped
 }
 
 // Memory Optimization Helper
