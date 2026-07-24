@@ -78,9 +78,10 @@ fun AnalysisResultScreen(
     onSaveAsNote: () -> Unit
 ) {
     val result = viewModel.ruleResult
-    val prediction = viewModel.prediction
+    val predictionLabel = viewModel.currentPredictionLabel
+    val confidence = viewModel.currentPredictionConfidence
     val isLoading = viewModel.isAnalyzing
-    val heatmapOverlay = viewModel.heatmapOverlay
+    val heatmapOverlay = viewModel.segmentationOverlay
     val context = LocalContext.current
     val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val sensorUiState = viewModel.sensorUiState
@@ -102,58 +103,70 @@ fun AnalysisResultScreen(
         }
     }
 
-    val confidence = prediction?.confidence ?: 0f
     val confidencePct = (confidence * 100).toInt()
     val isOutOfScope = !isLoading && (result == null || confidencePct < 50)
 
-    Scaffold(
-        topBar = {
-            ResultTopBar(
-                isOutOfScope = isOutOfScope,
-                onBack = onNavigateBack
-            )
-        },
-        bottomBar = {
-            if (!isLoading) {
-                ResultBottomBar(
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                ResultTopBar(
                     isOutOfScope = isOutOfScope,
-                    onPrimary = if (isOutOfScope) onNavigateBack else onSaveAsNote,
-                    onSecondary = onNavigateBack
+                    onBack = onNavigateBack
                 )
-            }
-        },
-        containerColor = OffWhite
-    ) { padding ->
+            },
+            bottomBar = {
+                if (!isLoading) {
+                    ResultBottomBar(
+                        isOutOfScope = isOutOfScope,
+                        onPrimary = if (isOutOfScope) onNavigateBack else onSaveAsNote,
+                        onSecondary = onNavigateBack
+                    )
+                }
+            },
+            containerColor = OffWhite
+        ) { padding ->
 
-        when {
-            isLoading -> {
-                Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    CircularProgressIndicator(color = GreenPrimary)
+            when {
+                isLoading -> {
+
+                }
+
+                isOutOfScope -> {
+                    OutOfScopeContent(
+                        confidencePct = confidencePct,
+                        bitmap = bitmapState.value,
+                        heatmapOverlay = heatmapOverlay,
+                        padding = padding
+                    )
+                }
+
+                else -> {
+                    ResultContent(
+                        result = result!!,
+                        confidence = confidence,
+                        predictedClass = predictionName ?: "Unknown",
+                        bitmap = bitmapState.value,
+                        heatmapOverlay = heatmapOverlay,
+                        padding = padding,
+                        sensorUiState = sensorUiState,
+                    )
                 }
             }
+        }
 
-            isOutOfScope -> {
-                OutOfScopeContent(
-                    confidencePct = confidencePct,
-                    bitmap = bitmapState.value,
-                    heatmapOverlay = heatmapOverlay,
-                    padding = padding
-                )
-            }
-
-            else -> {
-                ResultContent(
-                    result = result!!,
-                    confidence = confidence,
-                    predictedClass = predictionName ?: "Unknown",
-                    bitmap = bitmapState.value,
-                    heatmapOverlay = heatmapOverlay,
-                    padding = padding,
-                    sensorUiState = sensorUiState,
-                )
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f)) // Dims the background
+                    .clickable(enabled = false) { },           // Blocks click-throughs
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = GreenPrimary)
             }
         }
     }
+
 }
 
 @Composable
@@ -291,10 +304,6 @@ fun ResultContent(
                 description = result.conditionDescription ?: "Unknown"
             )
         } else if (result.isUsingSensors) {
-            PlantConditionCard(
-                condition = "Unknown Condition",
-                description = "Unknown"
-            )
             PossibleConditionsCard(causes = result.possibleCauses)
             CharacteristicsDescriptionCard(prediction = predictedClass, characteristics = result.characteristics)
         } else {
@@ -310,7 +319,8 @@ fun ResultContent(
         // Care recommendations
         if (result.isUsingSensors && result.recommendations.isNotEmpty()) {
             CareRecommendationsCard(items = result.recommendations)
-        } else if (!result.isUsingSensors) {
+        }
+        if (!result.isUsingSensors) {
             LockedRecommendationsCard()
         }
 
@@ -330,7 +340,7 @@ fun LeafImageCard(
     var showHeatmap by remember { mutableStateOf(false) }
 
     val heatmapAlpha by animateFloatAsState(
-        targetValue = if (showHeatmap) 0.55f else 0f,
+        targetValue = if (showHeatmap) 1.0f else 0f,
         animationSpec = tween(durationMillis = 250),
         label = "heatmap_alpha"
     )
@@ -347,31 +357,30 @@ fun LeafImageCard(
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = "Cropped leaf",
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize()
         )
 
-        // Layer 2 — CAM heatmap
+        // Layer 2 — segmentation overlay
         if (heatmapOverlay != null) {
             Image(
                 bitmap = heatmapOverlay.asImageBitmap(),
                 contentDescription = "AI Heatmap Overlay",
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(4.dp)
                     .graphicsLayer(alpha = heatmapAlpha)
             )
 
             // Layer 3 — legend top-right
-            if (showHeatmap) {
-                HeatmapLegend(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                )
-            }
+//            if (showHeatmap) {
+//                HeatmapLegend(
+//                    modifier = Modifier
+//                        .align(Alignment.TopEnd)
+//                        .padding(8.dp)
+//                )
+//            }
         }
 
         // Layer 4 — eye toggle button bottom-right
@@ -1409,7 +1418,7 @@ fun ScopeTile(
             Image(
                 painter = painterResource(id = imageResId),
                 contentDescription = title,
-                modifier = Modifier.fillMaxSize(0.7f), // Scale the icon
+                modifier = Modifier.fillMaxSize(), // Scale the icon
                 contentScale = ContentScale.Fit
             )
         }
