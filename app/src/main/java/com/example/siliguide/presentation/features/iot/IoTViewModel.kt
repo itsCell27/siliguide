@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.usecase.ConnectToDeviceWifiUseCase
@@ -261,7 +262,7 @@ class IoTViewModel @Inject constructor(
                 deviceIdentifier = token,
                 isActive = true,
                 lastKnownIp = "192.168.4.1",
-                connectionMode = "AP",
+                connectionMode = ConnectionMode.AP,
                 isSynced = false, // Initial state
                 dateAdded = System.currentTimeMillis()
             )

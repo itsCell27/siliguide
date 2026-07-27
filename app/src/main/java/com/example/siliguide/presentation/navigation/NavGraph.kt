@@ -22,7 +22,7 @@ import com.example.siliguide.presentation.features.analysis.AnalysisResultScreen
 import com.example.siliguide.presentation.features.auth.AuthViewModel
 import com.example.siliguide.presentation.features.auth.GuestInfoScreen
 import com.example.siliguide.presentation.features.auth.WelcomeScreen
-import com.example.siliguide.presentation.features.iot.ConnectionMode
+import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.presentation.features.iot.IoTSetupConnectionModeScreen
 import com.example.siliguide.presentation.features.iot.ap_setup.IoTSetupAPModeScreen
 import com.example.siliguide.presentation.features.iot.components.QrScannerScreen
@@ -104,11 +104,13 @@ fun SiliGuideNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNext = { selectedMode ->
                     when (selectedMode) {
-                        ConnectionMode.AP_MODE -> {
+                        ConnectionMode.AP -> {
                             navController.navigate(Screen.IoTSetupAP.route)
                         }
-                        ConnectionMode.LAN_MODE -> {
-                            // Assumes you have a Screen.IoTSetupLAN route defined
+                        ConnectionMode.BLUETOOTH -> {
+                            navController.navigate(Screen.IoTSetupLAN.route) // point this to bluetooth setup route
+                        }
+                        ConnectionMode.LAN -> {
                             navController.navigate(Screen.IoTSetupLAN.route)
                         }
                     }
