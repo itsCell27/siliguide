@@ -7,7 +7,7 @@ data class IoTDevice(
     val deviceIdentifier: String, // Storing the pairing token here
     val isActive: Boolean,
     val lastKnownIp: String,      // Will be 192.168.4.1 for AP mode
-    val connectionMode: String,    // "AP"
+    val connectionMode: ConnectionMode,    // "AP"
     val isSynced: Boolean = false,
     val dateAdded: Long
 )

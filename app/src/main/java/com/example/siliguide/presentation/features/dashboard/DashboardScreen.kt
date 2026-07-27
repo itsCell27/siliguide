@@ -43,6 +43,7 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.presentation.features.iot.IoTViewModel
 import kotlinx.coroutines.launch
@@ -375,7 +376,7 @@ fun IoTDevicesSection(devices: List<IoTDevice>, onAddDevice: () -> Unit) {
 @Composable
 fun IoTDeviceCard(
     device: IoTDevice,
-    modeLabel: String? = device.connectionMode.takeIf { it.isNotBlank() }
+    modeLabel: String = device.connectionMode.name
 ) {
     Card(
         modifier = Modifier
@@ -895,8 +896,8 @@ fun DashboardPreview() {
                 PlantItem("2", "Garden Bed 2",    PlantCondition("none",    "",        null,       false, "Oct 25, 2023"))
             ),
             devices = listOf(
-                IoTDevice("1","1","Sensor A","AAA",true, "10.1.1.1","LAN",false, 24052026),
-                IoTDevice("2","1","Sensor B","BBB",false,"10.1.1.1","AP", false, 23052026)
+                IoTDevice("1","1","Sensor A","AAA",true, "10.1.1.1", ConnectionMode.LAN,false, 24052026),
+                IoTDevice("2","1","Sensor B","BBB",false,"10.1.1.1", ConnectionMode.AP, false, 23052026)
             ),
             isAddMenuOpen = false, onAddMenuToggle = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},

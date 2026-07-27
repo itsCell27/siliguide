@@ -23,11 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.R
+import com.example.siliguide.domain.model.ConnectionMode
 
 // Define the two possible connection paths
-enum class ConnectionMode {
-    AP_MODE, LAN_MODE
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,8 +147,8 @@ fun IoTSetupConnectionModeScreen(
                     title = "AP Mode (Direct)",
                     tag = "No internet needed",
                     description = "Phone connects directly to the ESP32's hotspot. Best for farms without WiFi.",
-                    isSelected = selectedMode == ConnectionMode.AP_MODE,
-                    onClick = { selectedMode = ConnectionMode.AP_MODE }
+                    isSelected = selectedMode == ConnectionMode.AP,
+                    onClick = { selectedMode = ConnectionMode.AP }
                 )
 
                 ConnectionModeCard(
@@ -158,8 +156,8 @@ fun IoTSetupConnectionModeScreen(
                     title = "LAN Mode (Local)",
                     tag = "Needs router",
                     description = "ESP32 connects to your home WiFi network. Phone must be on the same WiFi.",
-                    isSelected = selectedMode == ConnectionMode.LAN_MODE,
-                    onClick = { selectedMode = ConnectionMode.LAN_MODE }
+                    isSelected = selectedMode == ConnectionMode.LAN,
+                    onClick = { selectedMode = ConnectionMode.LAN }
                 )
             }
         }
