@@ -223,21 +223,21 @@ private fun performManualCrop(bitmap: Bitmap, containerSize: IntSize, boxRect: a
     // -----------------------------
     // DEBUG: Draw a red border
     // -----------------------------
-    val canvas = Canvas(cropped)
-
-    val paint = Paint().apply {
-        color = android.graphics.Color.RED
-        style = Paint.Style.STROKE
-        strokeWidth = 6f
-    }
-
-    canvas.drawRect(
-        0f,
-        0f,
-        cropped.width.toFloat(),
-        cropped.height.toFloat(),
-        paint
-    )
+//    val canvas = Canvas(cropped)
+//
+//    val paint = Paint().apply {
+//        color = android.graphics.Color.RED
+//        style = Paint.Style.STROKE
+//        strokeWidth = 6f
+//    }
+//
+//    canvas.drawRect(
+//        0f,
+//        0f,
+//        cropped.width.toFloat(),
+//        cropped.height.toFloat(),
+//        paint
+//    )
 
     return cropped
 }
