@@ -14,6 +14,8 @@ import com.example.siliguide.data.local.SiliGuideDatabase
 import com.example.siliguide.data.local.UserPreferences
 import com.example.siliguide.data.remote.iot.WifiProvisioningManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager as AndroidBluetoothManager
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -23,6 +25,24 @@ object AppModule {
     @Singleton
     fun provideEsp32Api(): Esp32Api {
         return Esp32Api()
+    }
+
+    // Bluetooth
+    @Provides
+    @Singleton
+    fun provideAndroidBluetoothManager(
+        @ApplicationContext context: Context
+    ): AndroidBluetoothManager {
+        return context.getSystemService(AndroidBluetoothManager::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideBluetoothAdapter(
+        bluetoothManager: AndroidBluetoothManager
+    ): BluetoothAdapter {
+
+        return bluetoothManager.adapter
     }
 
     @Provides
