@@ -33,6 +33,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.presentation.features.iot.IoTViewModel
 import com.example.siliguide.presentation.navigation.Screen
 
@@ -312,7 +313,11 @@ fun IoTSetupAPModeScreen(
                             }
                         } else {
                             // Step 2 - Save device
-                            viewModel.finalizeSetup(deviceName)
+                            viewModel.finalizeSetup(
+                                deviceName,
+                                ConnectionMode.AP,
+                                ip = "192.168.4.1"
+                            )
                             onSetupComplete()
                         }
                     },

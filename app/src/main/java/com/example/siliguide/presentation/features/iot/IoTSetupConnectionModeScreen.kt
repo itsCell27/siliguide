@@ -143,6 +143,15 @@ fun IoTSetupConnectionModeScreen(
             // Selection Cards
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 ConnectionModeCard(
+                    icon = "ᛒ",
+                    title = "Bluetooth Mode (Direct)",
+                    tag = "No internet needed",
+                    description = "Phone pairs directly with the device over Bluetooth. No WiFi network needed, works fully offline.",
+                    isSelected = selectedMode == ConnectionMode.BLUETOOTH,
+                    onClick = { selectedMode = ConnectionMode.BLUETOOTH }
+                )
+
+                ConnectionModeCard(
                     icon = "📡",
                     title = "AP Mode (Direct)",
                     tag = "No internet needed",

@@ -10,7 +10,7 @@ fun Iot_devices.toIotDomain(): IoTDevice {
         deviceId = device_id,
         userId = user_id, // Add this
         deviceName = device_name,
-        deviceIdentifier = device_identifier,
+        pairingToken = pairing_token,
         isActive = is_active == 1L,
         lastKnownIp = last_known_ip ?: "192.168.4.1",
         connectionMode = ConnectionMode.valueOf(connection_mode),

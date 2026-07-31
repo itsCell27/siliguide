@@ -32,6 +32,13 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.usecase.GetIoTDeviceByIdUseCase
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.state.BluetoothConnectionUiState
+import kotlinx.coroutines.flow.asStateFlow
+import android.bluetooth.BluetoothDevice
+
+import com.example.siliguide.data.remote.iot.BluetoothApi
+import com.example.siliguide.data.remote.iot.BluetoothDiscoveryManager
+import com.example.siliguide.data.remote.iot.BluetoothManager
 
 @HiltViewModel
 class IoTViewModel @Inject constructor(
@@ -43,8 +50,12 @@ class IoTViewModel @Inject constructor(
     private val parseWifiQrUseCase: ParseWifiQrUseCase,
     private val saveIoTDeviceUseCase: SaveIoTDeviceUseCase,
     private val getIoTDeviceByIdUseCase: GetIoTDeviceByIdUseCase,
+    private val bluetoothManager: BluetoothManager,
+    private val bluetoothDiscoveryManager: BluetoothDiscoveryManager,
+    private val bluetoothApi: BluetoothApi,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
+
 
     var sensorData by mutableStateOf<SensorResponse?>(null)
         private set
@@ -65,12 +76,33 @@ class IoTViewModel @Inject constructor(
     private val _apConnectionState = MutableStateFlow("IDLE")
     val apConnectionState: StateFlow<String> = _apConnectionState
 
+
+    // =========================================================================
+    // BLUETOOTH SETUP STATE
+    // =========================================================================
+    private val _bluetoothSetupState =
+        MutableStateFlow<BluetoothConnectionUiState> (
+            BluetoothConnectionUiState.Waiting
+        )
+
+    val bluetoothSetupState = _bluetoothSetupState.asStateFlow()
+
+
     // SharedFlow to trigger navigation when saving is done
     private val _setupComplete = MutableSharedFlow<Unit>()
     val setupComplete: SharedFlow<Unit> = _setupComplete.asSharedFlow()
 
     // NEW: A reference to hold our polling loop so we can cancel it
     private var pollingJob: Job? = null
+
+    // Bluetooth SharedFlow
+    private val _bluetoothVerified = MutableSharedFlow<Unit>()
+    val bluetoothVerified = _bluetoothVerified.asSharedFlow()
+
+    // ========================================================================
+    // BLUETOOTH DEVICE STATE
+    // ========================================================================
+    private var selectedBluetoothDevice: BluetoothDevice? = null
 
     var deviceName by mutableStateOf("")
         private set
@@ -233,15 +265,28 @@ class IoTViewModel @Inject constructor(
     /**
      * FINAL STEP: Saves the device to the SQLDelight database
      */
-    fun finalizeSetup(customName: String) {
+    fun finalizeSetup(
+        customName: String,
+        connectionMode: ConnectionMode,
+        ip: String = ""
+    ) {
         viewModelScope.launch {
+
+            Log.d("IoTViewModel", "Entered finalizeSetup()")
+
+            Log.d("IoTViewModel", "connectedDeviceId = $connectedDeviceId")
             val id = connectedDeviceId ?: return@launch
+            Log.d("IoTViewModel", "connectedDeviceId = $id")
+
             val token = pairingToken ?: ""
+            Log.d("IoTViewModel", "pairingToken = $token")
 
             // Fetch the current userId
             val userId = authRepository.getUserId() ?: return@launch
+            Log.d("IoTViewModel", "userId = $userId")
 
             // Check if exists
+            Log.d("IoTViewModel", "Checking existing device...")
             val existingDevice = getIoTDeviceByIdUseCase(id)
             if (existingDevice != null) {
                 if (existingDevice.userId == userId) {
@@ -254,21 +299,24 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
             }
+            Log.d("IoTViewModel", "existingDevice = $existingDevice")
 
             val newDevice = IoTDevice(
                 deviceId = id,
                 userId = userId,
                 deviceName = customName,
-                deviceIdentifier = token,
+                pairingToken = token,
                 isActive = true,
-                lastKnownIp = "192.168.4.1",
-                connectionMode = ConnectionMode.AP,
+                lastKnownIp = ip,
+                connectionMode = connectionMode,
                 isSynced = false, // Initial state
                 dateAdded = System.currentTimeMillis()
             )
 
             try {
+                Log.d("IoTViewModel", "About to save device")
                 saveIoTDeviceUseCase(newDevice)
+                Log.d("IoTViewModel", "Emitting setupComplete")
                 _setupComplete.emit(Unit)
             } catch (e: Exception) {
                 error = "Database Error: Could not save device."
@@ -297,6 +345,125 @@ class IoTViewModel @Inject constructor(
         connectedDeviceId = null
         pairingToken = null
         deviceName = ""
+        error = null
+    }
+
+    // =========================================================================
+    // BLUETOOTH SETUP STATE HELPERS
+    // =========================================================================
+    private fun resetBluetoothDeviceState() {
+        selectedBluetoothDevice = null
+        connectedDeviceId = null
+        pairingToken = null
+    }
+
+    fun startBluetoothSetup() {
+
+        resetBluetoothDeviceState()
+
+        bluetoothManager.disconnect()
+
+        _bluetoothSetupState.value =
+            BluetoothConnectionUiState.Waiting
+
+        error = null
+    }
+
+    fun verifyPairedBluetoothDevices() {
+        viewModelScope.launch {
+
+            setBluetoothSearching()
+
+            try {
+
+                val pairedDevices =
+                    bluetoothDiscoveryManager.getPairedSiliGuideDevices()
+
+                if (pairedDevices.isEmpty()) {
+                    setBluetoothUnsupported(
+                        "No paired SiliGuide devices were found."
+                    )
+                    return@launch
+                }
+
+                val device = pairedDevices.first()
+
+                selectedBluetoothDevice = device
+
+                setBluetoothVerifying()
+
+                bluetoothManager.connect(device)
+
+                val info = bluetoothApi.getDeviceInfo()
+
+                connectedDeviceId = info.deviceId
+                pairingToken = info.token
+
+                if (deviceName.isEmpty()) {
+                    deviceName = "SiliGuide Node ${info.deviceId}"
+                }
+
+                Log.d(
+                    "BluetoothSetup",
+                    "Connected successfully!"
+                )
+
+                Log.d(
+                    "BluetoothSetup",
+                    "Device ID: ${info.deviceId}"
+                )
+
+                Log.d(
+                    "BluetoothSetup",
+                    "Pairing Token: ${info.token}"
+                )
+
+                _bluetoothVerified.emit(Unit)
+
+            } catch (e: SecurityException) {
+
+                Log.e(
+                    "BluetoothSetup",
+                    "Missing Bluetooth permission",
+                    e
+                )
+
+                setBluetoothUnsupported(
+                    "Missing Bluetooth permissions. Please grant them in settings."
+                )
+
+            } catch (e: Exception) {
+
+                bluetoothManager.disconnect()
+
+                Log.e(
+                    "BluetoothSetup",
+                    "Bluetooth verification failed",
+                    e
+                )
+
+                setBluetoothUnsupported(
+                    "Unable to communicate with the selected SiliGuide device."
+                )
+            }
+        }
+    }
+
+    fun setBluetoothSearching() {
+        _bluetoothSetupState.value = BluetoothConnectionUiState.Searching
+    }
+
+    fun setBluetoothVerifying() {
+        _bluetoothSetupState.value = BluetoothConnectionUiState.Verifying
+    }
+
+    fun setBluetoothUnsupported(message: String) {
+        _bluetoothSetupState.value =
+            BluetoothConnectionUiState.Unsupported(message)
+    }
+
+    fun resetBluetoothSetup() {
+        _bluetoothSetupState.value = BluetoothConnectionUiState.Waiting
         error = null
     }
 
