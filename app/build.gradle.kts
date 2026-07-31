@@ -99,6 +99,8 @@
         implementation("com.google.ai.edge.litert:litert-support:1.4.2") {
             exclude(group = "com.google.ai.edge.litert", module = "litert-support-api")
         }
+        // OpenCV
+        implementation("org.opencv:opencv:4.12.0")
 
         // Authentication (Credential Manager)
         implementation(libs.androidx.credentials)
