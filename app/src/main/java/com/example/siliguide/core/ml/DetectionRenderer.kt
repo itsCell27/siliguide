@@ -5,7 +5,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import androidx.core.graphics.createBitmap
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
+import com.example.siliguide.domain.model.SegmentationDetection
 
 class DetectionRenderer {
 
@@ -34,6 +36,13 @@ class DetectionRenderer {
         alpha = 120
     }
 
+    private val polygonPaint = Paint().apply {
+        color = Color.CYAN
+        style = Paint.Style.FILL
+        alpha = 120
+        isAntiAlias = true
+    }
+
     private fun intersectsAny(
         rect: RectF,
         occupiedRects: List<RectF>
@@ -54,6 +63,7 @@ class DetectionRenderer {
     /**
      * Creates a transparent overlay containing
      * all instance segmentation masks.
+     * Use by live analysis
      */
     fun render(
         imageWidth: Int,
@@ -126,7 +136,7 @@ class DetectionRenderer {
             ).coerceAtLeast(0f)
 
             // First choice: above box
-            var top = (detection.box.top - labelHeight).coerceAtLeast(0f)
+            var top = (detection.box.top - labelHeight + 1f).coerceAtLeast(0f)
 
             var labelRect = RectF(
                 left,
@@ -198,4 +208,180 @@ class DetectionRenderer {
 
         return overlay
     }
+
+
+    // used by history analysis that is from database
+    fun render(
+        imageWidth: Int,
+        imageHeight: Int,
+        detections: List<SegmentationDetection>
+    ): Bitmap {
+
+        val overlay = createBitmap(imageWidth, imageHeight)
+        overlay.eraseColor(Color.TRANSPARENT)
+
+        val canvas = Canvas(overlay)
+
+        val scale = minOf(imageWidth, imageHeight) / 640f
+
+        boxPaint.strokeWidth = (4f * scale).coerceAtLeast(2f)
+        textPaint.textSize = (28f * scale).coerceAtLeast(18f)
+
+        val labelPadding = (6f * scale).coerceAtLeast(4f)
+        val labelMargin = (4f * scale).coerceAtLeast(2f)
+
+        val occupiedLabelRects = mutableListOf<RectF>()
+        val labelsToDraw = mutableListOf<LabelInfo>()
+
+        val sortedDetections =
+            detections.sortedByDescending { it.confidence }
+
+        // ===============================
+        // PASS 1
+        // Draw polygons
+        // ===============================
+        sortedDetections.forEach { detection ->
+
+            if (detection.polygon.isNotEmpty()) {
+
+                val path = Path()
+
+                path.moveTo(
+                    detection.polygon.first().x,
+                    detection.polygon.first().y
+                )
+
+                detection.polygon
+                    .drop(1)
+                    .forEach {
+
+                        path.lineTo(
+                            it.x,
+                            it.y
+                        )
+                    }
+
+                path.close()
+
+                canvas.drawPath(
+                    path,
+                    polygonPaint
+                )
+            }
+        }
+
+        // ===============================
+        // PASS 2
+        // Draw boxes
+        // ===============================
+        sortedDetections.forEach { detection ->
+
+            val box = RectF(
+                detection.boundingBox.left,
+                detection.boundingBox.top,
+                detection.boundingBox.right,
+                detection.boundingBox.bottom
+            )
+
+            canvas.drawRect(
+                box,
+                boxPaint
+            )
+
+            val confidencePercent =
+                (detection.confidence * 100).toInt()
+
+            val label =
+                "${detection.label} ${confidencePercent}%"
+
+            val textWidth =
+                textPaint.measureText(label)
+
+            val textHeight =
+                textPaint.textSize
+
+            val labelWidth =
+                textWidth + labelPadding * 2
+
+            val labelHeight =
+                textHeight + labelPadding * 2
+
+            val left =
+                minOf(
+                    box.left,
+                    imageWidth - labelWidth
+                ).coerceAtLeast(0f)
+
+            var top =
+                (box.top - labelHeight + 1f)
+                    .coerceAtLeast(0f)
+
+            var labelRect = RectF(
+                left,
+                top,
+                left + labelWidth,
+                top + labelHeight
+            )
+
+            if (intersectsAny(labelRect, occupiedLabelRects)) {
+
+                top =
+                    box.bottom
+                        .coerceAtMost(imageHeight - labelHeight)
+
+                labelRect = RectF(
+                    left,
+                    top,
+                    left + labelWidth,
+                    top + labelHeight
+                )
+            }
+
+            while (intersectsAny(labelRect, occupiedLabelRects)) {
+
+                if (labelRect.right + labelWidth + labelMargin > imageWidth)
+                    break
+
+                labelRect.offset(
+                    labelWidth + labelMargin,
+                    0f
+                )
+            }
+
+            occupiedLabelRects.add(labelRect)
+
+            labelsToDraw.add(
+                LabelInfo(
+                    rect = labelRect,
+                    text = label,
+                    baseline =
+                        labelRect.top +
+                                textHeight +
+                                labelPadding * 0.35f
+                )
+            )
+        }
+
+        // ===============================
+        // PASS 3
+        // Draw labels
+        // ===============================
+        labelsToDraw.forEach {
+
+            canvas.drawRect(
+                it.rect,
+                labelBackgroundPaint
+            )
+
+            canvas.drawText(
+                it.text,
+                it.rect.left + labelPadding,
+                it.baseline,
+                textPaint
+            )
+        }
+
+        return overlay
+    }
+
 }

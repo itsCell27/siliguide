@@ -14,6 +14,7 @@ import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import android.graphics.Color
+import com.example.siliguide.domain.model.PolygonPoint
 
 class LeafSegmenter(
     context: Context,
@@ -43,7 +44,10 @@ class LeafSegmenter(
         val confidence: Float,
         val classId: Int,
         val coeffs: FloatArray,
-        var mask: Bitmap? = null
+
+        var mask: Bitmap? = null,
+
+        var polygon: List<PolygonPoint> = emptyList()
     )
 
     private val interpreter: Interpreter
@@ -355,11 +359,23 @@ class LeafSegmenter(
 
             val binaryMask = thresholdMask(croppedMask)
 
-            det.mask = binaryMaskToBitmap(binaryMask)
+            // Create the bitmap once
+            val bitmap = binaryMaskToBitmap(binaryMask)
+
+            // Store bitmap (used for live rendering)
+            det.mask = bitmap
+
+            // Extract polygon from the bitmap
+            det.polygon = ContourExtractor.extractPolygon(bitmap)
 
             Log.d(
                 TAG,
-                "Generated mask: ${det.mask?.width}x${det.mask?.height}"
+                "Generated mask: ${bitmap.width}x${bitmap.height}"
+            )
+
+            Log.d(
+                TAG,
+                "Polygon points: ${det.polygon.size}"
             )
         }
 
