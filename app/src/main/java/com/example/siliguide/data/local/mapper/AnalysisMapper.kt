@@ -11,9 +11,14 @@ fun Analysis_sessions.toDomainModel(): AnalysisSession {
         userId = user_id, // Map new field
         sessionTimestamp = session_timestamp,
         imagePath = image_path,
+
         predictedClass = predicted_class,
         confidence = confidence,
+
+        segmentationResult = JsonMapper.decodeSegmentationResult(segmentation_result),
+
         plantCondition = plant_condition,
+        plantConditionDescription = plant_condition_description,
         possibleCauses = possible_causes,
         characteristics = characteristics,
         recommendedActions = recommended_actions,

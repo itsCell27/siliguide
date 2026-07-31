@@ -7,13 +7,20 @@ data class AnalysisSession(
     val userId: String,          // REQUIRED: Multi-user isolation
     val sessionTimestamp: Long,
     val imagePath: String,
+
     val predictedClass: String,
     val confidence: Double,
+
+    val segmentationResult: List<SegmentationDetection>?,
+
     val plantCondition: String?,
+    val plantConditionDescription: String?,
     val possibleCauses: String?,
     val characteristics: String?,
     val recommendedActions: String?,
+
     val isPartial: Boolean,
+
     val soilMoisture: Double?,
     val soilPh: Double?,
     val soilTemp: Double?,
@@ -23,5 +30,6 @@ data class AnalysisSession(
     val potassium: Int?,
     val lightIntensity: Int?,
     val airTemp: Double?,
+
     val isSynced: Boolean = false // REQUIRED: Sync status
 )

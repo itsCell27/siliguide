@@ -1,11 +1,13 @@
 package com.example.siliguide.data.repository
 
+import com.example.siliguide.data.local.mapper.JsonMapper
 import com.example.siliguide.data.local.sqldelight.SiliGuideDatabaseManager
 import com.example.siliguide.data.local.mapper.toDomainModel
 import com.example.siliguide.domain.model.AnalysisSession
 import com.example.siliguide.domain.repository.AnalysisRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 class AnalysisRepositoryImpl @Inject constructor(
@@ -23,9 +25,14 @@ class AnalysisRepositoryImpl @Inject constructor(
                 user_id = session.userId,
                 session_timestamp = session.sessionTimestamp,
                 image_path = session.imagePath,
+
                 predicted_class = session.predictedClass,
                 confidence = session.confidence,
+
+                segmentation_result = JsonMapper.encodeSegmentationResult(session.segmentationResult),
+
                 plant_condition = session.plantCondition,
+                plant_condition_description = session.plantConditionDescription,
                 possible_causes = session.possibleCauses,
                 characteristics = session.characteristics,
                 recommended_actions = session.recommendedActions,
