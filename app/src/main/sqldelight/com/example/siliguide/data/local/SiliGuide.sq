@@ -47,7 +47,9 @@ CREATE TABLE analysis_sessions (
     image_path             TEXT NOT NULL,
     predicted_class        TEXT NOT NULL, -- healthy | leaf_curling | leaf_spots | yellowing
     confidence             REAL NOT NULL,  -- 0.0 to 1.0
+    segmentation_result    TEXT,          -- JSON containing all detected leaves
     plant_condition        TEXT,           -- NULL for partial analysis
+    plant_condition_description TEXT,
     possible_causes        TEXT,           -- JSON string array, always present
     characteristics        TEXT,           -- JSON string array, NULL for partial
     recommended_actions    TEXT,           -- JSON string array, NULL for partial
@@ -62,6 +64,7 @@ CREATE TABLE analysis_sessions (
     potassium              INTEGER,
     light_intensity        INTEGER,
     air_temp               REAL,
+
     is_synced              INTEGER NOT NULL DEFAULT 0
 );
 
@@ -202,12 +205,12 @@ DELETE FROM plants WHERE plant_id = ?;
 insertSession:
 INSERT INTO analysis_sessions (
     session_id, plant_id, device_id, user_id, session_timestamp, image_path,
-    predicted_class, confidence, plant_condition, possible_causes,
+    predicted_class, confidence, segmentation_result, plant_condition, plant_condition_description, possible_causes,
     characteristics, recommended_actions, is_partial,
     soil_moisture, soil_ph, soil_temp, electrical_conductivity,
     nitrogen, phosphorus, potassium, light_intensity, air_temp,
     is_synced
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     plant_id = excluded.plant_id,
     device_id = excluded.device_id,
@@ -216,7 +219,9 @@ ON CONFLICT(session_id) DO UPDATE SET
     image_path = excluded.image_path,
     predicted_class = excluded.predicted_class,
     confidence = excluded.confidence,
+    segmentation_result = excluded.segmentation_result,
     plant_condition = excluded.plant_condition,
+    plant_condition_description = excluded.plant_condition_description,
     possible_causes = excluded.possible_causes,
     characteristics = excluded.characteristics,
     recommended_actions = excluded.recommended_actions,
