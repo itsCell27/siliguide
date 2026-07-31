@@ -40,13 +40,16 @@ fun LoadingOverlay(
                 ) {
                     CircularProgressIndicator(color = GreenPrimary)
 
-                    Spacer(Modifier.height(16.dp))
+                    if (!message.isEmpty()) {
+                        Spacer(Modifier.height(16.dp))
 
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+
                 }
             }
         }
