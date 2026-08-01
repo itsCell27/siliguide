@@ -37,6 +37,7 @@ sealed class Screen(val route: String) {
     }
 
     // Updated to include optional plantId AND optional deviceId
+    // Analysis route if the data comes from the camera to crop adjust screen to this route
     object AnalysisResult : Screen("analysis_result/{imageUri}?plantId={plantId}&deviceId={deviceId}") {
         fun createRoute(imageUri: String, plantId: String? = null, deviceId: String? = null): String {
             val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
@@ -48,11 +49,24 @@ sealed class Screen(val route: String) {
         }
     }
 
+    // Analysis route for past analysis results from the database
+    object AnalysisHistoryResult : Screen("analysis_history_result/{sessionId}") {
+        fun createRoute(sessionId: String): String {
+            return "analysis_history_result/$sessionId"
+        }
+    }
+
     object AddPlant : Screen("add_plant")
     object PlantDetail : Screen("plant/{plantId}") {
         fun createRoute(plantId: String) = "plant/$plantId"
     }
     object IoTSetup : Screen("iot_setup")
+
+    object IoTSetupBluetooth : Screen("iot_setup_bluetooth")
+    object BluetoothConnectionScreen : Screen("bluetooth_connection")
+    object BluetoothDeviceDetailsScreen : Screen("bluetooth_device_details")
+    object BluetoothSetupGraph : Screen("bluetooth_setup_graph")
+
     object IoTSetupAP : Screen("iot_setup_ap")
     object IoTSetupLAN : Screen("iot_setup_lan")
     object QrScanner : Screen("qr_scanner")

@@ -14,7 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -38,8 +40,23 @@ fun AddPlantScreen(
     var selectedDeviceName by remember { mutableStateOf("") }
     var showNextSheet by remember { mutableStateOf(false) }
 
+    // Creates a state that refuses to be dismissed via swipe or outside click
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { it != SheetValue.Hidden }
+    )
+
+    // Animates the blur smoothly from 0.dp to 12.dp
+    val blurRadius by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (showNextSheet) 12.dp else 0.dp,
+        label = "blurAnimation"
+    )
+
     Scaffold(
-        Modifier.safeDrawingPadding(),
+        Modifier
+            .safeDrawingPadding()
+            // Applies the animated blur to the background
+            .then(if (blurRadius > 0.dp) Modifier.blur(blurRadius) else Modifier),
         topBar = {
             SiliGuideTopBar(title = "Add New Plant", onBack = onNavigateBack)
         },
@@ -129,9 +146,11 @@ fun AddPlantScreen(
         // --- POST-SAVE BOTTOM SHEET ---
         if (showNextSheet) {
             ModalBottomSheet(
-                onDismissRequest = { showNextSheet = false },
+                onDismissRequest = {  },
+                sheetState = sheetState,
                 containerColor = White,
-                dragHandle = { Box(Modifier.padding(vertical = 12.dp).size(36.dp, 4.dp).background(GrayLight, CircleShape)) }
+                dragHandle = null, // disable drag handle so user cannot go back to add plant screen and add duplicate plant
+                scrimColor = Color.Black.copy(alpha = 0.5f)
             ) {
                 NextStepsSheetContent(
                     onAnalyze = {
@@ -231,9 +250,11 @@ fun NextStepsSheetContent(onAnalyze: () -> Unit, onFinish: () -> Unit) {
     var selectedOption by remember { mutableStateOf(0) } // 0 for Analyze, 1 for Later
 
     Column(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text("What's next?", style = MaterialTheme.typography.titleLarge)
         Text("Your plant has been saved. Would you like to analyze it now or come back later?",
-            fontSize = 12.sp, color = GrayMedium, modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
+            fontSize = 12.sp, color = GrayMedium, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
 
         ChoiceCard(
             title = "Analyze Now",

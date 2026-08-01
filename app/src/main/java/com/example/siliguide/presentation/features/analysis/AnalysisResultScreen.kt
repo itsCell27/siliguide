@@ -1,6 +1,5 @@
 package com.example.siliguide.presentation.features.analysis
 
-import android.graphics.BitmapFactory
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -24,7 +23,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,19 +33,20 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.ui.res.painterResource
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.engine.RuleResult
 import com.example.siliguide.domain.engine.ThresholdLevel
 import com.example.siliguide.R
+import com.example.siliguide.core.ui.components.LoadingOverlay
 
 data class SensorRowData(
     val name: String,
@@ -75,38 +74,36 @@ fun AnalysisResultScreen(
     plantId: String? = null,
     viewModel: AnalysisViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onSaveAsNote: () -> Unit
+    onSaveAsNote: () -> Unit,
+    isHistoryMode: Boolean = false
 ) {
-    val result = viewModel.ruleResult
-    val predictionLabel = viewModel.currentPredictionLabel
-    val confidence = viewModel.currentPredictionConfidence
-    val isLoading = viewModel.isAnalyzing
-    val heatmapOverlay = viewModel.segmentationOverlay
-    val context = LocalContext.current
-    val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    val sensorUiState = viewModel.sensorUiState
-    val predictionName = viewModel.predictionName
+    val result = viewModel.analysisUiState.ruleResult
+    val predictionLabel = viewModel.analysisUiState.predictionLabel
+    val confidence = viewModel.analysisUiState.predictionConfidence
+    val isLoading = viewModel.analysisUiState.isLoading
+    val segmentOverlay = viewModel.analysisUiState.segmentationOverlay
+    val bitmap = viewModel.analysisUiState.bitmap
+    val sensorUiState = viewModel.analysisUiState.sensorUiState
+    val predictionName = viewModel.analysisUiState.predictionName
 
-    LaunchedEffect(imageUri) {
-        if (result == null && !isLoading) {
-            try {
-                val uri = imageUri.toUri()
-                val stream = context.contentResolver.openInputStream(uri)
-                val bmp = BitmapFactory.decodeStream(stream)
-                stream?.close()
-                if (bmp != null) {
-                    bitmapState.value = bmp
-                    viewModel.analyzeImage(bmp)
-                }
-            } catch (_: Exception) {
-            }
+    LaunchedEffect(imageUri, isHistoryMode) {
+
+        if (!isHistoryMode) {
+            viewModel.initialize(imageUri)
         }
     }
 
-    val confidencePct = (confidence * 100).toInt()
-    val isOutOfScope = !isLoading && (result == null || confidencePct < 50)
 
-    Box(Modifier.fillMaxSize()) {
+
+    if (isLoading) {
+        LoadingOverlay(
+            message = ""
+        ) { }
+    } else {
+
+        val confidencePct = (confidence * 100).toInt()
+        val isOutOfScope = result == null || confidencePct < 50
+
         Scaffold(
             topBar = {
                 ResultTopBar(
@@ -115,57 +112,56 @@ fun AnalysisResultScreen(
                 )
             },
             bottomBar = {
-                if (!isLoading) {
-                    ResultBottomBar(
-                        isOutOfScope = isOutOfScope,
-                        onPrimary = if (isOutOfScope) onNavigateBack else onSaveAsNote,
-                        onSecondary = onNavigateBack
-                    )
-                }
+                ResultBottomBar(
+                    isOutOfScope = isOutOfScope,
+                    isHistoryMode = isHistoryMode,
+                    onPrimary =
+                        if (isHistoryMode) {
+                            onNavigateBack
+                        } else if (isOutOfScope) {
+                            onNavigateBack
+                        } else {
+                            onSaveAsNote
+                        },
+                    onSecondary = onNavigateBack
+                )
             },
             containerColor = OffWhite
         ) { padding ->
 
             when {
-                isLoading -> {
-
-                }
 
                 isOutOfScope -> {
                     OutOfScopeContent(
                         confidencePct = confidencePct,
-                        bitmap = bitmapState.value,
-                        heatmapOverlay = heatmapOverlay,
+                        bitmap = bitmap,
+                        segmentOverlay = segmentOverlay,
                         padding = padding
                     )
                 }
 
                 else -> {
                     ResultContent(
-                        result = result!!,
+                        result = result,
                         confidence = confidence,
                         predictedClass = predictionName ?: "Unknown",
-                        bitmap = bitmapState.value,
-                        heatmapOverlay = heatmapOverlay,
+                        bitmap = bitmap,
+                        segmentOverlay = segmentOverlay,
                         padding = padding,
                         sensorUiState = sensorUiState,
+                        isSoilSensorOk = viewModel.analysisUiState.isSoilSensorOk,
+                        isAirTempSensorOk = viewModel.analysisUiState.isAirTempSensorOk
                     )
                 }
             }
         }
-
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.3f)) // Dims the background
-                    .clickable(enabled = false) { },           // Blocks click-throughs
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = GreenPrimary)
-            }
-        }
     }
+//    LoadingOverlay(
+//        isLoading = isLoading,
+//        message = ""
+//    ) {
+//
+//    }
 
 }
 
@@ -231,6 +227,7 @@ fun ResultTopBar(
 @Composable
 fun ResultBottomBar(
     isOutOfScope: Boolean,
+    isHistoryMode: Boolean,
     onPrimary: () -> Unit,
     onSecondary: () -> Unit
 ) {
@@ -253,7 +250,11 @@ fun ResultBottomBar(
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(
-                text = if (isOutOfScope) "Try Another Photo" else "Save Analysis",
+                text = when {
+                    isHistoryMode -> "Back"
+                    isOutOfScope -> "Try Another Photo"
+                    else -> "Save Analysis"
+                },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = White
@@ -268,9 +269,11 @@ fun ResultContent(
     confidence: Float,
     predictedClass: String,
     bitmap: android.graphics.Bitmap?,
-    heatmapOverlay: android.graphics.Bitmap?,
+    segmentOverlay: android.graphics.Bitmap?,
     padding: PaddingValues,
-    sensorUiState: List<SensorRowData>
+    sensorUiState: List<SensorRowData>,
+    isSoilSensorOk: Boolean,
+    isAirTempSensorOk: Boolean
 ) {
     val pct = (confidence * 100).toInt()
 
@@ -288,7 +291,7 @@ fun ResultContent(
         }
 
         // Leaf image - centered, 1:1 aspect
-        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay)
+        LeafImageCard(bitmap = bitmap, segmentOverlay = segmentOverlay)
 
         // Prediction card
         PredictionResultCard(
@@ -316,12 +319,18 @@ fun ResultContent(
             SensorReadingsCard(sensors = sensorUiState)
         }
 
+        val hasSensorData = sensorUiState.isNotEmpty()
+
         // Care recommendations
-        if (result.isUsingSensors && result.recommendations.isNotEmpty()) {
+        if (sensorUiState.isNotEmpty() && isSoilSensorOk && isAirTempSensorOk && result.recommendations.isNotEmpty()) {
             CareRecommendationsCard(items = result.recommendations)
         }
         if (!result.isUsingSensors) {
-            LockedRecommendationsCard()
+            LockedRecommendationsCard(
+                hasSensors = hasSensorData,
+                isSoilSensorOk = isSoilSensorOk,
+                isAirTempSensorOk = isAirTempSensorOk
+            )
         }
 
         Spacer(modifier = Modifier.height(80.dp))
@@ -333,7 +342,7 @@ fun ResultContent(
 @Composable
 fun LeafImageCard(
     bitmap: android.graphics.Bitmap?,
-    heatmapOverlay: android.graphics.Bitmap? = null
+    segmentOverlay: android.graphics.Bitmap? = null
 ) {
     if (bitmap == null) return
 
@@ -362,10 +371,10 @@ fun LeafImageCard(
         )
 
         // Layer 2 — segmentation overlay
-        if (heatmapOverlay != null) {
+        if (segmentOverlay != null) {
             Image(
-                bitmap = heatmapOverlay.asImageBitmap(),
-                contentDescription = "AI Heatmap Overlay",
+                bitmap = segmentOverlay.asImageBitmap(),
+                contentDescription = "AI Overlay",
                 contentScale = ContentScale.Fit,
                 filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 modifier = Modifier
@@ -384,8 +393,8 @@ fun LeafImageCard(
         }
 
         // Layer 4 — eye toggle button bottom-right
-        if (heatmapOverlay != null) {
-            HeatmapToggleButton(
+        if (segmentOverlay != null) {
+            OverlayToggleButton(
                 isActive = showHeatmap,
                 onToggle = { showHeatmap = !showHeatmap },
                 modifier = Modifier
@@ -397,7 +406,7 @@ fun LeafImageCard(
 }
 
 @Composable
-fun HeatmapToggleButton(
+fun OverlayToggleButton(
     isActive: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
@@ -1146,57 +1155,73 @@ fun CharacteristicsDescriptionCard(prediction: String, characteristics: List<Str
 }
 
 @Composable
-fun LockedRecommendationsCard() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(White, RoundedCornerShape(14.dp))
-            .border(1.dp, Border, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(OffWhite)
-                .padding(horizontal = 14.dp, vertical = 11.dp)
-        ) {
-            Text(
-                "CARE RECOMMENDATIONS",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = GrayBody,
-                letterSpacing = 0.4.sp
-            )
-        }
-        HorizontalDivider(color = Border)
+fun LockedRecommendationsCard(
+    hasSensors: Boolean,
+    isSoilSensorOk: Boolean,
+    isAirTempSensorOk: Boolean
+) {
+    // 1. Dynamically decide the Title based on the hardware state
+    val titleText = when {
+        !hasSensors -> "Unlock Smart Recommendations"
+        !isSoilSensorOk && !isAirTempSensorOk -> "Total Sensor Disconnection"
+        !isSoilSensorOk -> "Soil Sensor Malfunction"
+        !isAirTempSensorOk -> "Air Sensor Malfunction"
+        else -> "Data Unavailable"
+    }
 
+    // 2. Dynamically decide the explanation text
+    val bodyText = when {
+        !hasSensors -> "Connect your SiliGuide IoT device to fuse real-time environmental sensor data with this image analysis for specific care recommendations."
+        !isSoilSensorOk && !isAirTempSensorOk -> "Your SiliGuide IoT device is online, but both the soil sensor and air temperature sensor failed."
+        !isSoilSensorOk -> "Your SiliGuide IoT device is online, but the soil sensor is not returning data."
+        !isAirTempSensorOk -> "Your SiliGuide IoT device is online, but the air temperature sensor failed to read data."
+        else -> "Partial data detected. Full recommendations require complete sensor readings."
+    }
+
+    // 3. Change the icon from a Lock to a Warning if it's a hardware failure
+    val iconImage = if (!hasSensors) Icons.Rounded.Lock else Icons.Rounded.Warning
+
+    // (Optional: If you have a WarningRed or Danger color in your Theme, use it here instead of Gray)
+    val iconTint = if (!hasSensors) GrayMedium else Color(0xFFD32F2F)
+
+    SectionCard(
+        headerText = "CARE RECOMMENDATIONS",
+        headerBg = OffWhite, // Or whatever your standard header color is
+        headerTextColor = GrayBody
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 20.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                Icons.Rounded.Info,
-                null,
-                tint = GrayMedium,
-                modifier = Modifier.size(32.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(OffWhite),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = iconImage,
+                    contentDescription = "Lock/Warning Icon",
+                    tint = iconTint,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
             Text(
-                "Connect an IoT device for tailored advice",
+                text = titleText,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = GrayBody,
-                textAlign = TextAlign.Center
+                fontWeight = FontWeight.SemiBold,
+                color = Black
             )
             Text(
-                "Specific recommendations require sensor data readings.",
+                text = bodyText,
                 fontSize = 11.sp,
-                color = GrayMedium,
+                color = GrayBody,
                 textAlign = TextAlign.Center,
-                lineHeight = 16.sp,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                lineHeight = 18.sp
             )
         }
     }
@@ -1206,7 +1231,7 @@ fun LockedRecommendationsCard() {
 fun OutOfScopeContent(
     confidencePct: Int,
     bitmap: android.graphics.Bitmap?,
-    heatmapOverlay: android.graphics.Bitmap?,
+    segmentOverlay: android.graphics.Bitmap?,
     padding: PaddingValues
 ) {
     Column(
@@ -1217,7 +1242,8 @@ fun OutOfScopeContent(
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LeafImageCard(bitmap = bitmap, heatmapOverlay = heatmapOverlay)
+        // remove null after checking
+        LeafImageCard(bitmap = bitmap, segmentOverlay = null)
 
         // Rejection hero
         Column(

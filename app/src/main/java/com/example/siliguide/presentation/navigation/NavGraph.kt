@@ -1,5 +1,6 @@
 package com.example.siliguide.presentation.navigation
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,12 @@ import com.example.siliguide.presentation.features.analysis.AnalysisViewModel
 import com.example.siliguide.presentation.features.analysis.PreAnalysisScreen
 import com.example.siliguide.presentation.features.analysis.PreAnalysisState
 import com.example.siliguide.presentation.features.analysis.PreAnalysisViewModel
+import com.example.siliguide.presentation.features.iot.IoTViewModel
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothConnectionScreen
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothDeviceDetailsScreen
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothIntroScreen
+import androidx.compose.runtime.remember
+import androidx.navigation.compose.navigation
 
 @Composable
 fun SiliGuideNavGraph(
@@ -108,7 +115,7 @@ fun SiliGuideNavGraph(
                             navController.navigate(Screen.IoTSetupAP.route)
                         }
                         ConnectionMode.BLUETOOTH -> {
-                            navController.navigate(Screen.IoTSetupLAN.route) // point this to bluetooth setup route
+                            navController.navigate(Screen.BluetoothSetupGraph.route)
                         }
                         ConnectionMode.LAN -> {
                             navController.navigate(Screen.IoTSetupLAN.route)
@@ -118,6 +125,119 @@ fun SiliGuideNavGraph(
             )
         }
 
+        // Bluetooth Setup
+        navigation(
+            route = Screen.BluetoothSetupGraph.route,
+            startDestination = Screen.IoTSetupBluetooth.route
+        ) {
+
+            composable(Screen.IoTSetupBluetooth.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.BluetoothSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                BluetoothIntroScreen(
+                    onContinue = {
+                        viewModel.startBluetoothSetup()
+
+                        navController.navigate(
+                            Screen.BluetoothConnectionScreen.route
+                        )
+                    },
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.BluetoothConnectionScreen.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.BluetoothSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                val bluetoothUiState by viewModel.bluetoothSetupState.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    viewModel.bluetoothVerified.collect {
+                        navController.navigate(
+                            Screen.BluetoothDeviceDetailsScreen.route
+                        )
+                    }
+                }
+
+                BluetoothConnectionScreen(
+                    uiState = bluetoothUiState,
+
+                    onOpenBluetoothSettings = {
+
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_BLUETOOTH_SETTINGS
+                        )
+
+                        navController.context.startActivity(intent)
+                    },
+
+                    onVerifyDevices = {
+                        viewModel.verifyPairedBluetoothDevices()
+                    },
+
+                    onRetry = {
+                        viewModel.resetBluetoothSetup()
+                    },
+
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.BluetoothDeviceDetailsScreen.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.BluetoothSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                LaunchedEffect(Unit) {
+                    viewModel.setupComplete.collect {
+                        navController.popBackStack(
+                            Screen.Dashboard.route,
+                            false
+                        )
+                    }
+                }
+
+                BluetoothDeviceDetailsScreen(
+
+                    deviceName = viewModel.deviceName,
+                    onDeviceNameChanged = viewModel::updateDeviceName,
+
+                    availablePlants = emptyList(),
+                    selectedPlant = null,
+                    onPlantSelected = {},
+
+                    onSave = {
+                        viewModel.finalizeSetup(
+                            customName = viewModel.deviceName,
+                            connectionMode = ConnectionMode.BLUETOOTH
+                        )
+                    },
+
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+        }
+
+        // AP Setup
         composable(Screen.IoTSetupAP.route) {
             IoTSetupAPModeScreen(
                 navController = navController,
@@ -129,7 +249,7 @@ fun SiliGuideNavGraph(
         }
 
         composable(Screen.IoTSetupLAN.route) {
-            // Replace this with your actual LAN Setup Screen Composable
+            // TODO: Replace this with your actual LAN Setup Screen Composable
             Column() {
                 Button(onClick = { navController.popBackStack() }) {
                     Text("Coming Soon, Go Back")
@@ -248,6 +368,7 @@ fun SiliGuideNavGraph(
             )
         }
 
+        // Analysis Result route that the data is still being processed
         composable(
             route = Screen.AnalysisResult.route,
             arguments = listOf(
@@ -268,6 +389,7 @@ fun SiliGuideNavGraph(
                 imageUri = decodedUri,
                 plantId = plantId, // Pass ID if needed for UI or saving
                 onNavigateBack = {
+                    viewModel.clearCurrentCache()
                     if (plantId != null) {
                         val popped = navController.popBackStack(Screen.PlantDetail.route, false)
                         if (!popped) {
@@ -286,6 +408,7 @@ fun SiliGuideNavGraph(
                             plantId = id,
                             imagePath = decodedUri,
                             onSuccess = {
+                                viewModel.clearCurrentCache()
                                 // 3. Navigate back to PlantDetail on success
                                 val popped = navController.popBackStack(Screen.PlantDetail.route, false)
                                 if (!popped) {
@@ -301,6 +424,36 @@ fun SiliGuideNavGraph(
             )
         }
 
+        // Analysis Result route that the data comes from history or database
+        composable(
+            route = Screen.AnalysisHistoryResult.route,
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+
+            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
+
+            val viewModel: AnalysisViewModel = hiltViewModel()
+
+            LaunchedEffect(sessionId) {
+                viewModel.loadAnalysisSession(sessionId)
+            }
+
+            AnalysisResultScreen(
+                imageUri = "",
+                plantId = null,
+
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onSaveAsNote = { },
+                isHistoryMode = true
+            )
+        }
+
         composable(
             route = Screen.PlantDetail.route,
             arguments = listOf(navArgument("plantId") { type = NavType.StringType })
@@ -310,8 +463,11 @@ fun SiliGuideNavGraph(
                 plantId = plantId,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToAnalysis = {
-                    // CHANGE THIS: Navigate to PreAnalysis first
+                    // Navigate to PreAnalysis first
                     navController.navigate(Screen.PreAnalysis.createRoute(plantId))
+                },
+                onNavigateToAnalysisDetail = { sessionId ->
+                    navController.navigate(Screen.AnalysisHistoryResult.createRoute(sessionId))
                 }
             )
         }
