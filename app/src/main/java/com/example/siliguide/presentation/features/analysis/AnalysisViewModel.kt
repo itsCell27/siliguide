@@ -197,6 +197,7 @@ class AnalysisViewModel @Inject constructor(
                             "No Siling Labuyo leaves or distinct features detected. Please retake the photo."
 
                         analysisUiState = analysisUiState.copy(
+                            bitmap = bitmap,
                             analysisError = errorMessage,
                             isLoading = false
                         )
