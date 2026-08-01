@@ -35,6 +35,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -51,7 +52,7 @@ import kotlin.math.roundToInt
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 private val BottomNavHeight  = 68.dp
-private val IotCardWidth     = 130.dp
+private val IotCardWidth     = 200.dp
 private val AddDeviceCardWidth = 100.dp
 
 // ── Status color tokens ───────────────────────────────────────────────────────
@@ -330,41 +331,46 @@ fun IoTDevicesSection(devices: List<IoTDevice>, onAddDevice: () -> Unit) {
                     .padding(bottom = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                devices.forEach { device -> IoTDeviceCard(device = device) }
+                devices.forEach { device ->
+                    IoTDeviceCard(
+                        device = device,
+                        modifier = Modifier.width(IotCardWidth)
+                    )
+                }
 
                 // Add device card — width fixed, height wraps content
-                Box(
-                    modifier = Modifier
-                        .width(AddDeviceCardWidth)         // width only — height wraps
-                        .defaultMinSize(minHeight = 90.dp) // keeps it proportional
-                        .background(OffWhite, RoundedCornerShape(12.dp))
-                        .border(1.dp, GrayLight, RoundedCornerShape(12.dp))
-                        .clickable { onAddDevice() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .border(1.5.dp, GrayLight, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("+", fontSize = 14.sp, color = GrayHint, fontFamily = DMSans)
-                        }
-                        Text(
-                            text = "Add device",
-                            fontSize = 10.sp,
-                            fontFamily = DMSans,
-                            color = GrayHint,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+//                Box(
+//                    modifier = Modifier
+//                        .width(AddDeviceCardWidth)         // width only — height wraps
+//                        .defaultMinSize(minHeight = 90.dp) // keeps it proportional
+//                        .background(OffWhite, RoundedCornerShape(12.dp))
+//                        .border(1.dp, GrayLight, RoundedCornerShape(12.dp))
+//                        .clickable { onAddDevice() },
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    Column(
+//                        horizontalAlignment = Alignment.CenterHorizontally,
+//                        verticalArrangement = Arrangement.spacedBy(4.dp),
+//                        modifier = Modifier.padding(12.dp)
+//                    ) {
+//                        Box(
+//                            modifier = Modifier
+//                                .size(26.dp)
+//                                .clip(CircleShape)
+//                                .border(1.5.dp, GrayLight, CircleShape),
+//                            contentAlignment = Alignment.Center
+//                        ) {
+//                            Text("+", fontSize = 14.sp, color = GrayHint, fontFamily = DMSans)
+//                        }
+//                        Text(
+//                            text = "Add device",
+//                            fontSize = 10.sp,
+//                            fontFamily = DMSans,
+//                            color = GrayHint,
+//                            textAlign = TextAlign.Center
+//                        )
+//                    }
+//                }
             }
         }
     }
@@ -376,12 +382,11 @@ fun IoTDevicesSection(devices: List<IoTDevice>, onAddDevice: () -> Unit) {
 @Composable
 fun IoTDeviceCard(
     device: IoTDevice,
-    modeLabel: String = device.connectionMode.name
+    modeLabel: String = device.connectionMode.name,
+    modifier: Modifier = Modifier // The parent will pass the width here
 ) {
     Card(
-        modifier = Modifier
-            .width(IotCardWidth)               // width fixed, height adaptive
-            .wrapContentHeight(),
+        modifier = modifier.wrapContentHeight(), // Let the parent dictate width, but height wraps to content
         colors = CardDefaults.cardColors(containerColor = White),
         shape  = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, Border)
@@ -391,7 +396,7 @@ fun IoTDeviceCard(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(), // Inner elements fill the card's width
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -422,18 +427,22 @@ fun IoTDeviceCard(
                 fontWeight = FontWeight.Medium,
                 fontFamily = DMSans,
                 color = Black,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis // Adds "..." if the name is too long!
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (modeLabel != null)
-                    Arrangement.SpaceBetween else Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (modeLabel != null) {
-                    Text(text = modeLabel, fontSize = 10.sp, fontFamily = DMSans, color = GrayMedium)
-                }
+                Text(
+                    text = modeLabel,
+                    fontSize = 10.sp,
+                    fontFamily = DMSans,
+                    color = GrayMedium,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
                 Text(
                     text = if (device.isActive) "Connected" else "Offline",
                     fontSize = 10.sp,
@@ -897,7 +906,7 @@ fun DashboardPreview() {
             ),
             devices = listOf(
                 IoTDevice("1","1","Sensor A","AAA",true, "10.1.1.1", ConnectionMode.LAN,false, 24052026),
-                IoTDevice("2","1","Sensor B","BBB",false,"10.1.1.1", ConnectionMode.AP, false, 23052026)
+                IoTDevice("2","1","Sensor B","BBB",false,"10.1.1.1", ConnectionMode.BLUETOOTH, false, 23052026)
             ),
             isAddMenuOpen = false, onAddMenuToggle = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
