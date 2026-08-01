@@ -46,7 +46,6 @@ import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.engine.RuleResult
 import com.example.siliguide.domain.engine.ThresholdLevel
 import com.example.siliguide.R
-import com.example.siliguide.core.ui.components.LoadingOverlay
 import com.example.siliguide.core.ui.components.LoadingScreen
 
 data class SensorRowData(
