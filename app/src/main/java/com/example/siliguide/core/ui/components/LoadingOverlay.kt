@@ -18,7 +18,6 @@ import com.example.siliguide.core.ui.theme.GreenPrimary
 
 @Composable
 fun LoadingOverlay(
-    isLoading: Boolean,
     message: String = "Loading...",
     content: @Composable () -> Unit
 ) {
@@ -27,31 +26,30 @@ fun LoadingOverlay(
     ) {
         content()
 
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .clickable(enabled = false) {},
-                contentAlignment = Alignment.Center
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .clickable(enabled = false) {},
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(color = GreenPrimary)
+                CircularProgressIndicator(color = GreenPrimary)
 
-                    if (!message.isEmpty()) {
-                        Spacer(Modifier.height(16.dp))
+                if (!message.isEmpty()) {
+                    Spacer(Modifier.height(16.dp))
 
-                        Text(
-                            text = message,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
+
             }
         }
+
     }
 }
