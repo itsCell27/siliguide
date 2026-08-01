@@ -47,6 +47,7 @@ import com.example.siliguide.domain.engine.RuleResult
 import com.example.siliguide.domain.engine.ThresholdLevel
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.components.LoadingOverlay
+import com.example.siliguide.core.ui.components.LoadingScreen
 
 data class SensorRowData(
     val name: String,
@@ -96,9 +97,9 @@ fun AnalysisResultScreen(
 
 
     if (isLoading) {
-        LoadingOverlay(
+        LoadingScreen(
             message = ""
-        ) { }
+        )
     } else {
 
         val confidencePct = (confidence * 100).toInt()
