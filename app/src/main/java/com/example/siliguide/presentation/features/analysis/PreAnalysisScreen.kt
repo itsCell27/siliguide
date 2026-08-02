@@ -166,7 +166,7 @@ fun PreAnalysisScreen(
                 title = "Camera Permission Required",
 
                 message =
-                    "SILI-GUIDE needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
+                    "SiliGuide needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
 
                 confirmText = "Continue",
 
