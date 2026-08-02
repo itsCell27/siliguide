@@ -13,16 +13,33 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.Manifest
+import android.content.Context
+import com.example.siliguide.core.permission.PermissionManager
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionType
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 @HiltViewModel
 class PreAnalysisViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val getIoTDevicesUseCase: GetIoTDevicesUseCase,
-    private val getPlantByIdUseCase: GetPlantByIdUseCase
+    private val getPlantByIdUseCase: GetPlantByIdUseCase,
+    private val permissionManager: PermissionManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PreAnalysisState>(PreAnalysisState.NoDevice)
     val state: StateFlow<PreAnalysisState> = _state.asStateFlow()
+
+    var permissionStatus by mutableStateOf<PermissionStatus>(
+        PermissionStatus.RequestPermission
+    )
+        private set
+
+    var shouldShowPermissionDialog by mutableStateOf(false)
+        private set
 
     fun loadData(plantId: String) {
         viewModelScope.launch {
@@ -65,5 +82,59 @@ class PreAnalysisViewModel @Inject constructor(
             // State 7C: No connected devices found
             PreAnalysisState.NoDevice
         }
+    }
+
+    fun refreshCameraPermission(
+        context: Context
+    ) {
+
+        viewModelScope.launch {
+
+            val status =
+                permissionManager.getPermissionStatus(
+                    context = context,
+                    permission = Manifest.permission.CAMERA,
+                    type = PermissionType.CAMERA
+                )
+
+            permissionStatus = status
+
+            if (status == PermissionStatus.Granted) {
+
+                permissionManager.clearRequested(
+                    PermissionType.CAMERA
+                )
+            }
+        }
+    }
+
+    fun markCameraPermissionRequested() {
+
+        viewModelScope.launch {
+
+            permissionManager.markRequested(
+                PermissionType.CAMERA
+            )
+        }
+    }
+
+    fun clearCameraPermissionRequested() {
+
+        viewModelScope.launch {
+
+            permissionManager.clearRequested(
+                PermissionType.CAMERA
+            )
+        }
+    }
+
+    fun showPermissionDialog() {
+
+        shouldShowPermissionDialog = true
+    }
+
+    fun hidePermissionDialog() {
+
+        shouldShowPermissionDialog = false
     }
 }

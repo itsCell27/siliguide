@@ -2,6 +2,7 @@ package com.example.siliguide.presentation.features.analysis
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,14 +17,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.ui.components.PermissionDialog
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
@@ -83,15 +87,25 @@ sealed class PreAnalysisState {
 @Composable
 fun PreAnalysisScreen(
     state: PreAnalysisState,
+    permissionStatus: PermissionStatus,
     onBack: () -> Unit,
-    // 7A
+    showPermissionDialog: Boolean,
+
+    onRequestCameraPermission: () -> Unit,
+
+    onOpenSettings: () -> Unit,
+
+    onPermissionDenied: () -> Unit,
+
     onContinueToCamera: () -> Unit = {},
-    // 7B
+
     onContinueWithOtherDevice: (deviceId: String) -> Unit = {},
+
     onSkipToImageOnly: () -> Unit = {},
-    // 7C
+
     onContinueImageOnly: () -> Unit = {},
-    onAddIoTDevice: () -> Unit = {}
+
+    onAddIoTDevice: () -> Unit = {},
 ) {
     // On-the-go selection (7B only)
     var selectedOnTheGoId by remember { mutableStateOf<String?>(null) }
@@ -141,6 +155,50 @@ fun PreAnalysisScreen(
             onContinueImageOnly = onContinueImageOnly,
             onAddIoTDevice      = onAddIoTDevice
         )
+
+        if (
+            showPermissionDialog &&
+            permissionStatus == PermissionStatus.ShowRationale
+        ) {
+
+            PermissionDialog(
+
+                title = "Camera Permission Required",
+
+                message =
+                    "SILI-GUIDE needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
+
+                confirmText = "Continue",
+
+                dismissText = "Cancel",
+
+                onConfirm = onRequestCameraPermission,
+
+                onDismiss = onPermissionDenied
+            )
+        }
+
+        if (
+            showPermissionDialog &&
+            permissionStatus == PermissionStatus.PermanentlyDenied
+        ) {
+
+            PermissionDialog(
+
+                title = "Camera Permission Disabled",
+
+                message =
+                    "Camera permission has been permanently denied. Please enable it in Settings to continue.",
+
+                confirmText = "Open Settings",
+
+                dismissText = "Cancel",
+
+                onConfirm = onOpenSettings,
+
+                onDismiss = onPermissionDenied
+            )
+        }
     }
 }
 
@@ -171,8 +229,8 @@ private fun TopBar(onBack: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 // Chevron left drawn with Canvas (no Icon dependency on back arrow)
-                androidx.compose.foundation.Canvas(modifier = Modifier.size(14.dp)) {
-                    val p = androidx.compose.ui.graphics.Path().apply {
+                Canvas(modifier = Modifier.size(14.dp)) {
+                    val p = Path().apply {
                         moveTo(size.width * 0.65f, size.height * 0.18f)
                         lineTo(size.width * 0.35f, size.height * 0.50f)
                         lineTo(size.width * 0.65f, size.height * 0.82f)
@@ -180,10 +238,10 @@ private fun TopBar(onBack: () -> Unit) {
                     drawPath(
                         path = p,
                         color = GrayBody,
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        style = Stroke(
                             width = 1.5.dp.toPx(),
-                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                            join = androidx.compose.ui.graphics.StrokeJoin.Round
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
                         )
                     )
                 }
@@ -694,17 +752,17 @@ private fun InfoBanner(
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         // Info circle icon
-        androidx.compose.foundation.Canvas(
+        Canvas(
             modifier = Modifier
                 .size(14.dp)
                 .padding(top = 1.dp)
         ) {
             val r = size.minDimension / 2f
-            drawCircle(color = iconTint, radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2.dp.toPx()))
+            drawCircle(color = iconTint, radius = r, style = Stroke(width = 1.2.dp.toPx()))
             // vertical line
-            drawLine(iconTint, start = androidx.compose.ui.geometry.Offset(r, r * 0.6f), end = androidx.compose.ui.geometry.Offset(r, r * 1.3f), strokeWidth = 1.2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            drawLine(iconTint, start = Offset(r, r * 0.6f), end = Offset(r, r * 1.3f), strokeWidth = 1.2.dp.toPx(), cap = StrokeCap.Round)
             // dot
-            drawCircle(color = iconTint, radius = 0.7.dp.toPx(), center = androidx.compose.ui.geometry.Offset(r, r * 1.65f))
+            drawCircle(color = iconTint, radius = 0.7.dp.toPx(), center = Offset(r, r * 1.65f))
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -733,24 +791,24 @@ private fun CheckRow(text: String, checked: Boolean) {
         modifier = Modifier.fillMaxWidth()
     ) {
         // Check / X circle icon
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(14.dp).padding(top = 2.dp)) {
+        Canvas(modifier = Modifier.size(14.dp).padding(top = 2.dp)) {
             val r = size.minDimension / 2f
             if (checked) {
                 drawCircle(color = GreenBgLight, radius = r)
-                drawCircle(color = GreenLight, radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+                drawCircle(color = GreenLight, radius = r, style = Stroke(1.dp.toPx()))
                 // checkmark
-                val path = androidx.compose.ui.graphics.Path().apply {
+                val path = Path().apply {
                     moveTo(r * 0.55f, r)
                     lineTo(r * 0.85f, r * 1.35f)
                     lineTo(r * 1.45f, r * 0.65f)
                 }
-                drawPath(path, color = GreenPrimary, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                drawPath(path, color = GreenPrimary, style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             } else {
                 drawCircle(color = OffWhite, radius = r)
-                drawCircle(color = GrayLight, radius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+                drawCircle(color = GrayLight, radius = r, style = Stroke(1.dp.toPx()))
                 // X
-                drawLine(GrayHint, start = androidx.compose.ui.geometry.Offset(r * 0.6f, r * 0.6f), end = androidx.compose.ui.geometry.Offset(r * 1.4f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-                drawLine(GrayHint, start = androidx.compose.ui.geometry.Offset(r * 1.4f, r * 0.6f), end = androidx.compose.ui.geometry.Offset(r * 0.6f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawLine(GrayHint, start = Offset(r * 0.6f, r * 0.6f), end = Offset(r * 1.4f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
+                drawLine(GrayHint, start = Offset(r * 1.4f, r * 0.6f), end = Offset(r * 0.6f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
             }
         }
         Text(
@@ -837,10 +895,28 @@ fun PreAnalysis7APreview() {
             state = PreAnalysisState.LinkedConnected(
                 deviceName = "Garden Sensor",
                 deviceMeta = "LAN Mode · 192.168.1.42",
-                sensors    = SensorPreviewData(),
-                deviceId   = "dev_1"
+                sensors = SensorPreviewData(),
+                deviceId = "dev_1"
             ),
-            onBack = {}
+            onBack = {},
+            permissionStatus = PermissionStatus.Granted,
+            showPermissionDialog = false,
+
+            onRequestCameraPermission = {},
+
+            onOpenSettings = {},
+
+            onPermissionDenied = {},
+
+            onContinueToCamera = {},
+
+            onContinueWithOtherDevice = {},
+
+            onSkipToImageOnly = {},
+
+            onContinueImageOnly = {},
+
+            onAddIoTDevice = {}
         )
     }
 }
@@ -851,14 +927,40 @@ fun PreAnalysis7BPreview() {
     SiliGuideTheme {
         PreAnalysisScreen(
             state = PreAnalysisState.LinkedDisconnected(
-                deviceName      = "Garden Sensor",
-                lastSeenLabel   = "Last seen 14 min ago",
-                onTheGoDevices  = listOf(
-                    OnTheGoDevice("dev_2", "Backup Sensor", "AP Mode · Connected — for this analysis only"),
-                    OnTheGoDevice("dev_3", "Field Unit",    "LAN Mode · Connected — for this analysis only")
+                deviceName = "Garden Sensor",
+                lastSeenLabel = "Last seen 14 min ago",
+                onTheGoDevices = listOf(
+                    OnTheGoDevice(
+                        "dev_2",
+                        "Backup Sensor",
+                        "AP Mode · Connected — for this analysis only"
+                    ),
+                    OnTheGoDevice(
+                        "dev_3",
+                        "Field Unit",
+                        "LAN Mode · Connected — for this analysis only"
+                    )
                 )
             ),
-            onBack = {}
+            onBack = {},
+            permissionStatus = PermissionStatus.Granted,
+            showPermissionDialog = false,
+
+            onRequestCameraPermission = {},
+
+            onOpenSettings = {},
+
+            onPermissionDenied = {},
+
+            onContinueToCamera = {},
+
+            onContinueWithOtherDevice = {},
+
+            onSkipToImageOnly = {},
+
+            onContinueImageOnly = {},
+
+            onAddIoTDevice = {}
         )
     }
 }
@@ -868,8 +970,26 @@ fun PreAnalysis7BPreview() {
 fun PreAnalysis7CPreview() {
     SiliGuideTheme {
         PreAnalysisScreen(
-            state  = PreAnalysisState.NoDevice,
-            onBack = {}
+            state = PreAnalysisState.NoDevice,
+            onBack = {},
+            permissionStatus = PermissionStatus.Granted,
+            showPermissionDialog = false,
+
+            onRequestCameraPermission = {},
+
+            onOpenSettings = {},
+
+            onPermissionDenied = {},
+
+            onContinueToCamera = {},
+
+            onContinueWithOtherDevice = {},
+
+            onSkipToImageOnly = {},
+
+            onContinueImageOnly = {},
+
+            onAddIoTDevice = {}
         )
     }
 }

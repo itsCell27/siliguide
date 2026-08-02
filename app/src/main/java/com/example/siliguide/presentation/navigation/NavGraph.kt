@@ -1,12 +1,13 @@
 package com.example.siliguide.presentation.navigation
 
-import android.util.Log
-import androidx.compose.foundation.layout.Box
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -29,10 +30,7 @@ import com.example.siliguide.presentation.features.iot.ap_setup.IoTSetupAPModeSc
 import com.example.siliguide.presentation.features.iot.components.QrScannerScreen
 import com.example.siliguide.presentation.features.plants.AddPlantScreen
 import com.example.siliguide.presentation.features.plants.PlantDetailScreen
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import com.example.siliguide.presentation.features.analysis.AnalysisViewModel
 import com.example.siliguide.presentation.features.analysis.PreAnalysisScreen
 import com.example.siliguide.presentation.features.analysis.PreAnalysisState
@@ -42,7 +40,13 @@ import com.example.siliguide.presentation.features.iot.bluetooth_setup.Bluetooth
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothDeviceDetailsScreen
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothIntroScreen
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.compose.navigation
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionUtils
 
 @Composable
 fun SiliGuideNavGraph(
@@ -87,23 +91,53 @@ fun SiliGuideNavGraph(
                 onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
                 onNavigateToAddPlant = { navController.navigate(Screen.AddPlant.route) },
                 onNavigateToAddIoT = { navController.navigate(Screen.IoTSetup.route) },
-                onNavigateToPlantDetail = { plantId ->  // ← ADD THIS
+                onNavigateToPlantDetail = { plantId ->
                     navController.navigate(Screen.PlantDetail.createRoute(plantId))
                 },
                 onNavigateToSeeAll = { /* Future: Navigate to history list */ }
             )
         }
 
+
+
         // --- PLANT MANAGEMENT ---
         composable(route = Screen.AddPlant.route) {
             AddPlantScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToCamera = { plantId ->
-                    // pass new plant id to camera
-                    navController.navigate(Screen.Camera.createRoute(plantId))
+
+                    navController.navigate(
+                        Screen.PreAnalysis.createRoute(plantId)
+                    ) {
+
+                        popUpTo(Screen.AddPlant.route) {
+                            inclusive = true
+                        }
+                    }
                 }
             )
         }
+
+        composable(
+            route = Screen.PlantDetail.route,
+            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
+            PlantDetailScreen(
+                plantId = plantId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAnalysis = {
+                    // Navigate to PreAnalysis first
+                    navController.navigate(Screen.PreAnalysis.createRoute(plantId))
+                },
+                onNavigateToAnalysisDetail = { sessionId ->
+                    navController.navigate(Screen.AnalysisHistoryResult.createRoute(sessionId))
+                }
+            )
+        }
+        // --- PLANT MANAGEMENT ---
+
+
 
         // --- IOT SETUP WIZARD ---
         composable(route = Screen.IoTSetup.route) {
@@ -278,6 +312,13 @@ fun SiliGuideNavGraph(
         ) { backStackEntry ->
             val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
             val viewModel: PreAnalysisViewModel = hiltViewModel()
+            val context = LocalContext.current
+            val permissionLauncher =
+                rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) {
+                    viewModel.refreshCameraPermission(context)
+                }
 
             // 1. Collect the state from the ViewModel
             val state by viewModel.state.collectAsState()
@@ -287,32 +328,154 @@ fun SiliGuideNavGraph(
                 viewModel.loadData(plantId)
             }
 
+            LaunchedEffect(Unit) {
+                viewModel.refreshCameraPermission(context)
+            }
+
+            val lifecycleOwner = LocalLifecycleOwner.current
+
+            DisposableEffect(lifecycleOwner) {
+
+                val observer =
+                    LifecycleEventObserver { _, event ->
+
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            viewModel.refreshCameraPermission(context)
+                        }
+                    }
+
+                lifecycleOwner.lifecycle.addObserver(observer)
+
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+
+            fun continueToCamera(
+                navigate: () -> Unit
+            ) {
+
+                when (viewModel.permissionStatus) {
+
+                    PermissionStatus.Granted -> {
+
+                        navigate()
+                    }
+
+                    PermissionStatus.RequestPermission -> {
+
+                        viewModel.markCameraPermissionRequested()
+
+                        permissionLauncher.launch(
+                            Manifest.permission.CAMERA
+                        )
+                    }
+
+                    PermissionStatus.ShowRationale -> {
+
+                        viewModel.showPermissionDialog()
+                    }
+
+                    PermissionStatus.PermanentlyDenied -> {
+
+                        viewModel.showPermissionDialog()
+                    }
+                }
+            }
+
             PreAnalysisScreen(
+
                 state = state,
-                onBack = { navController.popBackStack() },
+
+                permissionStatus = viewModel.permissionStatus,
+
+                onBack = {
+                    navController.popBackStack()
+                },
+
+                showPermissionDialog =
+                    viewModel.shouldShowPermissionDialog,
+
+                onRequestCameraPermission = {
+                    viewModel.hidePermissionDialog()
+
+                    viewModel.markCameraPermissionRequested()
+
+                    permissionLauncher.launch(
+                        Manifest.permission.CAMERA
+                    )
+                },
+
+                onOpenSettings = {
+                    viewModel.hidePermissionDialog()
+
+                    PermissionUtils.openAppSettings(context)
+                },
+
+                onPermissionDenied = {
+                    viewModel.hidePermissionDialog()
+                },
+
                 onContinueToCamera = {
-                    // Navigate to Camera with the plantId
-                    val deviceId = (state as? PreAnalysisState.LinkedConnected)?.deviceId
-                    navController.navigate(Screen.Camera.createRoute(plantId, deviceId))
+
+                    continueToCamera {
+
+                        val deviceId =
+                            (state as? PreAnalysisState.LinkedConnected)
+                                ?.deviceId
+
+                        navController.navigate(
+                            Screen.Camera.createRoute(
+                                plantId,
+                                deviceId
+                            )
+                        )
+                    }
                 },
+
                 onContinueWithOtherDevice = { deviceId ->
-                    // Navigate to Camera with both IDs
-                    // (Ensure Screen.Camera.createRoute is updated to handle deviceId)
-                    navController.navigate(Screen.Camera.createRoute(plantId, deviceId))
+
+                    continueToCamera {
+
+                        navController.navigate(
+                            Screen.Camera.createRoute(
+                                plantId,
+                                deviceId
+                            )
+                        )
+                    }
                 },
-                onAddIoTDevice = {
-                    navController.navigate(Screen.IoTSetup.route)
-                },
+
                 onSkipToImageOnly = {
-                    navController.navigate(Screen.Camera.createRoute(plantId))
+
+                    continueToCamera {
+
+                        navController.navigate(
+                            Screen.Camera.createRoute(plantId)
+                        )
+                    }
                 },
+
                 onContinueImageOnly = {
-                    navController.navigate(Screen.Camera.createRoute(plantId))
+
+                    continueToCamera {
+
+                        navController.navigate(
+                            Screen.Camera.createRoute(plantId)
+                        )
+                    }
+                },
+
+                onAddIoTDevice = {
+
+                    navController.navigate(
+                        Screen.IoTSetup.route
+                    )
                 }
             )
         }
 
-        // --- ANALYSIS PIPELINE ---
+        // --- START ANALYSIS PIPELINE ---
         composable(
             route = Screen.Camera.route,
             arguments = listOf(
@@ -320,28 +483,28 @@ fun SiliGuideNavGraph(
                 navArgument("deviceId") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { backStackEntry ->
-        val plantId = backStackEntry.arguments?.getString("plantId")
-        val deviceId = backStackEntry.arguments?.getString("deviceId")
+            val plantId = backStackEntry.arguments?.getString("plantId")
+            val deviceId = backStackEntry.arguments?.getString("deviceId")
 
-        CameraScreen(
-            onBack = {
-                if (plantId != null) {
-                    val popped = navController.popBackStack(Screen.PlantDetail.route, false)
-                    if (!popped) {
-                        navController.navigate(Screen.PlantDetail.createRoute(plantId)) {
-                            popUpTo(Screen.Dashboard.route) { inclusive = false }
+            CameraScreen(
+                onBack = {
+                    if (plantId != null) {
+                        val popped = navController.popBackStack(Screen.PlantDetail.route, false)
+                        if (!popped) {
+                            navController.navigate(Screen.PlantDetail.createRoute(plantId)) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = false }
+                            }
                         }
+                    } else {
+                        navController.popBackStack()
                     }
-                } else {
-                    navController.popBackStack()
+                },
+                onImageCaptured = { rawUriString ->
+                    // Pass BOTH plantId and deviceId to the next screen
+                    navController.navigate(Screen.CropAdjust.createRoute(rawUriString, plantId, deviceId))
                 }
-            },
-            onImageCaptured = { rawUriString ->
-                // Pass BOTH plantId and deviceId to the next screen
-                navController.navigate(Screen.CropAdjust.createRoute(rawUriString, plantId, deviceId))
-            }
-        )
-    }
+            )
+        }
 
         composable(
             route = Screen.CropAdjust.route,
@@ -368,7 +531,7 @@ fun SiliGuideNavGraph(
             )
         }
 
-        // Analysis Result route that the data is still being processed
+        // Analysis Result route for live data
         composable(
             route = Screen.AnalysisResult.route,
             arguments = listOf(
@@ -453,24 +616,10 @@ fun SiliGuideNavGraph(
                 isHistoryMode = true
             )
         }
+        // --- END ANALYSIS PIPELINE ---
 
-        composable(
-            route = Screen.PlantDetail.route,
-            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
-            PlantDetailScreen(
-                plantId = plantId,
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToAnalysis = {
-                    // Navigate to PreAnalysis first
-                    navController.navigate(Screen.PreAnalysis.createRoute(plantId))
-                },
-                onNavigateToAnalysisDetail = { sessionId ->
-                    navController.navigate(Screen.AnalysisHistoryResult.createRoute(sessionId))
-                }
-            )
-        }
+
+
 
     }
 }
