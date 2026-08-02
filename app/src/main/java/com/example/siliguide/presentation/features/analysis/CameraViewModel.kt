@@ -58,13 +58,6 @@ class CameraViewModel @Inject constructor() : ViewModel() {
                 )
             }
 
-            is CameraEvent.PermissionChanged -> {
-
-                uiState.copy(
-                    hasCameraPermission = event.granted
-                )
-            }
-
             CameraEvent.ClearFocus -> {
 
                 uiState.copy(

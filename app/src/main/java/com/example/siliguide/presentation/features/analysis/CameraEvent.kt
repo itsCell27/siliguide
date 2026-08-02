@@ -16,10 +16,6 @@ sealed interface CameraEvent {
 
     object ClearFocus : CameraEvent
 
-    data class PermissionChanged(
-        val granted: Boolean
-    ) : CameraEvent
-
     data object GalleryProcessingStarted : CameraEvent
 
     data object GalleryProcessingFinished : CameraEvent

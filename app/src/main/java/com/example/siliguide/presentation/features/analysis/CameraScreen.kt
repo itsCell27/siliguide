@@ -1,7 +1,5 @@
 package com.example.siliguide.presentation.features.analysis
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.util.Log
 import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,24 +31,12 @@ fun CameraScreen(
 
     val cameraUiState = viewModel.uiState
     val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val lifecycleOwner =
+        androidx.lifecycle.compose.LocalLifecycleOwner.current
+
     val scope = rememberCoroutineScope() // Needed for background file copying
 
     var imageCaptureRef by remember { mutableStateOf<ImageCapture?>(null) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted ->
-
-            viewModel.onEvent(
-                CameraEvent.PermissionChanged(granted)
-            )
-
-            if (!granted) {
-                onBack()
-            }
-        }
-    )
 
     // Gallery Picker: Copy the file to cache to avoid SecurityException permission denials
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -67,25 +53,6 @@ fun CameraScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-
-        val granted =
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
-
-        viewModel.onEvent(
-            CameraEvent.PermissionChanged(granted)
-        )
-
-        if (!granted) {
-            permissionLauncher.launch(
-                Manifest.permission.CAMERA
-            )
-        }
-    }
-
     // Clear focus ring after a delay
     LaunchedEffect(cameraUiState.tapPoint) {
         if (cameraUiState.tapPoint != null) {
@@ -94,167 +61,165 @@ fun CameraScreen(
         }
     }
 
-    if (cameraUiState.hasCameraPermission) {
+            LoadingOverlay(
+                isLoading =
+                    cameraUiState.isCapturing ||
+                            cameraUiState.isProcessingGalleryImage,
+                message = if (cameraUiState.isCapturing)
+                    "Capturing image..."
+                else
+                    "Preparing image..."
+            ) {
+                var cameraProvider: ProcessCameraProvider? by remember { mutableStateOf(null) }
 
-        LoadingOverlay(
-            isLoading =
-                cameraUiState.isCapturing ||
-                        cameraUiState.isProcessingGalleryImage,
-            message = if (cameraUiState.isCapturing)
-                "Capturing image..."
-            else
-                "Preparing image..."
-        ) {
-            var cameraProvider: ProcessCameraProvider? by remember { mutableStateOf(null) }
+                DisposableEffect(Unit) {
+                    onDispose { cameraProvider?.unbindAll() }
+                }
 
-            DisposableEffect(Unit) {
-                onDispose { cameraProvider?.unbindAll() }
-            }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AndroidView(
+                        factory = { ctx ->
+                            val previewView = PreviewView(ctx)
+                            var cameraRef: Camera? = null // Reference to control focus
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                AndroidView(
-                    factory = { ctx ->
-                        val previewView = PreviewView(ctx)
-                        var cameraRef: Camera? = null // Reference to control focus
+                            ProcessCameraProvider.getInstance(ctx).apply {
+                                addListener({
+                                    val provider = get()
+                                    cameraProvider = provider
 
-                        ProcessCameraProvider.getInstance(ctx).apply {
-                            addListener({
-                                val provider = get()
-                                cameraProvider = provider
+                                    val preview = Preview.Builder().build().also {
+                                        it.surfaceProvider = previewView.surfaceProvider
+                                    }
+                                    val imageCapture = ImageCapture.Builder()
+                                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                        .setFlashMode(cameraUiState.flashMode)
+                                        .build()
 
-                                val preview = Preview.Builder().build().also {
-                                    it.surfaceProvider = previewView.surfaceProvider
-                                }
-                                val imageCapture = ImageCapture.Builder()
-                                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                                    .setFlashMode(cameraUiState.flashMode)
-                                    .build()
-
-                                try {
-                                    provider.unbindAll()
-                                    // Save the camera instance returned by bindToLifecycle
-                                    cameraRef = provider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        CameraSelector.DEFAULT_BACK_CAMERA,
-                                        preview,
-                                        imageCapture
-                                    )
-                                    imageCaptureRef = imageCapture
-                                } catch (e: Exception) {
-                                    Log.e("Camera", "Binding failed", e)
-                                }
-                            }, ContextCompat.getMainExecutor(ctx))
-                        }
-
-                        // --- TAP TO FOCUS IMPLEMENTATION ---
-                        previewView.setOnTouchListener { view, event ->
-                            if (event.action == MotionEvent.ACTION_UP) {
-                                // Convert screen tap coordinates to camera sensor coordinates
-                                val factory = previewView.meteringPointFactory
-                                val point = factory.createPoint(event.x, event.y)
-
-                                // Update UI state for the ring
-                                viewModel.onEvent(
-                                    CameraEvent.FocusTapped(
-                                        Offset(event.x, event.y)
-                                    )
-                                )
-
-                                // Create the action and execute it
-                                val action = FocusMeteringAction.Builder(point).build()
-                                val result = cameraRef?.cameraControl?.startFocusAndMetering(action)
-
-                                // Listen for focus completion
-                                result?.addListener({
                                     try {
-                                        val focusResult = result.get()
-                                        viewModel.onEvent(
-                                            CameraEvent.FocusFinished(
-                                                focusResult.isFocusSuccessful
-                                            )
+                                        provider.unbindAll()
+                                        // Save the camera instance returned by bindToLifecycle
+                                        cameraRef = provider.bindToLifecycle(
+                                            lifecycleOwner,
+                                            CameraSelector.DEFAULT_BACK_CAMERA,
+                                            preview,
+                                            imageCapture
                                         )
+                                        imageCaptureRef = imageCapture
                                     } catch (e: Exception) {
-                                        Log.e("Camera", "Focus metering failed", e)
-                                        viewModel.onEvent(
-                                            CameraEvent.FocusFinished(false)
-                                        )
+                                        Log.e("Camera", "Binding failed", e)
                                     }
                                 }, ContextCompat.getMainExecutor(ctx))
-
-                                view.performClick() // Good practice for accessibility
                             }
-                            true // Consume the touch event
+
+                            // --- TAP TO FOCUS IMPLEMENTATION ---
+                            previewView.setOnTouchListener { view, event ->
+                                if (event.action == MotionEvent.ACTION_UP) {
+                                    // Convert screen tap coordinates to camera sensor coordinates
+                                    val factory = previewView.meteringPointFactory
+                                    val point = factory.createPoint(event.x, event.y)
+
+                                    // Update UI state for the ring
+                                    viewModel.onEvent(
+                                        CameraEvent.FocusTapped(
+                                            Offset(event.x, event.y)
+                                        )
+                                    )
+
+                                    // Create the action and execute it
+                                    val action = FocusMeteringAction.Builder(point).build()
+                                    val result = cameraRef?.cameraControl?.startFocusAndMetering(action)
+
+                                    // Listen for focus completion
+                                    result?.addListener({
+                                        try {
+                                            val focusResult = result.get()
+                                            viewModel.onEvent(
+                                                CameraEvent.FocusFinished(
+                                                    focusResult.isFocusSuccessful
+                                                )
+                                            )
+                                        } catch (e: Exception) {
+                                            Log.e("Camera", "Focus metering failed", e)
+                                            viewModel.onEvent(
+                                                CameraEvent.FocusFinished(false)
+                                            )
+                                        }
+                                    }, ContextCompat.getMainExecutor(ctx))
+
+                                    view.performClick() // Good practice for accessibility
+                                }
+                                true // Consume the touch event
+                            }
+
+                            previewView
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        update = {
+                            imageCaptureRef?.flashMode = cameraUiState.flashMode
                         }
+                    )
 
-                        previewView
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    update = {
-                        imageCaptureRef?.flashMode = cameraUiState.flashMode
-                    }
-                )
-
-                // Your existing overlay logic remains exactly the same!
-                CameraOverlay(
-                    onCapture = {
-                        viewModel.onEvent(
-                            CameraEvent.CaptureStarted
-                        )
-
-                        val imageCapture = imageCaptureRef ?: run {
+                    // Your existing overlay logic remains exactly the same!
+                    CameraOverlay(
+                        onCapture = {
                             viewModel.onEvent(
-                                CameraEvent.CaptureFinished
+                                CameraEvent.CaptureStarted
                             )
-                            return@CameraOverlay
-                        }
-                        val file = File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
-                        val outputFileOptions = ImageCapture.OutputFileOptions.Builder(file).build()
 
-                        imageCapture.takePicture(
-                            outputFileOptions,
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageSavedCallback {
-                                override fun onImageSaved(
-                                    output: ImageCapture.OutputFileResults
-                                ) {
-
-                                    viewModel.onEvent(
-                                        CameraEvent.CaptureFinished
-                                    )
-
-                                    output.savedUri?.let {
-                                        onImageCaptured(it.toString())
-                                    } ?: onImageCaptured(
-                                        android.net.Uri.fromFile(file).toString()
-                                    )
-                                }
-                                override fun onError(exc: ImageCaptureException) {
-
-                                    viewModel.onEvent(
-                                        CameraEvent.CaptureFinished
-                                    )
-
-                                    Log.e(
-                                        "Camera",
-                                        "Capture failed",
-                                        exc
-                                    )
-                                }
+                            val imageCapture = imageCaptureRef ?: run {
+                                viewModel.onEvent(
+                                    CameraEvent.CaptureFinished
+                                )
+                                return@CameraOverlay
                             }
-                        )
-                    },
-                    onUpload = { galleryLauncher.launch("image/*") },
-                    onBack = onBack,
-                    tapPoint = cameraUiState.tapPoint,
-                    isFocusSuccessful = cameraUiState.isFocusSuccessful,
-                    flashMode = cameraUiState.flashMode,
-                    onFlashModeChange = {
-                        viewModel.onEvent(CameraEvent.FlashClicked)
-                    }
-                )
-            }
-        }
+                            val file = File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
+                            val outputFileOptions = ImageCapture.OutputFileOptions.Builder(file).build()
 
-    }
+                            imageCapture.takePicture(
+                                outputFileOptions,
+                                ContextCompat.getMainExecutor(context),
+                                object : ImageCapture.OnImageSavedCallback {
+                                    override fun onImageSaved(
+                                        output: ImageCapture.OutputFileResults
+                                    ) {
+
+                                        viewModel.onEvent(
+                                            CameraEvent.CaptureFinished
+                                        )
+
+                                        output.savedUri?.let {
+                                            onImageCaptured(it.toString())
+                                        } ?: onImageCaptured(
+                                            android.net.Uri.fromFile(file).toString()
+                                        )
+                                    }
+                                    override fun onError(exc: ImageCaptureException) {
+
+                                        viewModel.onEvent(
+                                            CameraEvent.CaptureFinished
+                                        )
+
+                                        Log.e(
+                                            "Camera",
+                                            "Capture failed",
+                                            exc
+                                        )
+                                    }
+                                }
+                            )
+                        },
+                        onUpload = { galleryLauncher.launch("image/*") },
+                        onBack = onBack,
+                        tapPoint = cameraUiState.tapPoint,
+                        isFocusSuccessful = cameraUiState.isFocusSuccessful,
+                        flashMode = cameraUiState.flashMode,
+                        onFlashModeChange = {
+                            viewModel.onEvent(CameraEvent.FlashClicked)
+                        }
+                    )
+                }
+            }
+
+
 }
 
