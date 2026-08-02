@@ -9,6 +9,8 @@ val GreenMid = Color(0xFF97C459)
 val GreenLight = Color(0xFFC0DD97)
 val GreenBgLight = Color(0xFFEAF3DE)
 
+val LightGreen = Color(0xFF97C459)
+
 // Neutrals
 val White = Color(0xFFFFFFFF)
 val OffWhite = Color(0xFFF7F7F5)

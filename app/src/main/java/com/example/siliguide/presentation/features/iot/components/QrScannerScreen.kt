@@ -14,8 +14,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,8 +24,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.R
 
 // ML Kit imports
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -199,17 +200,18 @@ fun QrScannerOverlay(
             IconButton(
                 onClick = onBack,
                 modifier = Modifier
-                    .size(36.dp)
-                    .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                    .size(32.dp)
+                    .background(Color.White.copy(alpha = 0.3f), CircleShape)
+                    .padding(6.dp)
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.ArrowBack,
+                    painter = painterResource(R.drawable.chevron_left),
                     contentDescription = "Back",
                     tint = Color.White
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             Text(
                 "Scan Device QR",
@@ -241,8 +243,7 @@ fun QrScannerOverlay(
                 val right = left + boxSize
                 val bottom = top + boxSize
 
-                drawRect(color = Color.Black.copy(alpha = 0.6f))
-
+                // Punch the clear hole
                 drawRoundRect(
                     color = Color.Transparent,
                     topLeft = Offset(left, top),
@@ -251,24 +252,28 @@ fun QrScannerOverlay(
                     blendMode = BlendMode.Clear
                 )
 
-                val cornerColor = GreenPrimary
+                val cornerColor = GreenPrimary // Or whatever your LightGreen variable is
 
-                drawLine(cornerColor, Offset(left, top), Offset(left + cornerLength, top), strokeWidth = strokeThickness)
-                drawLine(cornerColor, Offset(left, top), Offset(left, top + cornerLength), strokeWidth = strokeThickness)
+                // Top Left Corner
+                drawLine(cornerColor, Offset(left, top), Offset(left + cornerLength, top), strokeWidth = strokeThickness, cap = StrokeCap.Round)
+                drawLine(cornerColor, Offset(left, top), Offset(left, top + cornerLength), strokeWidth = strokeThickness, cap = StrokeCap.Round)
 
-                drawLine(cornerColor, Offset(right, top), Offset(right - cornerLength, top), strokeWidth = strokeThickness)
-                drawLine(cornerColor, Offset(right, top), Offset(right, top + cornerLength), strokeWidth = strokeThickness)
+                // Top Right Corner
+                drawLine(cornerColor, Offset(right, top), Offset(right - cornerLength, top), strokeWidth = strokeThickness, cap = StrokeCap.Round)
+                drawLine(cornerColor, Offset(right, top), Offset(right, top + cornerLength), strokeWidth = strokeThickness, cap = StrokeCap.Round)
 
-                drawLine(cornerColor, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth = strokeThickness)
-                drawLine(cornerColor, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth = strokeThickness)
+                // Bottom Left Corner
+                drawLine(cornerColor, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth = strokeThickness, cap = StrokeCap.Round)
+                drawLine(cornerColor, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth = strokeThickness, cap = StrokeCap.Round)
 
-                drawLine(cornerColor, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth = strokeThickness)
-                drawLine(cornerColor, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth = strokeThickness)
+                // Bottom Right Corner
+                drawLine(cornerColor, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth = strokeThickness, cap = StrokeCap.Round)
+                drawLine(cornerColor, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth = strokeThickness, cap = StrokeCap.Round)
             }
 
             Text(
                 text = "Point your camera at the QR code located on the back of the SiliGuide sensor.",
-                color = Color.White.copy(alpha = 0.8f),
+                color = Color.White,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 300.dp, start = 40.dp, end = 40.dp)
@@ -330,4 +335,13 @@ fun QrScannerOverlay(
             }
         }
     }
+}
+
+@Composable
+@androidx.compose.ui.tooling.preview.Preview
+fun Test() {
+    QrScannerOverlay(
+        onBack = {},
+        onManualEntry = {}
+    )
 }
