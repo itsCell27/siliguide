@@ -39,6 +39,16 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.google.accompanist.permissions.isGranted
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.core.permission.PermissionUtils
+import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.presentation.features.iot.IoTViewModel
+import kotlinx.coroutines.launch
 
 private const val INTRO_PROGRESS = 0f
 
@@ -60,24 +70,28 @@ fun BluetoothIntroScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bluetoothPermissions = rememberMultiplePermissionsState(
-        permissions = listOf(
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_SCAN
-        )
-    )
+    val viewModel: IoTViewModel = hiltViewModel()
 
-    var continueClicked by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(
-        continueClicked,
-        bluetoothPermissions.allPermissionsGranted
-    ) {
-        if (
-            continueClicked &&
-            bluetoothPermissions.allPermissionsGranted
-        ) {
-            continueClicked = false
+    var showRationaleDialog by remember {
+        mutableStateOf(false)
+    }
+
+    var showSettingsDialog by remember {
+        mutableStateOf(false)
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+
+        val granted =
+            result.values.all { it }
+
+        if (granted) {
+
             onContinue()
         }
     }
@@ -93,32 +107,56 @@ fun BluetoothIntroScreen(
                 primaryLabel = "Continue",
                 onPrimaryClick = {
 
-                    continueClicked = true
+                    scope.launch {
 
-                    Log.d(
-                        "BluetoothPermission",
-                        "CONNECT = ${
-                            bluetoothPermissions.permissions
-                                .firstOrNull { it.permission == Manifest.permission.BLUETOOTH_CONNECT }
-                                ?.status
-                                ?.isGranted
-                        }"
-                    )
+                        val connectPermission =
+                            viewModel.permissionManager.getPermissionStatus(
+                                context = context,
+                                permission = Manifest.permission.BLUETOOTH_CONNECT,
+                                type = PermissionType.BLUETOOTH
+                            )
 
-                    Log.d(
-                        "BluetoothPermission",
-                        "SCAN = ${
-                            bluetoothPermissions.permissions
-                                .firstOrNull { it.permission == Manifest.permission.BLUETOOTH_SCAN }
-                                ?.status
-                                ?.isGranted
-                        }"
-                    )
+                        val scanPermission =
+                            viewModel.permissionManager.getPermissionStatus(
+                                context = context,
+                                permission = Manifest.permission.BLUETOOTH_SCAN,
+                                type = PermissionType.BLUETOOTH
+                            )
 
-                    if (bluetoothPermissions.allPermissionsGranted) {
-                        onContinue()
-                    } else {
-                        bluetoothPermissions.launchMultiplePermissionRequest()
+                        when {
+
+                            connectPermission == PermissionStatus.Granted &&
+                                    scanPermission == PermissionStatus.Granted -> {
+
+                                onContinue()
+                            }
+
+                            connectPermission == PermissionStatus.ShowRationale ||
+                                    scanPermission == PermissionStatus.ShowRationale -> {
+
+                                showRationaleDialog = true
+                            }
+
+                            connectPermission == PermissionStatus.PermanentlyDenied ||
+                                    scanPermission == PermissionStatus.PermanentlyDenied -> {
+
+                                showSettingsDialog = true
+                            }
+
+                            else -> {
+
+                                viewModel.permissionManager.markRequested(
+                                    PermissionType.BLUETOOTH
+                                )
+
+                                bluetoothPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.BLUETOOTH_CONNECT,
+                                        Manifest.permission.BLUETOOTH_SCAN
+                                    )
+                                )
+                            }
+                        }
                     }
                 },
                 secondaryLabel = "Back",
@@ -171,6 +209,66 @@ fun BluetoothIntroScreen(
 
             RequirementChecklist(items = BLUETOOTH_REQUIREMENTS)
         }
+    }
+
+    if (showRationaleDialog) {
+
+        PermissionDialog(
+
+            title = "Bluetooth Permission Required",
+
+            message =
+                "SILI-GUIDE needs Bluetooth permission to discover and communicate with your IoT device.",
+
+            confirmText = "Continue",
+
+            dismissText = "Cancel",
+
+            onConfirm = {
+
+                showRationaleDialog = false
+
+                bluetoothPermissionLauncher.launch(
+
+                    arrayOf(
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                        Manifest.permission.BLUETOOTH_SCAN
+                    )
+                )
+            },
+
+            onDismiss = {
+
+                showRationaleDialog = false
+            }
+        )
+    }
+
+    if (showSettingsDialog) {
+
+        PermissionDialog(
+
+            title = "Bluetooth Permission Disabled",
+
+            message =
+                "Bluetooth permission has been permanently denied. Please enable it in Settings to continue.",
+
+            confirmText = "Open Settings",
+
+            dismissText = "Cancel",
+
+            onConfirm = {
+
+                showSettingsDialog = false
+
+                PermissionUtils.openAppSettings(context)
+            },
+
+            onDismiss = {
+
+                showSettingsDialog = false
+            }
+        )
     }
 }
 
