@@ -35,6 +35,7 @@ import com.example.siliguide.domain.usecase.GetIoTDeviceByIdUseCase
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.state.BluetoothConnectionUiState
 import kotlinx.coroutines.flow.asStateFlow
 import android.bluetooth.BluetoothDevice
+import com.example.siliguide.core.permission.PermissionManager
 
 import com.example.siliguide.data.remote.iot.BluetoothApi
 import com.example.siliguide.data.remote.iot.BluetoothDiscoveryManager
@@ -53,7 +54,9 @@ class IoTViewModel @Inject constructor(
     private val bluetoothManager: BluetoothManager,
     private val bluetoothDiscoveryManager: BluetoothDiscoveryManager,
     private val bluetoothApi: BluetoothApi,
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+
+    val permissionManager: PermissionManager
 ) : ViewModel() {
 
 

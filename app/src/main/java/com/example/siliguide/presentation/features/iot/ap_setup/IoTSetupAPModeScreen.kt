@@ -2,17 +2,14 @@ package com.example.siliguide.presentation.features.iot.ap_setup
 
 import android.content.Intent
 import android.provider.Settings
-import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.Wifi
@@ -37,6 +34,16 @@ import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.presentation.features.iot.IoTViewModel
 import com.example.siliguide.presentation.navigation.Screen
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.core.permission.PermissionUtils
+import com.example.siliguide.core.ui.components.PermissionDialog
+import kotlinx.coroutines.launch
+
 @Composable
 fun IoTSetupAPModeScreen(
     navController: NavHostController,
@@ -46,6 +53,50 @@ fun IoTSetupAPModeScreen(
     val viewModel: IoTViewModel = hiltViewModel()
     val connectionState by viewModel.apConnectionState.collectAsState()
 
+    // 1. Context & Coroutine Scope for the permission manager
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // 2. Permission Dialog States
+    var showRationaleDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // 3. The standard permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            navController.navigate(Screen.QrScanner.route)
+        }
+    }
+
+    // 4. The Shared Permission Logic
+    val handleScanQrClick = {
+        scope.launch {
+            val status = viewModel.permissionManager.getPermissionStatus(
+                context = context,
+                permission = Manifest.permission.CAMERA,
+                type = PermissionType.CAMERA
+            )
+
+            when (status) {
+                is PermissionStatus.Granted -> {
+                    navController.navigate(Screen.QrScanner.route)
+                }
+                is PermissionStatus.ShowRationale -> {
+                    showRationaleDialog = true
+                }
+                is PermissionStatus.PermanentlyDenied -> {
+                    showSettingsDialog = true
+                }
+                is PermissionStatus.RequestPermission -> {
+                    viewModel.permissionManager.markRequested(PermissionType.CAMERA)
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+            }
+        }
+    }
+
     var currentStep by remember { mutableIntStateOf(1) }
     var qrResult by remember { mutableStateOf<String?>(null) }
     var isChecking by remember { mutableStateOf(false) }
@@ -53,7 +104,7 @@ fun IoTSetupAPModeScreen(
     val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
     val qrResultFromNav = savedStateHandle?.get<String>("qr_result")
 
-    val context = LocalContext.current
+    //val context = LocalContext.current
 
     val defaultName = "SiliGuide IoT${viewModel.connectedDeviceId ?: ""}"
     var deviceName by remember { mutableStateOf(defaultName) }
@@ -309,7 +360,8 @@ fun IoTSetupAPModeScreen(
                                 viewModel.forceCheckConnection()
                             } else {
                                 // Otherwise go to QR scanner
-                                navController.navigate(Screen.QrScanner.route)
+                                //navController.navigate(Screen.QrScanner.route)
+                                handleScanQrClick()
                             }
                         } else {
                             // Step 2 - Save device
@@ -367,7 +419,7 @@ fun IoTSetupAPModeScreen(
                     // STEP 1: Connect to Device
                     1 -> APStep1Content(
                         onScanQrClick = {
-                            navController.navigate(Screen.QrScanner.route)
+                            handleScanQrClick()
                         },
                         isChecking = isChecking,
                         onManualRetry = {
@@ -388,6 +440,39 @@ fun IoTSetupAPModeScreen(
                 }
             }
         }
+    }
+
+    // 5. RENDER THE PERMISSION DIALOGS
+    if (showRationaleDialog) {
+        PermissionDialog(
+            title = "Camera Permission Required",
+            message = "SiliGuide needs camera access to scan the QR code on your IoT device.",
+            confirmText = "Continue",
+            dismissText = "Cancel",
+            onConfirm = {
+                showRationaleDialog = false
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            },
+            onDismiss = {
+                showRationaleDialog = false
+            }
+        )
+    }
+
+    if (showSettingsDialog) {
+        PermissionDialog(
+            title = "Camera Permission Disabled",
+            message = "Camera access was permanently denied. You must enable it in your device's app settings to scan the QR code.",
+            confirmText = "Open Settings",
+            dismissText = "Cancel",
+            onConfirm = {
+                showSettingsDialog = false
+                PermissionUtils.openAppSettings(context)
+            },
+            onDismiss = {
+                showSettingsDialog = false
+            }
+        )
     }
 }
 
