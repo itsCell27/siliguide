@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionType
 import com.example.siliguide.core.permission.PermissionUtils
+import com.example.siliguide.core.ui.components.LoadingOverlay
 import com.example.siliguide.core.ui.components.PermissionDialog
 import kotlinx.coroutines.launch
 
@@ -52,6 +53,8 @@ fun IoTSetupAPModeScreen(
 ) {
     val viewModel: IoTViewModel = hiltViewModel()
     val connectionState by viewModel.apConnectionState.collectAsState()
+
+    val validationDialog = viewModel.validationDialog
 
     // 1. Context & Coroutine Scope for the permission manager
     val context = LocalContext.current
@@ -124,10 +127,10 @@ fun IoTSetupAPModeScreen(
     }
 
     // STEP 1: Check connection immediately on entry (Removed legacy monitoring)
-    LaunchedEffect(Unit) {
-        isChecking = true
-        viewModel.forceCheckConnection()
-    }
+//    LaunchedEffect(Unit) {
+//        isChecking = true
+//        viewModel.forceCheckConnection()
+//    }
 
     // STEP 2: Handle QR result from navigation
     LaunchedEffect(qrResultFromNav) {
@@ -152,6 +155,14 @@ fun IoTSetupAPModeScreen(
             "CONNECTING" -> {
                 isChecking = true
             }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.setupComplete.collect {
+
+            onSetupComplete()
+
         }
     }
 
@@ -182,6 +193,7 @@ fun IoTSetupAPModeScreen(
 
 
     val handleBackPress: () -> Unit = {
+
         if (currentStep == 2) {
             // If user go back to step 2, disconnect from device
             viewModel.disconnectFromDeviceWifi()
@@ -272,175 +284,173 @@ fun IoTSetupAPModeScreen(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.safeDrawingPadding(),
+    LoadingOverlay(
+        isLoading = viewModel.isClaiming,
+        message = "Claiming device..."
+    ) {
+        Scaffold(
+            modifier = Modifier.safeDrawingPadding(),
 
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(White)
-            ) {
-
-                Row(
+            topBar = {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(White)
                 ) {
-                    IconButton(onClick = handleBackPress) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(OffWhite)
-                                .border(1.dp, Border, CircleShape),
-                            contentAlignment = Alignment.Center
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            enabled = !viewModel.isClaiming,
+                            onClick = handleBackPress
                         ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.chevron_left),
-                                contentDescription = "Back",
-                                tint = GrayBody,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(OffWhite)
+                                    .border(1.dp, Border, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.chevron_left),
+                                    contentDescription = "Back",
+                                    tint = GrayBody,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text(
+                            text = "AP Setup",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = GrayMedium
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        val displayStep = if (currentStep == 2) 2 else 1
+
+                        Text(
+                            text = "Step $displayStep of 2",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = GreenDark
+                        )
                     }
 
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Text(
-                        text = "AP Setup",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = GrayMedium
-                    )
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    val displayStep = if (currentStep == 2) 2 else 1
-
-                    Text(
-                        text = "Step $displayStep of 2",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = GreenDark
+                    LinearProgressIndicator(
+                        progress = {
+                            if (currentStep == 2) 1.0f else 0.5f
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = GreenPrimary,
+                        trackColor = Border,
                     )
                 }
+            },
 
-                LinearProgressIndicator(
-                    progress = {
-                        if (currentStep == 2) 1.0f else 0.5f
-                    },
+            bottomBar = {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = GreenPrimary,
-                    trackColor = Border,
-                )
-            }
-        },
+                        .background(White)
+                        .border(BorderStroke(1.dp, Border))
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 24.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            if (currentStep == 1) {
+                                handleScanQrClick()
+                            } else {
+                                // Step 2 - Save device
+                                viewModel.finalizeSetup(
+                                    customName = deviceName,
+                                    connectionMode = ConnectionMode.AP,
+                                    ip = "192.168.4.1"
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GreenPrimary,
+                            contentColor = White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isChecking || currentStep == 2
+                    ) {
+                        Text(
+                            text = when (currentStep) {
+                                1 -> "Scan QR Code"
+                                else -> "Save Device"
+                            },
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            },
 
-        bottomBar = {
-            Box(
+            containerColor = OffWhite
+        ) { paddingValues ->
+
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(White)
-                    .border(BorderStroke(1.dp, Border))
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 24.dp)
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
-                Button(
-                    onClick = {
-                        if (currentStep == 1) {
-                            if (isChecking) {
-                                // If checking, allow user to retry immediately
+
+                Crossfade(
+                    targetState = currentStep,
+                    animationSpec = tween(300),
+                    label = "step_transition"
+                ) { step ->
+
+                    when (step) {
+
+                        // STEP 1: Connect to Device
+                        1 -> APStep1Content(
+                            onScanQrClick = {
+                                handleScanQrClick()
+                            },
+                            isChecking = isChecking,
+                            onManualRetry = {
                                 isChecking = true
                                 viewModel.forceCheckConnection()
-                            } else {
-                                // Otherwise go to QR scanner
-                                //navController.navigate(Screen.QrScanner.route)
-                                handleScanQrClick()
-                            }
-                        } else {
-                            // Step 2 - Save device
-                            viewModel.finalizeSetup(
-                                deviceName,
-                                ConnectionMode.AP,
-                                ip = "192.168.4.1"
-                            )
-                            onSetupComplete()
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = when (currentStep) {
-                            2 -> GreenPrimary
-                            else -> if (isChecking) GreenMid else GreenLight
-                        },
-                        contentColor = White
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = !isChecking || currentStep == 2
-                ) {
-                    Text(
-                        text = when (currentStep) {
-                            1 -> if (isChecking) "Checking device…" else "Scan QR Code"
-                            else -> "Save Device"
-                        },
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        },
+                            },
+                        )
 
-        containerColor = OffWhite
-    ) { paddingValues ->
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-
-            Crossfade(
-                targetState = currentStep,
-                animationSpec = tween(300),
-                label = "step_transition"
-            ) { step ->
-
-                when (step) {
-
-                    // STEP 1: Connect to Device
-                    1 -> APStep1Content(
-                        onScanQrClick = {
-                            handleScanQrClick()
-                        },
-                        isChecking = isChecking,
-                        onManualRetry = {
-                            isChecking = true
-                            viewModel.forceCheckConnection()
-                        },
-                    )
-
-                    // STEP 2: Device Found - Configure
-                    2 -> APStep2Content(
-                        viewModel = viewModel,
-                        deviceName = deviceName,              // ← PASS DOWN
-                        onDeviceNameChange = { newName ->     // ← CALLBACK UP
-                            deviceName = newName
-                        },
-                        onBack = { currentStep = 1 }
-                    )
+                        // STEP 2: Device Found - Configure
+                        2 -> APStep2Content(
+                            viewModel = viewModel,
+                            deviceName = deviceName,              // ← PASS DOWN
+                            onDeviceNameChange = { newName ->     // ← CALLBACK UP
+                                deviceName = newName
+                            },
+                            onBack = { currentStep = 1 }
+                        )
+                    }
                 }
             }
         }
     }
+
+
 
     // 5. RENDER THE PERMISSION DIALOGS
     if (showRationaleDialog) {
@@ -471,6 +481,41 @@ fun IoTSetupAPModeScreen(
             },
             onDismiss = {
                 showSettingsDialog = false
+            }
+        )
+    }
+
+
+    if (validationDialog != null) {
+
+        AlertDialog(
+
+            onDismissRequest = {
+                viewModel.dismissValidationDialog()
+            },
+
+            title = {
+                Text(
+                    text = validationDialog.title
+                )
+            },
+
+            text = {
+                Text(
+                    text = validationDialog.message
+                )
+            },
+
+            confirmButton = {
+
+                Button(
+                    onClick = {
+                        viewModel.dismissValidationDialog()
+                    }
+                ) {
+                    Text("OK")
+                }
+
             }
         )
     }

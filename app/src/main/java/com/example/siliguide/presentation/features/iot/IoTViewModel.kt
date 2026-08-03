@@ -40,6 +40,12 @@ import com.example.siliguide.core.permission.PermissionManager
 import com.example.siliguide.data.remote.iot.BluetoothApi
 import com.example.siliguide.data.remote.iot.BluetoothDiscoveryManager
 import com.example.siliguide.data.remote.iot.BluetoothManager
+import com.example.siliguide.domain.usecase.ClaimIoTDeviceUseCase
+
+data class ValidationDialogState(
+    val title: String,
+    val message: String
+)
 
 @HiltViewModel
 class IoTViewModel @Inject constructor(
@@ -50,6 +56,7 @@ class IoTViewModel @Inject constructor(
     private val verifyDeviceConnectionUseCase: VerifyDeviceConnectionUseCase,
     private val parseWifiQrUseCase: ParseWifiQrUseCase,
     private val saveIoTDeviceUseCase: SaveIoTDeviceUseCase,
+    private val claimIoTDeviceUseCase: ClaimIoTDeviceUseCase,
     private val getIoTDeviceByIdUseCase: GetIoTDeviceByIdUseCase,
     private val bluetoothManager: BluetoothManager,
     private val bluetoothDiscoveryManager: BluetoothDiscoveryManager,
@@ -60,6 +67,9 @@ class IoTViewModel @Inject constructor(
 ) : ViewModel() {
 
 
+    var isClaiming by mutableStateOf(false)
+        private set
+
     var sensorData by mutableStateOf<SensorResponse?>(null)
         private set
 
@@ -67,6 +77,9 @@ class IoTViewModel @Inject constructor(
         private set
 
     var error by mutableStateOf<String?>(null)
+        private set
+
+    var validationDialog by mutableStateOf<ValidationDialogState?>(null)
         private set
 
     var connectedDeviceId by mutableStateOf<String?>(null)
@@ -229,26 +242,99 @@ class IoTViewModel @Inject constructor(
         }
     }
 
+    private fun showValidationDialog(
+        title: String,
+        message: String
+    ) {
+        Log.d(
+            "VALIDATION_DIALOG",
+            "Showing dialog: $title"
+        )
+
+        validationDialog = ValidationDialogState(
+            title = title,
+            message = message
+        )
+    }
+
+    fun dismissValidationDialog() {
+        validationDialog = null
+    }
+
     private suspend fun verifyEsp32ConnectionViaIp() = withContext(Dispatchers.IO) {
         Log.d("AP_DEBUG", "Pinging 192.168.4.1/info via Ktor...")
 
-        repeat(5) { attempt ->
-            val result = verifyDeviceConnectionUseCase()
+        repeat(3) { attempt ->
+            val result = verifyDeviceConnectionUseCase("192.168.4.1")
 
             result.onSuccess { info ->
-                Log.d("AP_DEBUG", "Verification Success! Connected to ${info.deviceId}")
+
+                Log.d(
+                    "AP_DEBUG",
+                    "Verification Success! Connected to ${info.deviceId}"
+                )
+
                 withContext(Dispatchers.Main) {
+
+                    // ----------------------------------------------------
+                    // 1. Verify this is actually a SiliGuide device
+                    // ----------------------------------------------------
+                    if (info.device != "SiliGuide") {
+
+                        showValidationDialog(
+                            title = "Unsupported Device",
+                            message = "The connected device is not a SiliGuide IoT device."
+                        )
+
+                        _apConnectionState.value = "FAILED"
+                        return@withContext
+                    }
+
+                    // ----------------------------------------------------
+                    // 2. Already exists in local database?
+                    // ----------------------------------------------------
+                    val existingDevice =
+                        getIoTDeviceByIdUseCase(info.deviceId)
+
+                    if (existingDevice != null) {
+
+                        showValidationDialog(
+                            title = "Device Already Registered",
+                            message = "This SiliGuide device is already registered in your account."
+                        )
+
+                        _apConnectionState.value = "FAILED"
+                        return@withContext
+                    }
+
+                    // ----------------------------------------------------
+                    // 3. Device already claimed?
+                    // ----------------------------------------------------
+                    if (info.claimed) {
+
+                        showValidationDialog(
+                            title = "Device Already Claimed",
+                            message = "This SiliGuide device has already been claimed and cannot be paired again unless it is factory reset."
+                        )
+
+                        _apConnectionState.value = "FAILED"
+                        return@withContext
+                    }
+
+                    // ----------------------------------------------------
+                    // Passed every validation
+                    // ----------------------------------------------------
                     connectedDeviceId = info.deviceId
                     pairingToken = info.token
 
-                    // Set default name automatically if user hasn't typed one
                     if (deviceName.isEmpty()) {
                         deviceName = "SiliGuide Node ${info.deviceId}"
                     }
 
-                    _apConnectionState.value = "CONNECTED"
                     error = null
+                    _apConnectionState.value = "CONNECTED"
                 }
+
                 return@withContext
             }
 
@@ -256,12 +342,19 @@ class IoTViewModel @Inject constructor(
                 Log.d("AP_DEBUG", "Ping attempt ${attempt + 1} failed: ${exception.message}")
             }
 
-            delay(1000)
+            delay(500)
         }
 
         withContext(Dispatchers.Main) {
+
             _apConnectionState.value = "FAILED"
+
             error = "Could not reach the SILI-GUIDE sensor. Please ensure you are connected to its Hotspot."
+
+            showValidationDialog(
+                title = "Unable to Reach Device",
+                message = "The app could not communicate with a SiliGuide device.\n\nPlease verify that your phone is connected to the correct SiliGuide_IoT Wi-Fi network, then tap Retry."
+            )
         }
     }
 
@@ -289,20 +382,20 @@ class IoTViewModel @Inject constructor(
             Log.d("IoTViewModel", "userId = $userId")
 
             // Check if exists
-            Log.d("IoTViewModel", "Checking existing device...")
-            val existingDevice = getIoTDeviceByIdUseCase(id)
-            if (existingDevice != null) {
-                if (existingDevice.userId == userId) {
-                    // Scenario A: Device already belongs to this user
-                    // Maybe just update the name?
-                    Log.d("IoTViewModel", "Device already registered to this user. Updating name.")
-                } else {
-                    // Scenario B: Device belongs to someone else (Security check)
-                    error = "This device is already registered to another account."
-                    return@launch
-                }
-            }
-            Log.d("IoTViewModel", "existingDevice = $existingDevice")
+//            Log.d("IoTViewModel", "Checking existing device...")
+//            val existingDevice = getIoTDeviceByIdUseCase(id)
+//            if (existingDevice != null) {
+//                if (existingDevice.userId == userId) {
+//                    // Scenario A: Device already belongs to this user
+//                    // Maybe just update the name?
+//                    Log.d("IoTViewModel", "Device already registered to this user. Updating name.")
+//                } else {
+//                    // Scenario B: Device belongs to someone else (Security check)
+//                    error = "This device is already registered to another account."
+//                    return@launch
+//                }
+//            }
+//            Log.d("IoTViewModel", "existingDevice = $existingDevice")
 
             val newDevice = IoTDevice(
                 deviceId = id,
@@ -317,13 +410,72 @@ class IoTViewModel @Inject constructor(
             )
 
             try {
-                Log.d("IoTViewModel", "About to save device")
+                isClaiming = true
+
+                Log.d(
+                    "IoTViewModel",
+                    "Claiming ESP32..."
+                )
+
+                claimIoTDeviceUseCase(
+                    host = ip,
+                    token = token
+                )
+
+                Log.d(
+                    "IoTViewModel",
+                    "ESP32 successfully claimed."
+                )
+
                 saveIoTDeviceUseCase(newDevice)
-                Log.d("IoTViewModel", "Emitting setupComplete")
+
                 _setupComplete.emit(Unit)
+
             } catch (e: Exception) {
-                error = "Database Error: Could not save device."
-                e.printStackTrace()
+
+                Log.e(
+                    "IoTViewModel",
+                    "Claim request failed. Verifying actual device state...",
+                    e
+                )
+
+                var recovered = false
+
+                val verificationResult =
+                    verifyDeviceConnectionUseCase(ip)
+
+                verificationResult.onSuccess { info ->
+
+                    // Same device and now marked as claimed?
+                    if (
+                        info.deviceId == id &&
+                        info.claimed
+                    ) {
+
+                        recovered = true
+
+                        Log.d(
+                            "IoTViewModel",
+                            "Claim appears to have succeeded despite missing HTTP response."
+                        )
+
+                        saveIoTDeviceUseCase(newDevice)
+
+                        _setupComplete.emit(Unit)
+
+                        return@onSuccess
+                    }
+                }
+
+                // Only show the dialog if recovery failed
+                if (!recovered) {
+                    showValidationDialog(
+                        title = "Unable to Claim Device",
+                        message = "The SiliGuide device did not acknowledge ownership. Please make sure it is powered on and connected, then try again."
+                    )
+                }
+            } finally {
+                isClaiming = false
             }
         }
     }
@@ -349,6 +501,7 @@ class IoTViewModel @Inject constructor(
         pairingToken = null
         deviceName = ""
         error = null
+        validationDialog = null
     }
 
     // =========================================================================

@@ -263,14 +263,10 @@ fun APStep1Content(
                 contentAlignment = Alignment.Center
             ) {
                 if (isChecking) {
-                    // Spinning refresh icon when checking
-                    Icon(
-                        Icons.Rounded.Refresh,
-                        contentDescription = null,
-                        tint = GreenPrimary,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .rotate(45f)  // You can animate this for spinning effect
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 3.dp,
+                        color = GreenPrimary
                     )
                 } else {
                     Icon(
@@ -284,16 +280,28 @@ fun APStep1Content(
 
             if (isChecking) {
                 Text(
-                    "Checking connection…",
+                    "Checking for SiliGuide device...",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = Black
                 )
                 Text(
-                    "Make sure you're connected to the SiliGuide_IoT network",
+                    "Please wait while we verify your SiliGuide device.",
                     fontSize = 11.sp,
                     color = GrayMedium,
                     textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    "Ready to detect device",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Black
+                )
+                Text(
+                    "Connect your phone to the SiliGuide_IoT Wi-Fi network, then tap \"Retry Detection\" or scan the QR code.",
+                    fontSize = 11.sp,
+                    color = GrayMedium
                 )
 
                 // Manual retry button when checking
@@ -315,18 +323,6 @@ fun APStep1Content(
                         color = White
                     )
                 }
-            } else {
-                Text(
-                    "Waiting for connection…",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Black
-                )
-                Text(
-                    "App detects you automatically",
-                    fontSize = 11.sp,
-                    color = GrayMedium
-                )
             }
         }
 
