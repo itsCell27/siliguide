@@ -22,8 +22,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import com.example.siliguide.core.permission.PermissionStatus
-import com.example.siliguide.core.ui.components.PermissionDialog
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -34,6 +32,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.R
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.ui.components.PermissionDialog
 import com.example.siliguide.core.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,28 +56,26 @@ data class SensorPreviewData(
 data class OnTheGoDevice(
     val deviceId: String,
     val name: String,
-    val meta: String          // e.g. "AP Mode · Connected"
+    val meta: String
 )
 
-/** Three possible screen states */
 sealed class PreAnalysisState {
-    /** 7A — Plant has a linked device AND it is currently connected */
     data class LinkedConnected(
         val deviceId: String,
         val deviceName: String,
-        val deviceMeta: String,         // e.g. "LAN Mode · 192.168.1.42"
+        val deviceMeta: String,
         val sensors: SensorPreviewData
     ) : PreAnalysisState()
 
-    /** 7B — Plant has a linked device BUT it is disconnected right now */
     data class LinkedDisconnected(
         val deviceName: String,
-        val lastSeenLabel: String,      // e.g. "Last seen 14 min ago"
+        val lastSeenLabel: String,
         val onTheGoDevices: List<OnTheGoDevice>
     ) : PreAnalysisState()
 
-    /** 7C — No IoT device linked (or no devices registered at all) */
-    object NoDevice : PreAnalysisState()
+    data class NoDevice(
+        val availableDevices: List<OnTheGoDevice> = emptyList()
+    ) : PreAnalysisState()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,30 +88,35 @@ fun PreAnalysisScreen(
     permissionStatus: PermissionStatus,
     onBack: () -> Unit,
     showPermissionDialog: Boolean,
-
     onRequestCameraPermission: () -> Unit,
-
     onOpenSettings: () -> Unit,
-
     onPermissionDenied: () -> Unit,
-
     onContinueToCamera: () -> Unit = {},
-
     onContinueWithOtherDevice: (deviceId: String) -> Unit = {},
-
     onSkipToImageOnly: () -> Unit = {},
-
     onContinueImageOnly: () -> Unit = {},
-
     onAddIoTDevice: () -> Unit = {},
 ) {
-    // On-the-go selection (7B only)
     var selectedOnTheGoId by remember { mutableStateOf<String?>(null) }
+    var imageOnlySelected by remember { mutableStateOf(false) }
 
-    // Auto-select first device when entering 7B
+    // BUG FIX: Smart Auto-Selection that doesn't overwrite user choices
     LaunchedEffect(state) {
-        if (state is PreAnalysisState.LinkedDisconnected) {
-            selectedOnTheGoId = state.onTheGoDevices.firstOrNull()?.deviceId
+        // If the user explicitly chose "Image Only", leave them alone!
+        if (imageOnlySelected) return@LaunchedEffect
+
+        val currentAvailableList = when (state) {
+            is PreAnalysisState.LinkedDisconnected -> state.onTheGoDevices
+            is PreAnalysisState.NoDevice -> state.availableDevices
+            else -> emptyList()
+        }
+
+        // Check if their previously selected device still exists in the refreshed list
+        val selectionStillExists = currentAvailableList.any { it.deviceId == selectedOnTheGoId }
+
+        // Only overwrite the selection if they haven't picked one, or their picked device went offline
+        if (!selectionStillExists) {
+            selectedOnTheGoId = currentAvailableList.firstOrNull()?.deviceId
         }
     }
 
@@ -122,10 +125,8 @@ fun PreAnalysisScreen(
             .fillMaxSize()
             .background(OffWhite)
     ) {
-        // ── Top bar ───────────────────────────────────────────────────────
         TopBar(onBack = onBack)
 
-        // ── Scrollable content ────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -135,67 +136,57 @@ fun PreAnalysisScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             when (state) {
-                is PreAnalysisState.LinkedConnected    -> LinkedConnectedContent(state)
+                is PreAnalysisState.LinkedConnected -> LinkedConnectedContent(state)
                 is PreAnalysisState.LinkedDisconnected -> LinkedDisconnectedContent(
-                    state            = state,
-                    selectedId       = selectedOnTheGoId,
-                    onSelectDevice   = { selectedOnTheGoId = it }
+                    state = state,
+                    selectedId = selectedOnTheGoId,
+                    onSelectDevice = { selectedOnTheGoId = it }
                 )
-                is PreAnalysisState.NoDevice           -> NoDeviceContent()
+                is PreAnalysisState.NoDevice -> NoDeviceContent(
+                    state = state,
+                    selectedId = selectedOnTheGoId,
+                    imageOnlySelected = imageOnlySelected,
+                    onSelectDevice = {
+                        selectedOnTheGoId = it
+                        imageOnlySelected = false
+                    },
+                    onSelectImageOnly = {
+                        selectedOnTheGoId = null
+                        imageOnlySelected = true
+                    }
+                )
             }
         }
 
-        // ── Pinned bottom button(s) ───────────────────────────────────────
         PinnedButtons(
-            state               = state,
-            selectedOnTheGoId   = selectedOnTheGoId,
-            onContinueToCamera  = onContinueToCamera,
+            state = state,
+            selectedOnTheGoId = selectedOnTheGoId,
+            imageOnlySelected = imageOnlySelected,
+            onContinueToCamera = onContinueToCamera,
             onContinueWithOther = onContinueWithOtherDevice,
-            onSkipToImageOnly   = onSkipToImageOnly,
+            onSkipToImageOnly = onSkipToImageOnly,
             onContinueImageOnly = onContinueImageOnly,
-            onAddIoTDevice      = onAddIoTDevice
+            onAddIoTDevice = onAddIoTDevice
         )
 
-        if (
-            showPermissionDialog &&
-            permissionStatus == PermissionStatus.ShowRationale
-        ) {
-
+        if (showPermissionDialog && permissionStatus == PermissionStatus.ShowRationale) {
             PermissionDialog(
-
                 title = "Camera Permission Required",
-
-                message =
-                    "SiliGuide needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
-
+                message = "SiliGuide needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
                 confirmText = "Continue",
-
                 dismissText = "Cancel",
-
                 onConfirm = onRequestCameraPermission,
-
                 onDismiss = onPermissionDenied
             )
         }
 
-        if (
-            showPermissionDialog &&
-            permissionStatus == PermissionStatus.PermanentlyDenied
-        ) {
-
+        if (showPermissionDialog && permissionStatus == PermissionStatus.PermanentlyDenied) {
             PermissionDialog(
-
                 title = "Camera Permission Disabled",
-
-                message =
-                    "Camera permission has been permanently denied. Please enable it in Settings to continue.",
-
+                message = "Camera permission has been permanently denied. Please enable it in Settings to continue.",
                 confirmText = "Open Settings",
-
                 dismissText = "Cancel",
-
                 onConfirm = onOpenSettings,
-
                 onDismiss = onPermissionDenied
             )
         }
@@ -203,7 +194,7 @@ fun PreAnalysisScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOP BAR
+// UI COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -218,7 +209,6 @@ private fun TopBar(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Back button
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -228,7 +218,6 @@ private fun TopBar(onBack: () -> Unit) {
                     .clickable { onBack() },
                 contentAlignment = Alignment.Center
             ) {
-                // Chevron left drawn with Canvas (no Icon dependency on back arrow)
                 Canvas(modifier = Modifier.size(14.dp)) {
                     val p = Path().apply {
                         moveTo(size.width * 0.65f, size.height * 0.18f)
@@ -246,7 +235,6 @@ private fun TopBar(onBack: () -> Unit) {
                     )
                 }
             }
-
             Text(
                 text  = "Before You Analyze",
                 style = MaterialTheme.typography.headlineSmall,
@@ -257,56 +245,29 @@ private fun TopBar(onBack: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 7A — LINKED + CONNECTED CONTENT
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun LinkedConnectedContent(state: PreAnalysisState.LinkedConnected) {
-    // Helper intro
     Text(
         text  = "SiliGuide will use your linked device's live sensor readings together with the leaf image for a complete analysis.",
         style = MaterialTheme.typography.bodySmall,
         color = GrayBody,
         lineHeight = 17.sp
     )
-
-    // Section label
     GroupLabel("Linked device")
-
-    // Green status card
     StatusCard(variant = StatusCardVariant.Green) {
-        DeviceStatusRow(
-            deviceName    = state.deviceName,
-            deviceMeta    = state.deviceMeta,
-            isConnected   = true
-        )
+        DeviceStatusRow(deviceName = state.deviceName, deviceMeta = state.deviceMeta, isConnected = true)
     }
-
-    // Sensor preview label
     GroupLabel("Live sensor preview")
-
-    // 3×3 sensor grid
     SensorGrid(sensors = state.sensors)
 
-    // Last update helper
     val updateText = buildAnnotatedString {
         append("Receiving data · last update ")
         withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = GreenDark)) {
             append("${state.sensors.lastUpdateSec} sec ago")
         }
     }
-    Text(
-        text  = updateText,
-        style = MaterialTheme.typography.bodySmall,
-        color = GrayHint,
-        lineHeight = 16.sp
-    )
+    Text(text = updateText, style = MaterialTheme.typography.bodySmall, color = GrayHint, lineHeight = 16.sp)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7B — LINKED + DISCONNECTED CONTENT
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun LinkedDisconnectedContent(
@@ -314,16 +275,9 @@ private fun LinkedDisconnectedContent(
     selectedId: String?,
     onSelectDevice: (String) -> Unit
 ) {
-    // Section label
     GroupLabel("Linked device")
-
-    // Amber warning card
     StatusCard(variant = StatusCardVariant.Amber) {
-        DeviceStatusRow(
-            deviceName  = state.deviceName,
-            deviceMeta  = state.lastSeenLabel,
-            isConnected = false
-        )
+        DeviceStatusRow(deviceName = state.deviceName, deviceMeta = state.lastSeenLabel, isConnected = false)
         Text(
             text  = "Your linked device isn't reachable right now. Use another connected device or skip to image-only analysis.",
             style = MaterialTheme.typography.bodySmall,
@@ -331,37 +285,28 @@ private fun LinkedDisconnectedContent(
             lineHeight = 16.sp
         )
     }
-
     if (state.onTheGoDevices.isNotEmpty()) {
         GroupLabel("Use another device?")
-
         state.onTheGoDevices.forEach { device ->
-            val isSelected = device.deviceId == selectedId
             OnTheGoDeviceOption(
-                device     = device,
-                isSelected = isSelected,
-                onClick    = { onSelectDevice(device.deviceId) }
+                device = device,
+                isSelected = device.deviceId == selectedId,
+                onClick = { onSelectDevice(device.deviceId) }
             )
         }
-
         OrDivider()
     }
-
-    // Gray "skip" info banner
-    InfoBanner(
-        isAmber   = false,
-        titleText = "Skip — analyze with image only",
-        bodyText  = "Without sensor data, only visual symptoms and possible causes will be shown (partial analysis)."
-    )
+    InfoBanner(isAmber = false, titleText = "Skip — analyze with image only", bodyText  = "Without sensor data, only visual symptoms and possible causes will be shown (partial analysis).")
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 7C — NO DEVICE CONTENT
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
-private fun NoDeviceContent() {
-    // Gray status card
+private fun NoDeviceContent(
+    state: PreAnalysisState.NoDevice,
+    selectedId: String?,
+    imageOnlySelected: Boolean,
+    onSelectDevice: (String) -> Unit,
+    onSelectImageOnly: () -> Unit
+) {
     StatusCard(variant = StatusCardVariant.Gray) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -369,46 +314,56 @@ private fun NoDeviceContent() {
         ) {
             DeviceIconTile(variant = StatusCardVariant.Gray)
             Column {
-                Text(
-                    text  = "No IoT Device Connected",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = GrayBody
-                )
-                Text(
-                    text  = "Sensor data won't be included",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = GrayHint
-                )
+                Text(text = "No IoT Device Linked", style = MaterialTheme.typography.titleMedium, color = GrayBody)
+                Text(text = "This plant isn't assigned to an IoT device.", style = MaterialTheme.typography.bodySmall, color = GrayHint)
             }
         }
     }
 
-    // Green-icon info banner
-    InfoBanner(
-        isAmber       = false,
-        useGreenIcon  = true,
-        titleText     = "Partial analysis",
-        bodyText      = "Without a connected sensor, SiliGuide will detect the visual symptom from your leaf image and list possible causes — but cannot pinpoint a specific condition or give targeted recommendations."
-    )
+    if (state.availableDevices.isNotEmpty()) {
+        GroupLabel("AVAILABLE CONNECTED DEVICES")
+        state.availableDevices.forEach { device ->
+            OnTheGoDeviceOption(
+                device = device,
+                isSelected = device.deviceId == selectedId,
+                onClick = { onSelectDevice(device.deviceId) }
+            )
+        }
 
-    // "What you'll get" list
-    GroupLabel("What you'll get")
+        OrDivider()
 
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        CheckRow(text = "Visual symptom prediction with confidence score", checked = true)
-        CheckRow(text = "List of possible plant conditions",               checked = true)
-        CheckRow(text = "No specific care recommendations",                checked = false)
+        SelectableInfoBanner(
+            selected = imageOnlySelected,
+            onClick = onSelectImageOnly,
+            title = "Partial Analysis",
+            description = "Analyze using only the leaf image. Sensor data won't be included."
+        )
+    } else {
+        InfoBanner(
+            isAmber = false,
+            useGreenIcon = true,
+            titleText = "Partial analysis",
+            bodyText  = "Without a connected sensor, SiliGuide will detect the visual symptom from your leaf image and list possible causes — but cannot pinpoint a specific condition or give targeted recommendations."
+        )
+
+        GroupLabel("What you'll get")
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            CheckRow(text = "Visual symptom prediction with confidence score", checked = true)
+            CheckRow(text = "List of possible plant conditions", checked = true)
+            CheckRow(text = "No specific care recommendations", checked = false)
+        }
     }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PINNED BOTTOM BUTTONS
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+}
 
 @Composable
 private fun PinnedButtons(
     state: PreAnalysisState,
     selectedOnTheGoId: String?,
+    imageOnlySelected: Boolean,
     onContinueToCamera: () -> Unit,
     onContinueWithOther: (String) -> Unit,
     onSkipToImageOnly: () -> Unit,
@@ -416,10 +371,10 @@ private fun PinnedButtons(
     onAddIoTDevice: () -> Unit
 ) {
     Surface(
-        modifier       = Modifier.fillMaxWidth(),
-        color          = White,
+        modifier = Modifier.fillMaxWidth(),
+        color = White,
         shadowElevation = 0.dp,
-        tonalElevation  = 0.dp
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
@@ -435,7 +390,6 @@ private fun PinnedButtons(
                 is PreAnalysisState.LinkedConnected -> {
                     PrimaryButton(label = "Continue to Camera", onClick = onContinueToCamera)
                 }
-
                 is PreAnalysisState.LinkedDisconnected -> {
                     val label = if (selectedOnTheGoId != null) {
                         val name = state.onTheGoDevices.find { it.deviceId == selectedOnTheGoId }?.name ?: "Other Device"
@@ -444,17 +398,30 @@ private fun PinnedButtons(
                         "Continue with Image Only"
                     }
                     PrimaryButton(
-                        label   = label,
+                        label = label,
                         onClick = {
                             if (selectedOnTheGoId != null) onContinueWithOther(selectedOnTheGoId)
                             else onSkipToImageOnly()
                         }
                     )
                 }
-
                 is PreAnalysisState.NoDevice -> {
-                    PrimaryButton(label = "Continue with Image Only", onClick = onContinueImageOnly)
-                    TextLinkButton(label = "Add an IoT device first", onClick = onAddIoTDevice)
+                    val selectedDevice = state.availableDevices.find { it.deviceId == selectedOnTheGoId }
+                    PrimaryButton(
+                        label = when {
+                            imageOnlySelected -> "Continue with Image Only"
+                            selectedDevice != null -> "Continue with ${selectedDevice.name}"
+                            else -> "Continue with Image Only"
+                        },
+                        onClick = {
+                            when {
+                                imageOnlySelected -> onContinueImageOnly()
+                                selectedDevice != null -> onContinueWithOther(selectedDevice.deviceId)
+                                else -> onContinueImageOnly()
+                            }
+                        }
+                    )
+                    TextLinkButton(label = "Add an IoT device", onClick = onAddIoTDevice)
                 }
             }
         }
@@ -474,10 +441,7 @@ private fun StatusCard(variant: StatusCardVariant, content: @Composable ColumnSc
         StatusCardVariant.Amber -> WarningBg    to WarningBorder
         StatusCardVariant.Gray  -> White        to GrayLight
     }
-    val borderStroke = if (variant == StatusCardVariant.Gray)
-        BorderStroke(1.dp, GrayLight)   // dashed look via thin border
-    else
-        BorderStroke(1.dp, border)
+    val borderStroke = if (variant == StatusCardVariant.Gray) BorderStroke(1.dp, GrayLight) else BorderStroke(1.dp, border)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -528,9 +492,7 @@ private fun DeviceStatusRow(deviceName: String, deviceMeta: String, isConnected:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        DeviceIconTile(
-            variant = if (isConnected) StatusCardVariant.Green else StatusCardVariant.Amber
-        )
+        DeviceIconTile(variant = if (isConnected) StatusCardVariant.Green else StatusCardVariant.Amber)
 
         Column(modifier = Modifier.weight(1f)) {
             Text(text = deviceName, style = MaterialTheme.typography.titleMedium, color = Black)
@@ -541,23 +503,17 @@ private fun DeviceStatusRow(deviceName: String, deviceMeta: String, isConnected:
             )
         }
 
-        // Connected / Disconnected pill
         Row(
             modifier = Modifier
                 .background(
                     color = if (isConnected) GreenPrimary else White,
                     shape = RoundedCornerShape(999.dp)
                 )
-                .then(
-                    if (!isConnected)
-                        Modifier.border(1.dp, WarningBorder, RoundedCornerShape(999.dp))
-                    else Modifier
-                )
+                .then(if (!isConnected) Modifier.border(1.dp, WarningBorder, RoundedCornerShape(999.dp)) else Modifier)
                 .padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            // Pulse dot
             Box(
                 modifier = Modifier
                     .size(6.dp)
@@ -588,7 +544,6 @@ private fun SensorGrid(sensors: SensorPreviewData) {
         "Air Temp"      to sensors.airTemp,
         "Light"         to sensors.light
     )
-    // Manual 3-col grid (LazyVerticalGrid not usable inside verticalScroll)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items.chunked(3).forEach { row ->
             Row(
@@ -598,10 +553,7 @@ private fun SensorGrid(sensors: SensorPreviewData) {
                 row.forEach { (name, value) ->
                     SensorMiniCard(name = name, value = value, modifier = Modifier.weight(1f))
                 }
-                // Fill empty slots in last row
-                repeat(3 - row.size) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
+                repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
             }
         }
     }
@@ -626,50 +578,26 @@ private fun SensorMiniCard(name: String, value: String, modifier: Modifier = Mod
                 maxLines  = 1
             )
             Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text      = value,
-                fontSize  = 11.5.sp,
-                fontFamily = DMSans,
-                fontWeight = FontWeight.Medium,
-                color     = Black
-            )
+            Text(text = value, fontSize = 11.5.sp, fontFamily = DMSans, fontWeight = FontWeight.Medium, color = Black)
         }
     }
 }
 
 @Composable
-private fun OnTheGoDeviceOption(
-    device: OnTheGoDevice,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected) GreenPrimary else Border,
-        label = "device_border"
-    )
-    val bgColor by animateColorAsState(
-        targetValue = if (isSelected) GreenBgLight else White,
-        label = "device_bg"
-    )
+private fun OnTheGoDeviceOption(device: OnTheGoDevice, isSelected: Boolean, onClick: () -> Unit) {
+    val borderColor by animateColorAsState(if (isSelected) GreenPrimary else Border, label = "device_border")
+    val bgColor by animateColorAsState(if (isSelected) GreenBgLight else White, label = "device_bg")
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bgColor, RoundedCornerShape(12.dp))
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onClick() }
+            .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(12.dp))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Small device icon tile
         Box(
             modifier = Modifier
                 .size(30.dp)
@@ -677,12 +605,7 @@ private fun OnTheGoDeviceOption(
                 .border(1.dp, GreenLight, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_iot_device),
-                contentDescription = null,
-                tint = GreenPrimary,
-                modifier = Modifier.size(14.dp)
-            )
+            Icon(painter = painterResource(R.drawable.ic_iot_device), contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(14.dp))
         }
 
         Column(modifier = Modifier.weight(1f)) {
@@ -690,25 +613,54 @@ private fun OnTheGoDeviceOption(
             Text(text = device.meta, fontSize = 10.sp, fontFamily = DMSans, color = GrayMedium)
         }
 
-        // Radio button
         Box(
             modifier = Modifier
                 .size(16.dp)
-                .border(
-                    width = if (isSelected) 2.dp else 1.5.dp,
-                    color = if (isSelected) GreenPrimary else GrayLight,
-                    shape = CircleShape
-                ),
+                .border(if (isSelected) 2.dp else 1.5.dp, if (isSelected) GreenPrimary else GrayLight, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(GreenPrimary)
-                )
-            }
+            if (isSelected) Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(GreenPrimary))
+        }
+    }
+}
+
+@Composable
+private fun SelectableInfoBanner(
+    selected: Boolean,
+    enabled: Boolean = true, // NEW: Added enabled parameter
+    onClick: () -> Unit,
+    title: String,
+    description: String
+) {
+    val borderColor by animateColorAsState(if (selected) GreenPrimary else Border, label = "")
+    val bgColor by animateColorAsState(if (selected) GreenBgLight else OffWhite, label = "")
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bgColor, RoundedCornerShape(12.dp))
+            .border(if (selected) 2.dp else 1.dp, borderColor, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp)) // Prevents click ripple from going outside borders
+            .clickable(
+                enabled = enabled, // NEW: Disables clicking if false
+                onClick = onClick
+            )
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .border(if (selected) 2.dp else 1.5.dp, if (selected) GreenPrimary else GrayLight, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) Box(modifier = Modifier.size(7.dp).background(GreenPrimary, CircleShape))
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall)
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = GrayBody)
         }
     }
 }
@@ -727,20 +679,15 @@ private fun OrDivider() {
 }
 
 @Composable
-private fun InfoBanner(
-    isAmber: Boolean,
-    useGreenIcon: Boolean = false,
-    titleText: String,
-    bodyText: String
-) {
-    val bg     = if (isAmber) WarningBg  else OffWhite
+private fun InfoBanner(isAmber: Boolean, useGreenIcon: Boolean = false, titleText: String, bodyText: String) {
+    val bg = if (isAmber) WarningBg else OffWhite
     val border = if (isAmber) WarningBorder else Border
     val titleColor = if (isAmber) Warning else Black
-    val bodyColor  = if (isAmber) Warning else GrayBody
-    val iconTint   = when {
-        isAmber      -> Warning
+    val bodyColor = if (isAmber) Warning else GrayBody
+    val iconTint = when {
+        isAmber -> Warning
         useGreenIcon -> GreenPrimary
-        else         -> GrayMedium
+        else -> GrayMedium
     }
 
     Row(
@@ -751,35 +698,16 @@ private fun InfoBanner(
             .padding(horizontal = 12.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        // Info circle icon
-        Canvas(
-            modifier = Modifier
-                .size(14.dp)
-                .padding(top = 1.dp)
-        ) {
+        Canvas(modifier = Modifier.size(14.dp).padding(top = 1.dp)) {
             val r = size.minDimension / 2f
             drawCircle(color = iconTint, radius = r, style = Stroke(width = 1.2.dp.toPx()))
-            // vertical line
             drawLine(iconTint, start = Offset(r, r * 0.6f), end = Offset(r, r * 1.3f), strokeWidth = 1.2.dp.toPx(), cap = StrokeCap.Round)
-            // dot
             drawCircle(color = iconTint, radius = 0.7.dp.toPx(), center = Offset(r, r * 1.65f))
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text       = titleText,
-                fontSize   = 11.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = DMSans,
-                color      = titleColor
-            )
-            Text(
-                text       = bodyText,
-                fontSize   = 11.sp,
-                fontFamily = DMSans,
-                color      = bodyColor,
-                lineHeight = 16.sp
-            )
+            Text(text = titleText, fontSize = 11.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = titleColor)
+            Text(text = bodyText, fontSize = 11.sp, fontFamily = DMSans, color = bodyColor, lineHeight = 16.sp)
         }
     }
 }
@@ -790,13 +718,11 @@ private fun CheckRow(text: String, checked: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Check / X circle icon
         Canvas(modifier = Modifier.size(14.dp).padding(top = 2.dp)) {
             val r = size.minDimension / 2f
             if (checked) {
                 drawCircle(color = GreenBgLight, radius = r)
                 drawCircle(color = GreenLight, radius = r, style = Stroke(1.dp.toPx()))
-                // checkmark
                 val path = Path().apply {
                     moveTo(r * 0.55f, r)
                     lineTo(r * 0.85f, r * 1.35f)
@@ -806,29 +732,21 @@ private fun CheckRow(text: String, checked: Boolean) {
             } else {
                 drawCircle(color = OffWhite, radius = r)
                 drawCircle(color = GrayLight, radius = r, style = Stroke(1.dp.toPx()))
-                // X
                 drawLine(GrayHint, start = Offset(r * 0.6f, r * 0.6f), end = Offset(r * 1.4f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
                 drawLine(GrayHint, start = Offset(r * 1.4f, r * 0.6f), end = Offset(r * 0.6f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
             }
         }
-        Text(
-            text       = text,
-            fontSize   = 12.sp,
-            fontFamily = DMSans,
-            color      = if (checked) GrayBody else GrayHint,
-            lineHeight = 18.sp,
-            modifier   = Modifier.weight(1f)
-        )
+        Text(text = text, fontSize = 12.sp, fontFamily = DMSans, color = if (checked) GrayBody else GrayHint, lineHeight = 18.sp, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun GroupLabel(text: String) {
     Text(
-        text      = text.uppercase(),
-        style     = SectionLabelStyle,
-        color     = GrayMedium,
-        modifier  = Modifier.padding(top = 4.dp)
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelMedium, // BUG FIX: Swapped undefined 'SectionLabelStyle' for standard Compose style
+        color = GrayMedium,
+        modifier = Modifier.padding(top = 4.dp)
     )
 }
 
@@ -848,22 +766,6 @@ private fun PrimaryButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun OutlineButton(label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(White)
-            .border(1.5.dp, GreenPrimary, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(vertical = 14.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = label, fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = GreenPrimary)
-    }
-}
-
-@Composable
 private fun TextLinkButton(label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
@@ -873,123 +775,12 @@ private fun TextLinkButton(label: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text           = label,
-            fontSize       = 12.sp,
-            fontWeight     = FontWeight.Medium,
-            fontFamily     = DMSans,
-            color          = GrayMedium,
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = DMSans,
+            color = GrayMedium,
             textDecoration = TextDecoration.Underline
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PREVIEWS
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Preview(showBackground = true, name = "7A — Linked & Connected", showSystemUi = true)
-@Composable
-fun PreAnalysis7APreview() {
-    SiliGuideTheme {
-        PreAnalysisScreen(
-            state = PreAnalysisState.LinkedConnected(
-                deviceName = "Garden Sensor",
-                deviceMeta = "LAN Mode · 192.168.1.42",
-                sensors = SensorPreviewData(),
-                deviceId = "dev_1"
-            ),
-            onBack = {},
-            permissionStatus = PermissionStatus.Granted,
-            showPermissionDialog = false,
-
-            onRequestCameraPermission = {},
-
-            onOpenSettings = {},
-
-            onPermissionDenied = {},
-
-            onContinueToCamera = {},
-
-            onContinueWithOtherDevice = {},
-
-            onSkipToImageOnly = {},
-
-            onContinueImageOnly = {},
-
-            onAddIoTDevice = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, name = "7B — Linked & Disconnected", showSystemUi = true)
-@Composable
-fun PreAnalysis7BPreview() {
-    SiliGuideTheme {
-        PreAnalysisScreen(
-            state = PreAnalysisState.LinkedDisconnected(
-                deviceName = "Garden Sensor",
-                lastSeenLabel = "Last seen 14 min ago",
-                onTheGoDevices = listOf(
-                    OnTheGoDevice(
-                        "dev_2",
-                        "Backup Sensor",
-                        "AP Mode · Connected — for this analysis only"
-                    ),
-                    OnTheGoDevice(
-                        "dev_3",
-                        "Field Unit",
-                        "LAN Mode · Connected — for this analysis only"
-                    )
-                )
-            ),
-            onBack = {},
-            permissionStatus = PermissionStatus.Granted,
-            showPermissionDialog = false,
-
-            onRequestCameraPermission = {},
-
-            onOpenSettings = {},
-
-            onPermissionDenied = {},
-
-            onContinueToCamera = {},
-
-            onContinueWithOtherDevice = {},
-
-            onSkipToImageOnly = {},
-
-            onContinueImageOnly = {},
-
-            onAddIoTDevice = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, name = "7C — No Device", showSystemUi = true)
-@Composable
-fun PreAnalysis7CPreview() {
-    SiliGuideTheme {
-        PreAnalysisScreen(
-            state = PreAnalysisState.NoDevice,
-            onBack = {},
-            permissionStatus = PermissionStatus.Granted,
-            showPermissionDialog = false,
-
-            onRequestCameraPermission = {},
-
-            onOpenSettings = {},
-
-            onPermissionDenied = {},
-
-            onContinueToCamera = {},
-
-            onContinueWithOtherDevice = {},
-
-            onSkipToImageOnly = {},
-
-            onContinueImageOnly = {},
-
-            onAddIoTDevice = {}
         )
     }
 }
