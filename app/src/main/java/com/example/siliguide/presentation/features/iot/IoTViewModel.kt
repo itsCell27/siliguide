@@ -127,60 +127,6 @@ class IoTViewModel @Inject constructor(
         deviceName = name
     }
 
-    // =========================================================================
-    // LIVE DASHBOARD POLLING LOGIC
-    // =========================================================================
-
-    /**
-     * Starts a continuous loop that fetches data every 3 seconds.
-     */
-    fun startLiveMonitoring() {
-        // First, cancel any existing loop so we don't accidentally run multiples!
-        stopLiveMonitoring()
-
-        Log.d("AP_DEBUG", "Starting live sensor monitoring...")
-        pollingJob = viewModelScope.launch {
-            // isActive ensures the loop stops automatically if the ViewModel is destroyed
-            while (isActive) {
-                fetchSensors(isBackgroundRefresh = true)
-                delay(3000) // Wait 3 seconds before pinging the ESP32 again
-            }
-        }
-    }
-
-    /**
-     * Stops the continuous loop. Call this when the user leaves the Dashboard.
-     */
-    fun stopLiveMonitoring() {
-        pollingJob?.cancel()
-        pollingJob = null
-        Log.d("AP_DEBUG", "Stopped live sensor monitoring.")
-    }
-
-    /**
-     * Fetches sensor data once.
-     * @param isBackgroundRefresh If true, it won't show the initial "Loading..." state.
-     */
-    fun fetchSensors(isBackgroundRefresh: Boolean = false) {
-        viewModelScope.launch {
-            if (!isBackgroundRefresh) {
-                isLoading = true // Only show loading spinner on the very first manual fetch
-            }
-            error = null
-
-            try {
-                sensorData = fetchSensorsUseCase()
-            } catch (e: Exception) {
-                error = "ESP32 not connected: ${e.message}"
-                // If the connection breaks completely, stop the loop to save battery
-                // stopLiveMonitoring()
-            }
-
-            if (!isBackgroundRefresh) {
-                isLoading = false
-            }
-        }
-    }
 
     // =========================================================================
     // AP CONNECTION & VERIFICATION LOGIC

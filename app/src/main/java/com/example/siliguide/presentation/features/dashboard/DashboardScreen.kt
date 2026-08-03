@@ -121,8 +121,7 @@ fun DashboardScreen(
         onNavigateToAddIoT  = onNavigateToAddIoT,
         onNavigateToPlantDetail = onNavigateToPlantDetail,
         onNavigateToSeeAll  = onNavigateToSeeAll,
-        onNavigateToProfile = onNavigateToProfile,
-        testIotContent      = { TestIoTScreen() }
+        onNavigateToProfile = onNavigateToProfile
     )
 }
 
@@ -140,8 +139,7 @@ fun DashboardContent(
     onNavigateToAddIoT: () -> Unit,
     onNavigateToPlantDetail: (String) -> Unit,
     onNavigateToSeeAll: () -> Unit,
-    onNavigateToProfile: () -> Unit,
-    testIotContent: @Composable () -> Unit = {}
+    onNavigateToProfile: () -> Unit
 ) {
     // Dynamically compute how much bottom padding the scrollable body needs:
     // system nav bar inset + our custom bottom nav bar height.
@@ -172,7 +170,6 @@ fun DashboardContent(
                     onSeeAll = onNavigateToSeeAll,
                     onNavigateToPlantDetail = onNavigateToPlantDetail
                 )
-                testIotContent()
             }
         }
 
@@ -862,35 +859,7 @@ fun SheetOptionItem(icon: String, title: String, description: String, onClick: (
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TEST IOT SCREEN  (dev / debug — replace with real monitoring UI)
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-fun TestIoTScreen() {
-    val viewModel: IoTViewModel = hiltViewModel()
-    DisposableEffect(Unit) {
-        viewModel.startLiveMonitoring()
-        onDispose { viewModel.stopLiveMonitoring() }
-    }
-    when {
-        viewModel.isLoading          -> Text("Loading...")
-        viewModel.error != null      -> Text(viewModel.error!!)
-        viewModel.sensorData != null -> {
-            val data = viewModel.sensorData!!
-            Column {
-                Text("Soil Moisture: ${data.soil.moisture}")
-                Text("Soil Temp: ${data.soil.temperature}")
-                Text("pH: ${data.soil.ph}")
-                Text("EC: ${data.soil.ec}")
-                Text("Nitrogen: ${data.soil.nitrogen}")
-                Text("Phosphorus: ${data.soil.phosphorus}")
-                Text("Potassium: ${data.soil.potassium}")
-                Text("Light: ${data.environment.light}")
-                Text("Air Temp: ${data.environment.airTemperature}")
-            }
-        }
-    }
-}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PREVIEWS
