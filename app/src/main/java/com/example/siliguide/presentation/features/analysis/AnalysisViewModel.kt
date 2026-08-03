@@ -308,12 +308,24 @@ class AnalysisViewModel @Inject constructor(
                 }
 
                 // 3. Try to get Sensor Data
-                val sensorData = try {
-                    val data = fetchSensorsUseCase(deviceId)
-                    Log.d("AnalysisViewModel", "Sensor Data Received: $data")
-                    data
-                } catch (e: Exception) {
-                    Log.e("AnalysisViewModel", "CRITICAL: Sensor Fetch Failed: ${e.message}", e)
+                val sensorData = if (deviceId != null) {
+                    try {
+                        val data = fetchSensorsUseCase(deviceId)
+                        Log.d("AnalysisViewModel", "Sensor Data Received: $data")
+                        data
+                    } catch (e: Exception) {
+                        Log.e(
+                            "AnalysisViewModel",
+                            "Sensor Fetch Failed: ${e.message}",
+                            e
+                        )
+                        null
+                    }
+                } else {
+                    Log.d(
+                        "AnalysisViewModel",
+                        "No IoT device assigned. Skipping sensor fetch."
+                    )
                     null
                 }
 
