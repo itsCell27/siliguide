@@ -10,7 +10,17 @@ interface IoTRepository {
     suspend fun getSensors(deviceId: String? = null): SensorResponse
 
     // Returns the deviceId if successful, or an Exception if it fails
-    suspend fun verifyDeviceConnection(): Result<DeviceInfoDto>
+    suspend fun verifyDeviceConnection(host: String): Result<DeviceInfoDto>
+
+    /**
+     * Claims an unclaimed ESP32 device.
+     *
+     * Throws an exception if the ESP32 rejects the request.
+     */
+    suspend fun claimDevice(
+        host: String,
+        token: String
+    )
 
     suspend fun getDeviceById(deviceId: String): IoTDevice?
 

@@ -8,8 +8,10 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import io.ktor.client.request.post
 
 class Esp32Api {
 
@@ -21,33 +23,44 @@ class Esp32Api {
             }
         }
 
-        // 2. Set strict timeouts so the app doesn't freeze if the ESP32 disconnects
+        // 2. Strict timeouts to prevent socket freezing/buffer attacks
         install(HttpTimeout) {
-            requestTimeoutMillis = 5000 // 5 seconds max waiting for sensor data
-            connectTimeoutMillis = 3000 // 3 seconds max to establish connection
+            requestTimeoutMillis = 5000
+            connectTimeoutMillis = 3000
         }
 
-        // 3. Configure JSON Parsing (Lenient mode is great for embedded hardware)
+        // 3. Type-Safe Serialization gatekeeper
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
                 isLenient = true
-                ignoreUnknownKeys = true // Prevents crashes if you add/remove sensors on the ESP32 later
+                ignoreUnknownKeys = true
             })
         }
     }
 
-    suspend fun getSensorData(host: String = "192.168.4.1"): SensorResponseDto {
-        // Note: In a later refactor, we will make "192.168.4.1" dynamic
-        // based on your LAN/AP connection mode!
-        return client
-            .get("http://$host/data")
-            .body()
+    // Pass the token so the ESP32 doesn't block you with a 401 Unauthorized
+    suspend fun getSensorData(host: String, token: String? = null): SensorResponseDto {
+        return client.get("http://$host/data") {
+            // If we have a token (device is claimed), append it securely to the request
+            if (token != null) {
+                parameter("token", token)
+            }
+        }.body()
     }
 
-    suspend fun getDeviceInfo(host: String = "192.168.4.1"): DeviceInfoDto {
-        return client
-            .get("http://$host/info")
-            .body()
+    // get device /info for discovery
+    suspend fun getDeviceInfo(host: String): DeviceInfoDto {
+        return client.get("http://$host/info").body()
+    }
+
+    // Add the Handshake lock endpoint so your repository can claim the device
+    suspend fun claimDevice(
+        host: String,
+        token: String
+    ) {
+        client.post("http://$host/claim") {
+            parameter("token", token)
+        }
     }
 }

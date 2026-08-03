@@ -2,7 +2,7 @@ package com.example.siliguide.core.di
 
 import com.example.siliguide.data.repository.AnalysisRepositoryImpl
 import com.example.siliguide.data.repository.AuthRepositoryImpl
-import com.example.siliguide.data.repository.Esp32Repository
+import com.example.siliguide.data.repository.IoTRepositoryImpl
 import com.example.siliguide.data.repository.PlantRepositoryImpl
 import com.example.siliguide.domain.repository.AnalysisRepository
 import com.example.siliguide.domain.repository.AuthRepository
@@ -36,6 +36,6 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindIoTRepository(
-        esp32Repository: Esp32Repository
+        ioTRepositoryImpl: IoTRepositoryImpl
     ): IoTRepository
 }

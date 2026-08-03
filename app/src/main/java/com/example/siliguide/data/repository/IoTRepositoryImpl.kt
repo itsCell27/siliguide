@@ -36,7 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class Esp32Repository @Inject constructor(
+class IoTRepositoryImpl @Inject constructor(
     private val api: Esp32Api,
     private val bluetoothApi: BluetoothApi,
     private val wifiProvisioningManager: WifiProvisioningManager,
@@ -125,18 +125,28 @@ class Esp32Repository @Inject constructor(
         wifiProvisioningManager.disconnect(context)
     }
 
-    override suspend fun verifyDeviceConnection(): Result<DeviceInfoDto> {
+    override suspend fun verifyDeviceConnection(host: String): Result<DeviceInfoDto> {
         return try {
-            val info = api.getDeviceInfo()
 
-            if (info.device == "SiliGuide" && info.mode == "AP") {
-                Result.success(info)
-            } else {
-                Result.failure(Exception("Unrecognized device format."))
-            }
+            val info = api.getDeviceInfo(host)
+
+            Result.success(info)
+
         } catch (e: Exception) {
+
             Result.failure(e)
+
         }
+    }
+
+    override suspend fun claimDevice(
+        host: String,
+        token: String
+    ) {
+        api.claimDevice(
+            host = host,
+            token = token
+        )
     }
 
     // --- DATABASE OPERATIONS ---
