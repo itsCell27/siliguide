@@ -12,6 +12,8 @@ interface IoTRepository {
     // Returns the deviceId if successful, or an Exception if it fails
     suspend fun verifyDeviceConnection(host: String): Result<DeviceInfoDto>
 
+    suspend fun isDeviceOnline(deviceId: String): Boolean
+
     /**
      * Claims an unclaimed ESP32 device.
      *
@@ -33,7 +35,6 @@ interface IoTRepository {
 
     fun disconnectFromWifi()
 
-    // ADD THESE TWO LINES:
     suspend fun saveDevice(device: IoTDevice)
     suspend fun deleteDevice(deviceId: String)
 

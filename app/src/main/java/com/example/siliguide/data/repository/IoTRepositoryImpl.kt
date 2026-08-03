@@ -106,6 +106,33 @@ class IoTRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun isDeviceOnline(deviceId: String): Boolean {
+
+        val savedDevice = getDeviceById(deviceId)
+            ?: return false
+
+        return try {
+
+            val info = when (savedDevice.connectionMode) {
+
+                ConnectionMode.AP ->
+                    api.getDeviceInfo(DEFAULT_AP_IP)
+
+                ConnectionMode.LAN ->
+                    api.getDeviceInfo(savedDevice.lastKnownIp)
+
+                ConnectionMode.BLUETOOTH ->
+                    bluetoothApi.getDeviceInfo()
+            }
+
+            info.deviceId == savedDevice.deviceId
+
+        } catch (_: Exception) {
+
+            false
+        }
+    }
+
     override fun connectToDeviceWifi(
         ssid: String,
         password: String,
