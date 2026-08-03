@@ -77,7 +77,7 @@ class PlantViewModel @Inject constructor(
                 // 1. Insert the plant
                 val newPlantId = addPlantUseCase(userId, name, deviceId)
 
-                // 2. YOUR IDEA: Verify it exists in the DB before updating the state
+                // 2. Verify it exists in the DB before updating the state
                 // This ensures that when the UI sees 'createdPlantId', the record is 100% there.
                 val verifiedPlant = getPlantByIdUseCase(newPlantId)
 
