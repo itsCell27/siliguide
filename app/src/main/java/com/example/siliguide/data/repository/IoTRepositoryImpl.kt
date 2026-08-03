@@ -100,7 +100,7 @@ class IoTRepositoryImpl @Inject constructor(
             ConnectionMode.AP,
             null -> {
 
-                api.getSensorData(DEFAULT_AP_IP)
+                api.getSensorData(host = DEFAULT_AP_IP, token = device?.pairingToken)
                     .toDomain()
             }
         }
