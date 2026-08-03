@@ -15,5 +15,5 @@ interface PlantRepository {
     suspend fun updatePlantName(plantId: String, name: String)
     suspend fun linkDevice(plantId: String, deviceId: String)
     suspend fun unlinkDevice(plantId: String)
-    suspend fun getPlantsByDeviceId(deviceId: String): List<Plant>
+    suspend fun getPlantByDeviceId(deviceId: String): List<Plant>
 }

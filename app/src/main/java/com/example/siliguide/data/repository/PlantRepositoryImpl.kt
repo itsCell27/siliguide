@@ -63,8 +63,8 @@ class PlantRepositoryImpl @Inject constructor(
         queries.unlinkPlantDevice(plantId)
     }
 
-    override suspend fun getPlantsByDeviceId(deviceId: String): List<Plant> {
-        return queries.getPlantsByDeviceId(deviceId)
+    override suspend fun getPlantByDeviceId(deviceId: String): List<Plant> {
+        return queries.getPlantByDeviceId(deviceId)
             .executeAsList()
             .map { it.toDomainModel() }
     }
