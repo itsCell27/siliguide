@@ -15,6 +15,7 @@ package com.example.siliguide.data.repository
  */
 
 import android.content.Context
+import android.util.Log
 import app.cash.sqldelight.db.SqlDriver
 import com.example.siliguide.data.local.SiliGuideDatabase
 import com.example.siliguide.data.remote.iot.Esp32Api
@@ -69,13 +70,15 @@ class IoTRepositoryImpl @Inject constructor(
             // ------------------------------------------------------------
             // BLUETOOTH MODE
             // ------------------------------------------------------------
-            // The ESP32 is already connected through Bluetooth Classic (SPP),
+            // The ESP32 is already connected through Bluetooth
             // so no IP address is required.
             ConnectionMode.BLUETOOTH -> {
+                val responseDto = bluetoothApi.getSpecificDeviceSensorData(
+                    deviceId = device.deviceId,
+                    token = device.pairingToken
+                ) ?: throw IllegalStateException("Failed to fetch sensor data via Bluetooth")
 
-                bluetoothApi
-                    .getSensorData()
-                    .toDomain()
+                responseDto.toDomain()
             }
 
             // ------------------------------------------------------------
@@ -111,6 +114,8 @@ class IoTRepositoryImpl @Inject constructor(
         val savedDevice = getDeviceById(deviceId)
             ?: return false
 
+        Log.d("IoTRepositoryImpl", "Checking if device is online... $savedDevice")
+        Log.d("IoTRepositoryImpl", "Checking if device is online... ${savedDevice.connectionMode}")
         return try {
 
             val info = when (savedDevice.connectionMode) {
@@ -122,10 +127,11 @@ class IoTRepositoryImpl @Inject constructor(
                     api.getDeviceInfo(savedDevice.lastKnownIp)
 
                 ConnectionMode.BLUETOOTH ->
-                    bluetoothApi.getDeviceInfo()
+                    bluetoothApi.getSpecificDeviceInfo(savedDevice.deviceId)
             }
+            Log.d("IoTRepositoryImpl", "Checking if device is online... ${info?.deviceId}")
 
-            info.deviceId == savedDevice.deviceId
+            info?.deviceId == savedDevice.deviceId
 
         } catch (_: Exception) {
 
