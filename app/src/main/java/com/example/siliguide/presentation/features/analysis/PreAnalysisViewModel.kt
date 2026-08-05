@@ -20,8 +20,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class PreAnalysisViewModel @Inject constructor(
@@ -31,6 +35,11 @@ class PreAnalysisViewModel @Inject constructor(
     private val permissionManager: PermissionManager,
     private val checkDeviceConnectionUseCase: CheckDeviceConnectionUseCase
 ) : ViewModel() {
+
+    // Backing property for state updates
+    private val _preUiState = MutableStateFlow(PreAnalysisUiState())
+    // Public read-only stream for the UI to observe
+    val preUiState: StateFlow<PreAnalysisUiState> = _preUiState.asStateFlow()
 
     private val _state = MutableStateFlow<PreAnalysisState>(PreAnalysisState.NoDevice())
     val state: StateFlow<PreAnalysisState> = _state.asStateFlow()
@@ -43,23 +52,68 @@ class PreAnalysisViewModel @Inject constructor(
 
     fun loadData(plantId: String) {
         viewModelScope.launch {
-            val userId = authRepository.getUserId() ?: return@launch
-            val plant = getPlantByIdUseCase(plantId) ?: return@launch
+            // 1. Initial loading state
+            _preUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    loadingMessage = "Initializing..."
+                )
+            }
 
-            getIoTDevicesUseCase(userId).collect { allDevices ->
-                // BUG FIX: Replaced standard buildList { } to allow suspended operations
-                val onlineDevices = mutableListOf<IoTDevice>()
-                for (device in allDevices) {
-                    if (checkDeviceConnectionUseCase(device.deviceId)) {
-                        onlineDevices.add(device)
+            try {
+                // 2. Switch to the IO thread for all database and Bluetooth work
+                val stateUpdate = withContext(Dispatchers.IO) {
+
+                    _preUiState.update { it.copy(loadingMessage = "Loading user data...") }
+                    val userId = authRepository.getUserId() ?: return@withContext null
+
+                    _preUiState.update { it.copy(loadingMessage = "Fetching plant details...") }
+                    val plant = getPlantByIdUseCase(plantId) ?: return@withContext null
+
+                    _preUiState.update { it.copy(loadingMessage = "Finding paired devices...") }
+                    val allDevices = getIoTDevicesUseCase(userId).first()
+
+                    val onlineDevices = mutableListOf<IoTDevice>()
+                    val totalDevices = allDevices.size
+
+                    // Use a standard indexed loop to show progress (e.g., "Checking 1 of 3")
+                    allDevices.forEachIndexed { index, device ->
+
+                        _preUiState.update {
+                            it.copy(loadingMessage = "Connecting to device ${index + 1} of $totalDevices...")
+                        }
+
+                        // This blocking Bluetooth check now runs safely in the background
+                        if (checkDeviceConnectionUseCase(device.deviceId)) {
+                            onlineDevices.add(device)
+                        }
                     }
+
+                    _preUiState.update { it.copy(loadingMessage = "Finalizing dashboard...") }
+
+                    // Return the computed state back to the outer coroutine
+                    buildState(
+                        plant = plant,
+                        allDevices = allDevices,
+                        onlineDevices = onlineDevices
+                    )
                 }
 
-                _state.value = buildState(
-                    plant = plant,
-                    allDevices = allDevices,
-                    onlineDevices = onlineDevices
-                )
+                // 3. Update the UI state (automatically back on the Main thread)
+                if (stateUpdate != null) {
+                    _state.value = stateUpdate
+                }
+
+            } catch (e: Exception) {
+                // Optional: Show an error message briefly before hiding the loader
+                _preUiState.update { it.copy(loadingMessage = "Error loading data") }
+            } finally {
+                _preUiState.update { currentState ->
+                    currentState.copy(
+                        isLoading = false,
+                        loadingMessage = "" // Clear the message when done
+                    )
+                }
             }
         }
     }

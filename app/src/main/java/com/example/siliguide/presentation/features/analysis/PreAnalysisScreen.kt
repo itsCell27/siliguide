@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.R
 import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.ui.components.LoadingOverlay
 import com.example.siliguide.core.ui.components.PermissionDialog
 import com.example.siliguide.core.ui.theme.*
 
@@ -84,6 +85,7 @@ sealed class PreAnalysisState {
 
 @Composable
 fun PreAnalysisScreen(
+    viewModel: PreAnalysisViewModel,
     state: PreAnalysisState,
     permissionStatus: PermissionStatus,
     onBack: () -> Unit,
@@ -97,6 +99,7 @@ fun PreAnalysisScreen(
     onContinueImageOnly: () -> Unit = {},
     onAddIoTDevice: () -> Unit = {},
 ) {
+    val preUiState by viewModel.preUiState.collectAsState()
     var selectedOnTheGoId by remember { mutableStateOf<String?>(null) }
     var imageOnlySelected by remember { mutableStateOf(false) }
 
@@ -120,75 +123,80 @@ fun PreAnalysisScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(OffWhite)
+    LoadingOverlay(
+        isLoading = preUiState.isLoading,
+        message = preUiState.loadingMessage
     ) {
-        TopBar(onBack = onBack)
-
         Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .fillMaxSize()
+                .background(OffWhite)
         ) {
-            when (state) {
-                is PreAnalysisState.LinkedConnected -> LinkedConnectedContent(state)
-                is PreAnalysisState.LinkedDisconnected -> LinkedDisconnectedContent(
-                    state = state,
-                    selectedId = selectedOnTheGoId,
-                    onSelectDevice = { selectedOnTheGoId = it }
-                )
-                is PreAnalysisState.NoDevice -> NoDeviceContent(
-                    state = state,
-                    selectedId = selectedOnTheGoId,
-                    imageOnlySelected = imageOnlySelected,
-                    onSelectDevice = {
-                        selectedOnTheGoId = it
-                        imageOnlySelected = false
-                    },
-                    onSelectImageOnly = {
-                        selectedOnTheGoId = null
-                        imageOnlySelected = true
-                    }
+            TopBar(onBack = onBack)
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                when (state) {
+                    is PreAnalysisState.LinkedConnected -> LinkedConnectedContent(state)
+                    is PreAnalysisState.LinkedDisconnected -> LinkedDisconnectedContent(
+                        state = state,
+                        selectedId = selectedOnTheGoId,
+                        onSelectDevice = { selectedOnTheGoId = it }
+                    )
+                    is PreAnalysisState.NoDevice -> NoDeviceContent(
+                        state = state,
+                        selectedId = selectedOnTheGoId,
+                        imageOnlySelected = imageOnlySelected,
+                        onSelectDevice = {
+                            selectedOnTheGoId = it
+                            imageOnlySelected = false
+                        },
+                        onSelectImageOnly = {
+                            selectedOnTheGoId = null
+                            imageOnlySelected = true
+                        }
+                    )
+                }
+            }
+
+            PinnedButtons(
+                state = state,
+                selectedOnTheGoId = selectedOnTheGoId,
+                imageOnlySelected = imageOnlySelected,
+                onContinueToCamera = onContinueToCamera,
+                onContinueWithOther = onContinueWithOtherDevice,
+                onSkipToImageOnly = onSkipToImageOnly,
+                onContinueImageOnly = onContinueImageOnly,
+                onAddIoTDevice = onAddIoTDevice
+            )
+
+            if (showPermissionDialog && permissionStatus == PermissionStatus.ShowRationale) {
+                PermissionDialog(
+                    title = "Camera Permission Required",
+                    message = "SiliGuide needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
+                    confirmText = "Continue",
+                    dismissText = "Cancel",
+                    onConfirm = onRequestCameraPermission,
+                    onDismiss = onPermissionDenied
                 )
             }
-        }
 
-        PinnedButtons(
-            state = state,
-            selectedOnTheGoId = selectedOnTheGoId,
-            imageOnlySelected = imageOnlySelected,
-            onContinueToCamera = onContinueToCamera,
-            onContinueWithOther = onContinueWithOtherDevice,
-            onSkipToImageOnly = onSkipToImageOnly,
-            onContinueImageOnly = onContinueImageOnly,
-            onAddIoTDevice = onAddIoTDevice
-        )
-
-        if (showPermissionDialog && permissionStatus == PermissionStatus.ShowRationale) {
-            PermissionDialog(
-                title = "Camera Permission Required",
-                message = "SiliGuide needs camera access to analyze your plant leaves. Please allow camera permission to continue.",
-                confirmText = "Continue",
-                dismissText = "Cancel",
-                onConfirm = onRequestCameraPermission,
-                onDismiss = onPermissionDenied
-            )
-        }
-
-        if (showPermissionDialog && permissionStatus == PermissionStatus.PermanentlyDenied) {
-            PermissionDialog(
-                title = "Camera Permission Disabled",
-                message = "Camera permission has been permanently denied. Please enable it in Settings to continue.",
-                confirmText = "Open Settings",
-                dismissText = "Cancel",
-                onConfirm = onOpenSettings,
-                onDismiss = onPermissionDenied
-            )
+            if (showPermissionDialog && permissionStatus == PermissionStatus.PermanentlyDenied) {
+                PermissionDialog(
+                    title = "Camera Permission Disabled",
+                    message = "Camera permission has been permanently denied. Please enable it in Settings to continue.",
+                    confirmText = "Open Settings",
+                    dismissText = "Cancel",
+                    onConfirm = onOpenSettings,
+                    onDismiss = onPermissionDenied
+                )
+            }
         }
     }
 }
