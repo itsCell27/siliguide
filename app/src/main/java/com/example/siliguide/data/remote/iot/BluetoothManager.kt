@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
@@ -13,8 +15,11 @@ import javax.inject.Singleton
 
 @Singleton
 class BluetoothManager @Inject constructor(
-    private val bluetoothAdapter: BluetoothAdapter
+    private val bluetoothAdapter: BluetoothAdapter,
+    @param:ApplicationContext private val context: Context
 ) {
+    private val systemBluetoothManager =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
 
     companion object {
         // Standard Serial Port Profile UUID
@@ -25,6 +30,13 @@ class BluetoothManager @Inject constructor(
     private var socket: BluetoothSocket? = null
     private var input: InputStream? = null
     private var output: OutputStream? = null
+
+    /**
+     * Checks if the phone's Bluetooth radio is turned ON.
+     */
+    fun isBluetoothOn(): Boolean {
+        return systemBluetoothManager?.adapter?.isEnabled == true
+    }
 
     fun isConnected(): Boolean {
         return socket?.isConnected == true
@@ -138,7 +150,7 @@ class BluetoothManager @Inject constructor(
     fun executeCommand(command: String): String {
         Log.d(
             "BluetoothManager",
-            "instance=${System.identityHashCode(this)}"
+            "instance=${System.identityHashCode(this)} command=$command"
         )
 
         sendCommand(command)

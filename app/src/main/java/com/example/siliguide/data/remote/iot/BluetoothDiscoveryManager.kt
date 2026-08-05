@@ -21,4 +21,13 @@ class BluetoothDiscoveryManager @Inject constructor(
                 device.name?.startsWith("SiliGuide_") == true
             }
     }
+
+    @SuppressLint("MissingPermission") // Temporary
+    fun getSpecificPairedDevice(deviceId: String): BluetoothDevice? {
+        return bluetoothAdapter.bondedDevices
+            .firstOrNull { device ->
+                device.name?.startsWith("SiliGuide_") == true &&
+                        device.name?.takeLast(4) == deviceId.takeLast(4)
+            }
+    }
 }
