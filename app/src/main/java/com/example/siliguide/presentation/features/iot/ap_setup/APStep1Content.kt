@@ -52,6 +52,8 @@ fun APStep1Content(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Spacer(modifier = Modifier.height(0.5.dp))
+
         // Header
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -344,5 +346,7 @@ fun APStep1Content(
                 lineHeight = 16.sp
             )
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }

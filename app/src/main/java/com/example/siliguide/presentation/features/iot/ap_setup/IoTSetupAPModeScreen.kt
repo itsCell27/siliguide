@@ -329,9 +329,8 @@ fun IoTSetupAPModeScreen(
 
                         Text(
                             text = "AP Setup",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = GrayMedium
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         Spacer(modifier = Modifier.weight(1f))
@@ -340,9 +339,8 @@ fun IoTSetupAPModeScreen(
 
                         Text(
                             text = "Step $displayStep of 2",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = GreenDark
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GreenPrimary
                         )
                     }
 
@@ -352,8 +350,8 @@ fun IoTSetupAPModeScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp)
-                            .height(6.dp)
+                            .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
+                            .height(3.dp)
                             .clip(RoundedCornerShape(3.dp)),
                         color = GreenPrimary,
                         trackColor = Border,
@@ -412,7 +410,7 @@ fun IoTSetupAPModeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .padding(horizontal = 20.dp)
             ) {
 
                 Crossfade(

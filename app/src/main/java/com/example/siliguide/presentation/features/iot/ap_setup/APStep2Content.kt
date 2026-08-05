@@ -34,7 +34,7 @@ fun APStep2Content(
     onBack: () -> Unit
 ) {
 
-    val maxChar = 30
+    val maxChar = 12
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -42,6 +42,8 @@ fun APStep2Content(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Spacer(modifier = Modifier.height(0.5.dp))
+
         // Success Icon
         Box(
             modifier = Modifier.size(66.dp).background(GreenPrimary, CircleShape),
