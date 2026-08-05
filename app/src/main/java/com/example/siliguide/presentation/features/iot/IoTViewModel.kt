@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -41,6 +40,10 @@ import com.example.siliguide.data.remote.iot.BluetoothApi
 import com.example.siliguide.data.remote.iot.BluetoothDiscoveryManager
 import com.example.siliguide.data.remote.iot.BluetoothManager
 import com.example.siliguide.domain.usecase.ClaimIoTDeviceUseCase
+import com.example.siliguide.presentation.features.analysis.AnalysisUiState
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.PairedSiliGuideDevice
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class ValidationDialogState(
     val title: String,
@@ -66,6 +69,10 @@ class IoTViewModel @Inject constructor(
     val permissionManager: PermissionManager
 ) : ViewModel() {
 
+    // Backing property for state updates
+    private val _iotUiState = MutableStateFlow(IoTUiState())
+    // Public read-only stream for the UI to observe
+    val iotUiState: StateFlow<IoTUiState> = _iotUiState.asStateFlow()
 
     var isClaiming by mutableStateOf(false)
         private set
@@ -102,6 +109,12 @@ class IoTViewModel @Inject constructor(
         )
 
     val bluetoothSetupState = _bluetoothSetupState.asStateFlow()
+
+    private val _pairedDevices = MutableStateFlow<List<PairedSiliGuideDevice>>(emptyList())
+    val pairedDevices: StateFlow<List<PairedSiliGuideDevice>> = _pairedDevices.asStateFlow()
+
+    private val _navigateToDeviceSelection = MutableSharedFlow<Unit>()
+    val navigateToDeviceSelection: SharedFlow<Unit> = _navigateToDeviceSelection.asSharedFlow()
 
 
     // SharedFlow to trigger navigation when saving is done
@@ -274,7 +287,7 @@ class IoTViewModel @Inject constructor(
                     pairingToken = info.token
 
                     if (deviceName.isEmpty()) {
-                        deviceName = "SiliGuide Node ${info.deviceId}"
+                        deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
                     }
 
                     error = null
@@ -471,84 +484,295 @@ class IoTViewModel @Inject constructor(
         error = null
     }
 
+    fun connectToSelectedBluetoothDevice(selected: BluetoothDevice) {
+        viewModelScope.launch {
+
+            setBluetoothVerifying()
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    loadingMessage = "Connecting..."
+                )
+            }
+
+            withContext(Dispatchers.IO) {
+                try {
+
+                    bluetoothManager.connect(selected)
+
+                    withContext(Dispatchers.Main) {
+                        _iotUiState.update { currentState ->
+                            currentState.copy(
+                                loadingMessage = "Verifying..."
+                            )
+                        }
+                    }
+
+                    val info = bluetoothApi.getDeviceInfo()
+
+                    withContext(Dispatchers.Main) {
+
+                        // ----------------------------------------------------
+                        // 1. Verify this is actually a SiliGuide device
+                        // ----------------------------------------------------
+                        if (info.device != "SiliGuide") {
+                            showValidationDialog(
+                                title = "Unsupported Device",
+                                message = "The connected device is not a SiliGuide IoT device."
+                            )
+                            setBluetoothUnsupported("Device is not recognized as SiliGuide.")
+                            bluetoothManager.disconnect()
+                            return@withContext
+                        }
+
+                        // ----------------------------------------------------
+                        // 2. Already exists in local database?
+                        // ----------------------------------------------------
+                        val existingDevice = getIoTDeviceByIdUseCase(info.deviceId)
+
+                        if (existingDevice != null) {
+                            showValidationDialog(
+                                title = "Device Already Registered",
+                                message = "This SiliGuide device is already registered in your account."
+                            )
+                            setBluetoothUnsupported("Device already exists in your records.")
+                            bluetoothManager.disconnect()
+                            return@withContext
+                        }
+
+                        // ----------------------------------------------------
+                        // 3. Device already claimed?
+                        // ----------------------------------------------------
+                        if (info.claimed) {
+                            showValidationDialog(
+                                title = "Device Already Claimed",
+                                message = "This SiliGuide device has already been claimed and cannot be paired again unless it is factory reset."
+                            )
+                            setBluetoothUnsupported("Device is permanently locked to another user.")
+                            bluetoothManager.disconnect()
+                            return@withContext
+                        }
+
+                        // ----------------------------------------------------
+                        // Passed every validation
+                        // ----------------------------------------------------
+                        connectedDeviceId = info.deviceId
+                        pairingToken = info.token ?: ""
+
+                        if (deviceName.isEmpty()) {
+                            deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                        }
+
+                        error = null
+                        _bluetoothVerified.emit(Unit)
+                    }
+
+                } catch (e: SecurityException) {
+                    Log.e("BluetoothSetup", "Missing Bluetooth permission", e)
+                    withContext(Dispatchers.Main) {
+                        setBluetoothUnsupported("Missing Bluetooth permissions. Please grant them in settings.")
+                    }
+                } catch (e: Exception) {
+                    bluetoothManager.disconnect()
+                    Log.e("BluetoothSetup", "Bluetooth verification failed", e)
+                    withContext(Dispatchers.Main) {
+                        showValidationDialog(
+                            title = "Connection Failed",
+                            message = "Could not reach the SILI-GUIDE sensor over Bluetooth. Ensure it is powered on, in range, and paired correctly."
+                        )
+                        resetBluetoothSetup()
+                    }
+                } finally {
+                    _iotUiState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun verifyPairedBluetoothDevices() {
         viewModelScope.launch {
 
-            setBluetoothSearching()
-
-            try {
-
-                val pairedDevices =
-                    bluetoothDiscoveryManager.getPairedSiliGuideDevices()
-
-                if (pairedDevices.isEmpty()) {
-                    setBluetoothUnsupported(
-                        "No paired SiliGuide devices were found."
-                    )
-                    return@launch
-                }
-
-                val device = pairedDevices.first()
-
-                selectedBluetoothDevice = device
-
-                setBluetoothVerifying()
-
-                bluetoothManager.connect(device)
-
-                val info = bluetoothApi.getDeviceInfo()
-
-                connectedDeviceId = info.deviceId
-                pairingToken = info.token
-
-                if (deviceName.isEmpty()) {
-                    deviceName = "SiliGuide Node ${info.deviceId}"
-                }
-
-                Log.d(
-                    "BluetoothSetup",
-                    "Connected successfully!"
-                )
-
-                Log.d(
-                    "BluetoothSetup",
-                    "Device ID: ${info.deviceId}"
-                )
-
-                Log.d(
-                    "BluetoothSetup",
-                    "Pairing Token: ${info.token}"
-                )
-
-                _bluetoothVerified.emit(Unit)
-
-            } catch (e: SecurityException) {
-
-                Log.e(
-                    "BluetoothSetup",
-                    "Missing Bluetooth permission",
-                    e
-                )
-
-                setBluetoothUnsupported(
-                    "Missing Bluetooth permissions. Please grant them in settings."
-                )
-
-            } catch (e: Exception) {
-
-                bluetoothManager.disconnect()
-
-                Log.e(
-                    "BluetoothSetup",
-                    "Bluetooth verification failed",
-                    e
-                )
-
-                setBluetoothUnsupported(
-                    "Unable to communicate with the selected SiliGuide device."
+            setBluetoothVerifying()
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    loadingMessage = "Checking Bluetooth..."
                 )
             }
+
+            withContext(Dispatchers.IO) {
+                try {
+
+                    if (!bluetoothManager.isBluetoothOn()) {
+                        withContext(Dispatchers.Main) {
+                            showValidationDialog(
+                                title = "Bluetooth is Off",
+                                message = "Please turn on Bluetooth in your phone's settings to scan for SiliGuide devices."
+                            )
+                            resetBluetoothSetup()
+                            _iotUiState.update { currentState ->
+                                currentState.copy(
+                                    isLoading = false,
+                                    isBluetoothOn = false
+                                )
+                            }
+                        }
+                        return@withContext
+                    }
+
+                    _iotUiState.update { it.copy(
+                        loadingMessage = "Checking paired devices...",
+                        isBluetoothOn = true
+                        )
+                    }
+
+                    val startTime = System.currentTimeMillis()
+
+                    val pairedDevices = bluetoothDiscoveryManager.getPairedSiliGuideDevices()
+
+                    if (pairedDevices.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            showValidationDialog(
+                                title = "No Device Found",
+                                message = "No paired SiliGuide devices were found. Please tap 'Open Settings' to pair the device first."
+                            )
+                            resetBluetoothSetup()
+                            _iotUiState.update { currentState ->
+                                currentState.copy(
+                                    isLoading = false,
+                                    hasPairedDevices = false
+                                )
+                            }
+                        }
+                        return@withContext
+                    }
+
+                    _iotUiState.update { it.copy(
+                        loadingMessage = "Verifying active devices...",
+                        hasPairedDevices = true
+                        )
+                    }
+
+                    val mapped = pairedDevices.mapNotNull { device ->
+
+                        val isOnline = try {
+                            withTimeoutOrNull(500) {
+                                bluetoothManager.connect(device)
+                                bluetoothApi.ping()
+                            } ?: false
+                        } catch (e: Exception) {
+                            Log.d("BluetoothSetup", "Ping failed for ${device.name}: ${e.message}")
+                            false
+                        } finally {
+                            bluetoothManager.disconnect()
+                        }
+
+                        if (isOnline) {
+                            PairedSiliGuideDevice(
+                                name = device.name ?: "Unknown Device",
+                                deviceId = device.address,
+                                device = device
+                            )
+                        } else {
+                            null
+                        }
+                    }
+
+                    val duration = System.currentTimeMillis() - startTime
+                    Log.d("PerformanceLog", "Getting paired Bluetooth devices took: ${duration}ms")
+
+                    withContext(Dispatchers.Main) {
+                        _pairedDevices.value = mapped
+                        _navigateToDeviceSelection.emit(Unit)
+                    }
+
+                } catch (e: SecurityException) {
+                    Log.e("BluetoothSetup", "Missing Bluetooth permission", e)
+                    withContext(Dispatchers.Main) {
+                        setBluetoothUnsupported("Missing Bluetooth permissions. Please grant them in settings.")
+                    }
+                } catch (e: Exception) {
+                    bluetoothManager.disconnect()
+                    Log.e("BluetoothSetup", "Bluetooth verification failed", e)
+                    withContext(Dispatchers.Main) {
+                        showValidationDialog(
+                            title = "Connection Failed",
+                            message = "Could not reach the SILI-GUIDE sensor over Bluetooth. Ensure it is powered on, in range, and paired correctly."
+                        )
+                        resetBluetoothSetup()
+                    }
+                } finally {
+                    _iotUiState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    fun finalizeBluetoothSetup(customName: String) {
+        viewModelScope.launch {
+            val id = connectedDeviceId ?: return@launch
+            val token = pairingToken ?: ""
+            val userId = authRepository.getUserId() ?: return@launch
+
+            try {
+                isClaiming = true
+
+                // Lock Execution — claim first, over Bluetooth.
+                val claimResult = withContext(Dispatchers.IO) {
+                    bluetoothApi.claimDevice(token)
+                }
+
+                Log.d("IoTViewModel", "Claim status=${claimResult.status}, error=${claimResult.error}")
+
+                if (!claimResult.error.isNullOrBlank()) {
+                    showValidationDialog(
+                        title = "Claim Rejected",
+                        message = claimResult.error ?: "The device rejected the claim request."
+                    )
+                    return@launch   // no save happen, device stay unsaved
+                }
+
+                // Local Commit — only reach here if claim succeed.
+                val newDevice = IoTDevice(
+                    deviceId = id,
+                    userId = userId,
+                    deviceName = customName,
+                    pairingToken = token,
+                    isActive = true,
+                    lastKnownIp = "",
+                    connectionMode = ConnectionMode.BLUETOOTH,
+                    isSynced = false,
+                    dateAdded = System.currentTimeMillis()
+                )
+
+                saveIoTDeviceUseCase(newDevice)
+                bluetoothManager.disconnect()
+                resetBluetoothDeviceState()
+                _setupComplete.emit(Unit)
+
+            } catch (e: Exception) {
+                Log.e("IoTViewModel", "Claim or save failed", e)
+                showValidationDialog(
+                    title = "Save Failed",
+                    message = "Could not claim or save this device. Please try again."
+                )
+                bluetoothManager.disconnect()
+            } finally {
+                isClaiming = false
+            }
+        }
+    }
+
+    fun selectPairedDevice(paired: PairedSiliGuideDevice) {
+        connectToSelectedBluetoothDevice(paired.device)
     }
 
     fun setBluetoothSearching() {
