@@ -43,6 +43,7 @@ import com.example.siliguide.core.permission.PermissionType
 import com.example.siliguide.core.permission.PermissionUtils
 import com.example.siliguide.core.ui.components.LoadingOverlay
 import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,7 +53,8 @@ fun IoTSetupAPModeScreen(
     onSetupComplete: () -> Unit
 ) {
     val viewModel: IoTViewModel = hiltViewModel()
-    val connectionState by viewModel.apConnectionState.collectAsState()
+    val apConnectionState by viewModel.apConnectionState.collectAsState()
+    val connectionState = apConnectionState
 
     val validationDialog = viewModel.validationDialog
 
@@ -109,10 +111,13 @@ fun IoTSetupAPModeScreen(
 
     //val context = LocalContext.current
 
-    val defaultName = "SiliGuide IoT${viewModel.connectedDeviceId ?: ""}"
+    val randomSuffix = remember {
+        val allowedChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        (1..3).map { allowedChars.random() }.joinToString("")
+    }
+    val defaultName = "SiliGuide$randomSuffix".take(DEVICE_NAME_MAX_LENGTH)
     var deviceName by remember { mutableStateOf(defaultName) }
 
-    val apConnectionState by viewModel.apConnectionState.collectAsState()
     val wifiOff = apConnectionState == "WIFI_OFF"
 
     var showWifiModal by remember { mutableStateOf(false) }
@@ -289,13 +294,12 @@ fun IoTSetupAPModeScreen(
         message = "Claiming device..."
     ) {
         Scaffold(
-            modifier = Modifier.safeDrawingPadding(),
-
             topBar = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(White)
+                        .statusBarsPadding()
                 ) {
 
                     Row(
@@ -366,6 +370,7 @@ fun IoTSetupAPModeScreen(
                         .background(White)
                         .border(BorderStroke(1.dp, Border))
                         .navigationBarsPadding()
+                        .imePadding()
                         .padding(horizontal = 20.dp, vertical = 24.dp)
                 ) {
                     Button(
@@ -389,7 +394,11 @@ fun IoTSetupAPModeScreen(
                             contentColor = White
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = !isChecking || currentStep == 2
+                        enabled = !isChecking && when (currentStep) {
+                            1 -> true // On step 1, it's enabled as long as we aren't checking
+                            2 -> deviceName.isNotBlank() // On step 2, name must not be blank
+                            else -> false
+                        }
                     ) {
                         Text(
                             text = when (currentStep) {

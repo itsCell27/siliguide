@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 import com.example.siliguide.presentation.features.iot.IoTViewModel
 
 @Composable
@@ -34,7 +35,7 @@ fun APStep2Content(
     onBack: () -> Unit
 ) {
 
-    val maxChar = 12
+    val maxChar = DEVICE_NAME_MAX_LENGTH
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -161,6 +162,6 @@ fun APStep2Content(
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

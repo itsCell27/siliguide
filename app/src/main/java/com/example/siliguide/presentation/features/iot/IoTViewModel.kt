@@ -50,6 +50,8 @@ data class ValidationDialogState(
     val message: String
 )
 
+const val DEVICE_NAME_MAX_LENGTH = 12
+
 @HiltViewModel
 class IoTViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -359,7 +361,7 @@ class IoTViewModel @Inject constructor(
             val newDevice = IoTDevice(
                 deviceId = id,
                 userId = userId,
-                deviceName = customName,
+                deviceName = customName.trim().take(DEVICE_NAME_MAX_LENGTH),
                 pairingToken = token,
                 isActive = true,
                 lastKnownIp = ip,
@@ -744,7 +746,7 @@ class IoTViewModel @Inject constructor(
                 val newDevice = IoTDevice(
                     deviceId = id,
                     userId = userId,
-                    deviceName = customName,
+                    deviceName = customName.trim().take(DEVICE_NAME_MAX_LENGTH),
                     pairingToken = token,
                     isActive = true,
                     lastKnownIp = "",
