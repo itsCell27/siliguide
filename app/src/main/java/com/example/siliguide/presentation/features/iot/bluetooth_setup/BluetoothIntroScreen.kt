@@ -41,12 +41,21 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.google.accompanist.permissions.isGranted
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionType
 import com.example.siliguide.core.permission.PermissionUtils
 import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.core.ui.theme.Border
+import com.example.siliguide.core.ui.theme.InfoBlue
+import com.example.siliguide.core.ui.theme.White
 import com.example.siliguide.presentation.features.iot.IoTViewModel
 import kotlinx.coroutines.launch
 
@@ -98,73 +107,80 @@ fun BluetoothIntroScreen(
 
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .safeDrawingPadding(),
         topBar = {
             BluetoothSetupTopBar(stepLabel = null, onBack = onBack)
         },
         bottomBar = {
-            WizardBottomActions(
-                primaryLabel = "Continue",
-                onPrimaryClick = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(White)
+                    .border(BorderStroke(1.dp, Border))
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 24.dp)
+            ) {
+                WizardBottomActions(
+                    primaryLabel = "Continue",
+                    onPrimaryClick = {
 
-                    scope.launch {
+                        scope.launch {
 
-                        val connectPermission =
-                            viewModel.permissionManager.getPermissionStatus(
-                                context = context,
-                                permission = Manifest.permission.BLUETOOTH_CONNECT,
-                                type = PermissionType.BLUETOOTH
-                            )
-
-                        val scanPermission =
-                            viewModel.permissionManager.getPermissionStatus(
-                                context = context,
-                                permission = Manifest.permission.BLUETOOTH_SCAN,
-                                type = PermissionType.BLUETOOTH
-                            )
-
-                        when {
-
-                            connectPermission == PermissionStatus.Granted &&
-                                    scanPermission == PermissionStatus.Granted -> {
-
-                                onContinue()
-                            }
-
-                            connectPermission == PermissionStatus.ShowRationale ||
-                                    scanPermission == PermissionStatus.ShowRationale -> {
-
-                                showRationaleDialog = true
-                            }
-
-                            connectPermission == PermissionStatus.PermanentlyDenied ||
-                                    scanPermission == PermissionStatus.PermanentlyDenied -> {
-
-                                showSettingsDialog = true
-                            }
-
-                            else -> {
-
-                                viewModel.permissionManager.markRequested(
-                                    PermissionType.BLUETOOTH
+                            val connectPermission =
+                                viewModel.permissionManager.getPermissionStatus(
+                                    context = context,
+                                    permission = Manifest.permission.BLUETOOTH_CONNECT,
+                                    type = PermissionType.BLUETOOTH
                                 )
 
-                                bluetoothPermissionLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.BLUETOOTH_CONNECT,
-                                        Manifest.permission.BLUETOOTH_SCAN
+                            val scanPermission =
+                                viewModel.permissionManager.getPermissionStatus(
+                                    context = context,
+                                    permission = Manifest.permission.BLUETOOTH_SCAN,
+                                    type = PermissionType.BLUETOOTH
+                                )
+
+                            when {
+
+                                connectPermission == PermissionStatus.Granted &&
+                                        scanPermission == PermissionStatus.Granted -> {
+
+                                    onContinue()
+                                }
+
+                                connectPermission == PermissionStatus.ShowRationale ||
+                                        scanPermission == PermissionStatus.ShowRationale -> {
+
+                                    showRationaleDialog = true
+                                }
+
+                                connectPermission == PermissionStatus.PermanentlyDenied ||
+                                        scanPermission == PermissionStatus.PermanentlyDenied -> {
+
+                                    showSettingsDialog = true
+                                }
+
+                                else -> {
+
+                                    viewModel.permissionManager.markRequested(
+                                        PermissionType.BLUETOOTH
                                     )
-                                )
+
+                                    bluetoothPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.BLUETOOTH_CONNECT,
+                                            Manifest.permission.BLUETOOTH_SCAN
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
-                },
-                secondaryLabel = "Back",
-                onSecondaryClick = onBack,
-                modifier = Modifier
-                    .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-            )
+                )
+            }
+
         }
     ) { innerPadding ->
         Column(
@@ -178,7 +194,7 @@ fun BluetoothIntroScreen(
             ProgressHeader(progress = INTRO_PROGRESS)
 
             CircularIconBadge(
-                background = InfoBg,
+                background = InfoBlue,
                 borderColor = InfoBorder,
                 iconTint = Info,
                 icon = Icons.Default.Bluetooth,
@@ -197,7 +213,7 @@ fun BluetoothIntroScreen(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Use Bluetooth Classic to communicate directly with your SiliGuide IoT device.",
+                    text = "Use Bluetooth to communicate directly with your SiliGuide IoT device.",
                     style = MaterialTheme.typography.bodySmall,
                     color = GrayMedium,
                     textAlign = TextAlign.Center,
@@ -251,7 +267,7 @@ fun BluetoothIntroScreen(
             title = "Bluetooth Permission Disabled",
 
             message =
-                "Bluetooth permission has been permanently denied. Please enable it in Settings to continue.",
+                "Bluetooth permission has been permanently denied. Tap \"Open Settings,\" then go to Permissions → Nearby devices and select Allow to continue.",
 
             confirmText = "Open Settings",
 

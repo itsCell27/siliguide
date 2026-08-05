@@ -32,9 +32,10 @@ val WarningBg = Color(0xFFFAEEDA)
 val WarningBorder = Color(0xFFE9C589)
 
 // Status - Info (Blue)
-val Info = Color(0xFF1F4A6E)
+val Info = Color(0xff2f6fed)
 val InfoBg = Color(0xFFE6F0F7)
-val InfoBorder = Color(0xFFB4D0E2)
+val InfoBorder = Color(0xffbfd6fb)
+val InfoBlue = Color(0xffeaf1fe)
 
 // Status - Success (Green)
 val Success = Color(0xFF3B6D11)

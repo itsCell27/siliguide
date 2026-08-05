@@ -1,6 +1,8 @@
 package com.example.siliguide.presentation.navigation
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -47,6 +49,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.compose.navigation
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionUtils
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothSelectionScreen
 
 @Composable
 fun SiliGuideNavGraph(
@@ -195,39 +198,59 @@ fun SiliGuideNavGraph(
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
-                val bluetoothUiState by viewModel.bluetoothSetupState.collectAsState()
-
                 LaunchedEffect(Unit) {
-                    viewModel.bluetoothVerified.collect {
-                        navController.navigate(
-                            Screen.BluetoothDeviceDetailsScreen.route
-                        )
+                    viewModel.navigateToDeviceSelection.collect {
+                        navController.navigate(Screen.BluetoothSelectionScreen.route)
                     }
                 }
 
                 BluetoothConnectionScreen(
-                    uiState = bluetoothUiState,
-
-                    onOpenBluetoothSettings = {
-
-                        val intent = android.content.Intent(
-                            android.provider.Settings.ACTION_BLUETOOTH_SETTINGS
-                        )
-
-                        navController.context.startActivity(intent)
-                    },
-
-                    onVerifyDevices = {
-                        viewModel.verifyPairedBluetoothDevices()
-                    },
-
-                    onRetry = {
-                        viewModel.resetBluetoothSetup()
-                    },
-
+                    viewModel = viewModel,
                     onBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+
+            composable(Screen.BluetoothSelectionScreen.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.BluetoothSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val context = LocalContext.current
+                val pairedDevices by viewModel.pairedDevices.collectAsState()
+                val uiState by viewModel.iotUiState.collectAsState()
+
+                val bluetoothSettingsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    // This callback runs ONLY when the user closes/returns from the Bluetooth settings screen
+                    viewModel.verifyPairedBluetoothDevices()
+                }
+
+                LaunchedEffect(Unit) {                              // NEW
+                    viewModel.bluetoothVerified.collect {
+                        navController.navigate(Screen.BluetoothDeviceDetailsScreen.route)
+                    }
+                }
+
+                BluetoothSelectionScreen(
+                    viewModel = viewModel,
+                    devices = pairedDevices,
+                    onDeviceSelected = { pairedDevice ->
+                        viewModel.selectPairedDevice(pairedDevice)
+                    },
+                    onOpenBluetoothSettings = {
+                        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                        bluetoothSettingsLauncher.launch(intent)
+                    },
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                    isLoading = uiState.isLoading,
+                    message = uiState.loadingMessage
                 )
             }
 
@@ -249,6 +272,7 @@ fun SiliGuideNavGraph(
                 }
 
                 BluetoothDeviceDetailsScreen(
+                    viewModel = viewModel,
 
                     deviceName = viewModel.deviceName,
                     onDeviceNameChanged = viewModel::updateDeviceName,
@@ -258,10 +282,7 @@ fun SiliGuideNavGraph(
                     onPlantSelected = {},
 
                     onSave = {
-                        viewModel.finalizeSetup(
-                            customName = viewModel.deviceName,
-                            connectionMode = ConnectionMode.BLUETOOTH
-                        )
+                        viewModel.finalizeBluetoothSetup(customName = viewModel.deviceName)
                     },
 
                     onBack = {
@@ -384,6 +405,7 @@ fun SiliGuideNavGraph(
             }
 
             PreAnalysisScreen(
+                viewModel = viewModel,
 
                 state = state,
 

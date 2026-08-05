@@ -64,6 +64,7 @@ sealed class Screen(val route: String) {
 
     object IoTSetupBluetooth : Screen("iot_setup_bluetooth")
     object BluetoothConnectionScreen : Screen("bluetooth_connection")
+    object BluetoothSelectionScreen : Screen("bluetooth_selection")
     object BluetoothDeviceDetailsScreen : Screen("bluetooth_device_details")
     object BluetoothSetupGraph : Screen("bluetooth_setup_graph")
 

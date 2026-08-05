@@ -1,17 +1,26 @@
 package com.example.siliguide.presentation.features.iot.bluetooth_setup
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -21,9 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.siliguide.core.ui.theme.Border
 import com.example.siliguide.core.ui.theme.GreenPrimary
 import com.example.siliguide.core.ui.theme.SiliGuideTheme
 import com.example.siliguide.core.ui.theme.White
+import com.example.siliguide.presentation.features.iot.IoTViewModel
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.BluetoothModeBadge
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.BluetoothSetupTopBar
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.CircularIconBadge
@@ -41,6 +53,7 @@ private const val STEP_2_PROGRESS = 1f
  */
 @Composable
 fun BluetoothDeviceDetailsScreen(
+    viewModel: IoTViewModel,
     deviceName: String,
     onDeviceNameChanged: (String) -> Unit,
     availablePlants: List<String>,
@@ -50,23 +63,41 @@ fun BluetoothDeviceDetailsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val validationDialog = viewModel.validationDialog
+
+    if (validationDialog != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissValidationDialog() },
+            title = { Text(validationDialog.title) },
+            text = { Text(validationDialog.message) },
+            confirmButton = {
+                Button(onClick = { viewModel.dismissValidationDialog() }) { Text("OK") }
+            }
+        )
+    }
+
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .safeDrawingPadding(),
         topBar = {
             BluetoothSetupTopBar(stepLabel = "Step 2 of 2", onBack = onBack)
         },
         bottomBar = {
-            WizardBottomActions(
-                primaryLabel = "Save Device",
-                onPrimaryClick = onSave,
-                primaryEnabled = deviceName.isNotBlank(),
-                secondaryLabel = "Back",
-                onSecondaryClick = onBack,
-                secondaryIsLink = false,
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-            )
+            Box(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .background(White)
+                    .border(BorderStroke(1.dp, Border))
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 24.dp)
+            ) {
+                WizardBottomActions(
+                    primaryLabel = "Save Device",
+                    onPrimaryClick = onSave,
+                    primaryEnabled = deviceName.isNotBlank() && !viewModel.isClaiming
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -140,7 +171,8 @@ private fun BluetoothDeviceDetailsScreenPreview() {
             selectedPlant = null,
             onPlantSelected = {},
             onSave = {},
-            onBack = {}
+            onBack = {},
+            viewModel = viewModel()
         )
     }
 }

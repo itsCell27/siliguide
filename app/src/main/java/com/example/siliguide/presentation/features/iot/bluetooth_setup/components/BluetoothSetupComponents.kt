@@ -51,26 +51,32 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.Border
 import com.example.siliguide.core.ui.theme.DangerBg
 import com.example.siliguide.core.ui.theme.DangerBorder
+import com.example.siliguide.core.ui.theme.GrayBody
 import com.example.siliguide.core.ui.theme.GrayHint
 import com.example.siliguide.core.ui.theme.GrayMedium
 import com.example.siliguide.core.ui.theme.GreenBgLight
 import com.example.siliguide.core.ui.theme.GreenPrimary
 import com.example.siliguide.core.ui.theme.Info
 import com.example.siliguide.core.ui.theme.InfoBg
+import com.example.siliguide.core.ui.theme.InfoBlue
 import com.example.siliguide.core.ui.theme.InfoBorder
 import com.example.siliguide.core.ui.theme.OffWhite
 import com.example.siliguide.core.ui.theme.White
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.state.VerificationStage
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.state.VerificationStageStatus
 
-private const val DEVICE_NAME_MAX_LENGTH = 30
+private const val DEVICE_NAME_MAX_LENGTH = 12
 private val CardCornerRadius = 14.dp
 private val CardBorderWidth = 1.dp
 private val IconBadgeSize = 76.dp
@@ -87,18 +93,31 @@ fun BluetoothSetupTopBar(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = GrayMedium
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(OffWhite)
+                    .border(1.dp, Border, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.chevron_left),
+                    contentDescription = "Back",
+                    tint = GrayBody,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
         Text(
             text = "Bluetooth Setup",
             style = MaterialTheme.typography.titleSmall,
@@ -137,7 +156,12 @@ fun BluetoothIllustrationCard(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(InfoBg, RoundedCornerShape(CardCornerRadius))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(InfoBlue, White)
+                ),
+                RoundedCornerShape(CardCornerRadius)
+            )
             .border(CardBorderWidth, InfoBorder, RoundedCornerShape(CardCornerRadius))
             .padding(vertical = 18.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -270,7 +294,7 @@ fun OpenBluetoothSettingsCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
@@ -293,7 +317,7 @@ fun OpenBluetoothSettingsCard(
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = "Pair your SiliGuide device",
+                    text = "Pair your SiliGuide device, then come back",
                     style = MaterialTheme.typography.bodySmall,
                     color = GrayMedium
                 )
