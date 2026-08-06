@@ -21,7 +21,7 @@ import com.example.siliguide.data.local.SiliGuideDatabase
 import com.example.siliguide.data.remote.iot.Esp32Api
 import com.example.siliguide.data.remote.iot.WifiProvisioningManager
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
-import com.example.siliguide.data.remote.iot.dto.toDomain
+import com.example.siliguide.data.local.mapper.toDomain
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.IoTRepository

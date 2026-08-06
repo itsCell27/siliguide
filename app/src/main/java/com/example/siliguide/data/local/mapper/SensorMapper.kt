@@ -1,5 +1,6 @@
-package com.example.siliguide.data.remote.iot.dto
+package com.example.siliguide.data.local.mapper
 
+import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
 import com.example.siliguide.domain.model.EnvironmentData
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.model.SoilData
