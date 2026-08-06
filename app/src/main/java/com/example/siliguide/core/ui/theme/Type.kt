@@ -53,6 +53,71 @@ val NavLabelActiveStyle = TextStyle(
     fontSize = 10.sp,
     letterSpacing = 0.sp
 )
+
+// ── Setup wizard text styles ───────────────────────────────────────────────
+
+/** Wizard step heading — 17sp Fraunces */
+val WizardTitleStyle = TextStyle(
+    fontFamily = Fraunces,
+    fontWeight = FontWeight.Bold,
+    fontSize = 17.sp,
+    letterSpacing = (-0.3).sp
+)
+
+/** Wizard success heading — 15sp Fraunces */
+val WizardSuccessTitleStyle = TextStyle(
+    fontFamily = Fraunces,
+    fontWeight = FontWeight.Bold,
+    fontSize = 15.sp,
+    letterSpacing = (-0.3).sp
+)
+
+/** Wizard body copy — 12sp, 1.5 line height */
+val WizardBodyStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 12.sp,
+    lineHeight = 18.sp
+)
+
+/** Wizard body copy, medium weight — 12sp */
+val WizardBodyMediumStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 12.sp,
+    lineHeight = 18.sp
+)
+
+/** Wizard list / caption copy — 11sp, 1.5 line height */
+val WizardCaptionStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 11.sp,
+    lineHeight = 16.5.sp
+)
+
+/** Wizard sub-caption — 10sp */
+val WizardSubCaptionStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 10.sp
+)
+
+/** Wizard uppercase micro label — 10sp */
+val WizardMicroLabelStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 10.sp,
+    letterSpacing = 0.4.sp
+)
+
+/** Wizard inline monospace chip — SSID / device id */
+val WizardMonoStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Normal,
+    fontSize = 10.sp
+)
+
 val Typography = Typography(
 
     // Large headings - Fraunces serif
