@@ -49,3 +49,15 @@ val PageFrameBg = Color(0xFFF7F7F5)
 val LeafBgDark = Color(0xFF1F3909)
 val LeafBgMedium = Color(0xFF2A3D10)
 val LeafBgYellow = Color(0xFF3A4408)
+
+// ── Setup wizard status tokens (IoT provisioning flows) ────────────────────
+
+// Wizard - Warning (amber, softer than global Warning)
+val WizardWarningBg = Color(0xFFFEF5E7)
+val WizardWarningBorder = Color(0xFFF5CBA7)
+val WizardWarningText = Color(0xFF784212)
+
+// Wizard - Error (red, softer than global Danger)
+val WizardErrorBg = Color(0xFFFCEBEB)
+val WizardErrorBorder = Color(0xFFF7C1C1)
+val WizardErrorText = Color(0xFFA32D2D)
