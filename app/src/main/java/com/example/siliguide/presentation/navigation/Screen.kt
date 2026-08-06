@@ -69,6 +69,12 @@ sealed class Screen(val route: String) {
     object BluetoothSetupGraph : Screen("bluetooth_setup_graph")
 
     object IoTSetupAP : Screen("iot_setup_ap")
-    object IoTSetupLAN : Screen("iot_setup_lan")
     object QrScanner : Screen("qr_scanner")
+
+
+    // --- LAN SETUP WIZARD ---
+    object IoTSetupLAN : Screen("iot_setup_lan")
+    object LanSetupGraph : Screen("lan_setup_graph")
+    object LanLocationPermission : Screen("lan_location_permission")
+    object LanWifiSelection : Screen("lan_wifi_selection")
 }

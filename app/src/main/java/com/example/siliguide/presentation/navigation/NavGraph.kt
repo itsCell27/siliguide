@@ -5,9 +5,6 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +47,12 @@ import androidx.navigation.compose.navigation
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionUtils
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothSelectionScreen
+
+import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.presentation.features.iot.lan_setup.LanLocationPermissionScreen
+import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
+import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiSelectionScreen
+import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
 
 @Composable
 fun SiliGuideNavGraph(
@@ -303,14 +306,208 @@ fun SiliGuideNavGraph(
             )
         }
 
+
+        /**
+         * LAN Setup — nested graph so every step shares one IoTViewModel
+         */
+        navigation(
+            route = Screen.LanSetupGraph.route,
+            startDestination = Screen.LanLocationPermission.route
+        ) {
+
+            // ── Step 1 of 4 — Location Permission ──────────────────────
+            composable(Screen.LanLocationPermission.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                // Activity context — PermissionManager needs it to separate a
+                // rationale from a permanent denial
+                val context = LocalContext.current
+
+                val permissionState by viewModel.lanPermissionState.collectAsState()
+
+                // OS permission prompt
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions()
+                ) { grants ->
+                    viewModel.onLanPermissionResult(
+                        context = context,
+                        granted = grants.values.all { it }
+                    )
+                }
+
+                // Returning from Location / WiFi settings — re-run the gate
+                val settingsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    viewModel.continueFromLanPermission(context)
+                }
+
+                // Step 1 → Step 2
+                LaunchedEffect(Unit) {
+                    viewModel.lanPreflightPassed.collect {
+
+                        // Guard against a double navigate when ON_RESUME and
+                        // the settings launcher both fire
+                        if (navController.currentDestination?.route ==
+                            Screen.LanLocationPermission.route
+                        ) {
+                            navController.navigate(Screen.LanWifiSelection.route)
+                        }
+                    }
+                }
+
+                // A missing permission needs the OS prompt, not a dialog
+                val blocker = viewModel.lanBlocker
+
+                LaunchedEffect(blocker) {
+                    if (blocker?.action == LanPreflightAction.REQUEST_PERMISSION) {
+                        viewModel.dismissLanBlocker()
+                        viewModel.markLanPermissionRequested()
+                        permissionLauncher.launch(viewModel.lanPermissionArray)
+                    }
+                }
+
+                // Keep the artwork honest across app switches
+                val lifecycleOwner = LocalLifecycleOwner.current
+
+                DisposableEffect(lifecycleOwner) {
+
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            viewModel.refreshLanPermissionState(context)
+                        }
+                    }
+
+                    lifecycleOwner.lifecycle.addObserver(observer)
+
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
+                LanLocationPermissionScreen(
+                    state = permissionState,
+
+                    onBack = {
+                        viewModel.resetLanSetup()
+                        navController.popBackStack()
+                    },
+
+                    onGrantPermission = {
+                        viewModel.continueFromLanPermission(context)
+                    },
+
+                    // Same gate — permissions are already in, so this falls
+                    // through to the Location service and Wi-Fi checks
+                    onContinue = {
+                        viewModel.continueFromLanPermission(context)
+                    },
+
+                    onWhyNeeded = {
+                        viewModel.showLanPermissionRationale()
+                    },
+
+                    onOpenAppSettings = {
+                        PermissionUtils.openAppSettings(context)
+                    }
+                )
+
+                // Blockers: Location off, WiFi off, permanently denied
+                if (blocker != null &&
+                    blocker.action != LanPreflightAction.REQUEST_PERMISSION
+                ) {
+                    PermissionDialog(
+                        title = blocker.title,
+                        message = blocker.message,
+
+                        confirmText = when (blocker.action) {
+                            LanPreflightAction.OPEN_LOCATION_SETTINGS -> "Open Location Settings"
+                            LanPreflightAction.OPEN_WIFI_SETTINGS -> "Open WiFi Settings"
+                            LanPreflightAction.OPEN_APP_SETTINGS -> "Open App Settings"
+                            else -> "OK"
+                        },
+
+                        dismissText = "Cancel",
+
+                        onConfirm = {
+                            val action = blocker.action
+
+                            viewModel.dismissLanBlocker()
+
+                            when (action) {
+
+                                LanPreflightAction.OPEN_LOCATION_SETTINGS ->
+                                    settingsLauncher.launch(
+                                        Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                                    )
+
+                                LanPreflightAction.OPEN_WIFI_SETTINGS ->
+                                    settingsLauncher.launch(
+                                        Intent(Settings.ACTION_WIFI_SETTINGS)
+                                    )
+
+                                LanPreflightAction.OPEN_APP_SETTINGS ->
+                                    PermissionUtils.openAppSettings(context)
+
+                                else -> Unit
+                            }
+                        },
+
+                        onDismiss = { viewModel.dismissLanBlocker() }
+                    )
+                }
+
+                // Rationale dialog from "Why is this needed?"
+                viewModel.validationDialog?.let { dialog ->
+                    PermissionDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = "OK",
+                        dismissText = "Close",
+                        onConfirm = { viewModel.dismissValidationDialog() },
+                        onDismiss = { viewModel.dismissValidationDialog() }
+                    )
+                }
+            }
+            // ── Step 2 of 4 — Connect to Home Wi-Fi ────────────────────
+            composable(Screen.LanWifiSelection.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                // TODO: wire scan results, selection and password into IoTViewModel
+                LanWifiSelectionScreen(
+                    state = LanWifiUiState.Scanning,
+                    onBack = { navController.popBackStack() },
+                    onRefresh = {},
+                    onSelectNetwork = {},
+                    onPasswordChange = {},
+                    onTogglePasswordVisibility = {},
+                    onContinue = {}
+                )
+            }
+        }
+
+        // Old entry point kept so existing callers keep working
         composable(Screen.IoTSetupLAN.route) {
-            // TODO: Replace this with your actual LAN Setup Screen Composable
-            Column() {
-                Button(onClick = { navController.popBackStack() }) {
-                    Text("Coming Soon, Go Back")
+            LaunchedEffect(Unit) {
+                navController.navigate(Screen.LanSetupGraph.route) {
+                    popUpTo(Screen.IoTSetupLAN.route) { inclusive = true }
                 }
             }
         }
+        /**
+         * LAN Setup End
+         */
+
 
         composable(Screen.QrScanner.route) {
             QrScannerScreen(

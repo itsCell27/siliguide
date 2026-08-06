@@ -40,10 +40,19 @@ import com.example.siliguide.data.remote.iot.BluetoothApi
 import com.example.siliguide.data.remote.iot.BluetoothDiscoveryManager
 import com.example.siliguide.data.remote.iot.BluetoothManager
 import com.example.siliguide.domain.usecase.ClaimIoTDeviceUseCase
-import com.example.siliguide.presentation.features.analysis.AnalysisUiState
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.PairedSiliGuideDevice
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeoutOrNull
+
+import android.Manifest
+import android.os.Build
+import com.example.siliguide.core.permission.DeviceSettingsChecker
+import com.example.siliguide.core.permission.PermissionRequest
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.presentation.features.iot.lan_setup.LanPermissionUiState
+import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
+import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightResult
 
 data class ValidationDialogState(
     val title: String,
@@ -68,6 +77,7 @@ class IoTViewModel @Inject constructor(
     private val bluetoothApi: BluetoothApi,
     @param:ApplicationContext private val context: Context,
 
+    private val deviceSettingsChecker: DeviceSettingsChecker,
     val permissionManager: PermissionManager
 ) : ViewModel() {
 
@@ -794,5 +804,299 @@ class IoTViewModel @Inject constructor(
         _bluetoothSetupState.value = BluetoothConnectionUiState.Waiting
         error = null
     }
+
+
+    // =========================================================================
+    // LAN SETUP FUNCTIONS
+    // =========================================================================
+
+    /** Drives Step 1 of 4 — Location Permission. */
+    private val _lanPermissionState =
+        MutableStateFlow<LanPermissionUiState>(LanPermissionUiState.Requesting)
+
+    val lanPermissionState: StateFlow<LanPermissionUiState> =
+        _lanPermissionState.asStateFlow()
+
+    /**
+     * Emitted when permission, Location service and Wi-Fi are all ready.
+     *
+     * extraBufferCapacity keeps the event alive across the brief window where
+     * the screen is resuming and the collector has not re-attached yet.
+     */
+    private val _lanPreflightPassed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanPreflightPassed: SharedFlow<Unit> = _lanPreflightPassed.asSharedFlow()
+
+    /** Whatever is currently blocking Step 1, or null when nothing is. */
+    var lanBlocker by mutableStateOf<LanPreflightResult.Blocked?>(null)
+        private set
+
+    fun dismissLanBlocker() {
+        lanBlocker = null
+    }
+
+    /**
+     * Runtime permissions needed to scan for Wi-Fi networks.
+     *
+     * Android 13+ adds NEARBY_WIFI_DEVICES. It is a SEPARATE grant from
+     * ACCESS_FINE_LOCATION with its own system prompt and its own App Settings
+     * toggle, so both have to be tracked individually.
+     */
+    val lanPermissionRequests: List<PermissionRequest>
+        get() = buildList {
+
+            add(
+                PermissionRequest(
+                    permission = Manifest.permission.ACCESS_FINE_LOCATION,
+                    type = PermissionType.LOCATION
+                )
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(
+                    PermissionRequest(
+                        permission = Manifest.permission.NEARBY_WIFI_DEVICES,
+                        type = PermissionType.NEARBY_WIFI
+                    )
+                )
+            }
+        }
+
+    /** Same list, shaped for RequestMultiplePermissions. */
+    val lanPermissionArray: Array<String>
+        get() = lanPermissionRequests
+            .map { it.permission }
+            .toTypedArray()
+
+    /** Status of every LAN permission, keyed by permission string. */
+    private suspend fun lanPermissionStatuses(
+        context: Context
+    ): Map<String, PermissionStatus> =
+        lanPermissionRequests.associate { request ->
+            request.permission to permissionManager.getPermissionStatus(
+                context = context,
+                permission = request.permission,
+                type = request.type
+            )
+        }
+
+    /**
+     * Turns per-permission statuses into the Step 1 artwork state.
+     *
+     * Granted when nothing is missing. Denied only when something is
+     * permanently denied — if a missing permission can still be prompted, the
+     * screen stays in Requesting so the user is not sent to App Settings for
+     * no reason.
+     */
+    private fun toLanPermissionUiState(
+        statuses: Map<String, PermissionStatus>
+    ): LanPermissionUiState {
+
+        val missing = statuses.filterValues { it !is PermissionStatus.Granted }
+
+        if (missing.isEmpty()) {
+            return LanPermissionUiState.Granted
+        }
+
+        val anyPermanentlyDenied =
+            missing.values.any { it is PermissionStatus.PermanentlyDenied }
+
+        if (!anyPermanentlyDenied) {
+            return LanPermissionUiState.Requesting
+        }
+
+        return LanPermissionUiState.Denied(
+            missingLocation =
+                missing.containsKey(Manifest.permission.ACCESS_FINE_LOCATION),
+
+            missingNearbyDevices =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        missing.containsKey(Manifest.permission.NEARBY_WIFI_DEVICES),
+
+            canRetryPrompt = missing.values.any {
+                it is PermissionStatus.RequestPermission ||
+                        it is PermissionStatus.ShowRationale
+            }
+        )
+    }
+
+    /** Human-readable list of what is still missing, for dialog copy. */
+    private fun missingLanPermissionLabels(
+        statuses: Map<String, PermissionStatus>
+    ): String {
+
+        val labels = buildList {
+
+            if (statuses[Manifest.permission.ACCESS_FINE_LOCATION]
+                        !is PermissionStatus.Granted
+            ) {
+                add("Location")
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                statuses[Manifest.permission.NEARBY_WIFI_DEVICES]
+                        !is PermissionStatus.Granted
+            ) {
+                add("Nearby devices")
+            }
+        }
+
+        return labels.joinToString(" and ")
+    }
+
+    /**
+     * Single gate for Step 1 → Step 2.
+     *
+     * Checked in the order the user can act on them: permissions first, then
+     * the Location service, then the Wi-Fi radio.
+     *
+     * [context] must be the Activity context, since PermissionManager needs it
+     * to tell a rationale apart from a permanent denial.
+     */
+    private suspend fun evaluateLanPreflight(
+        context: Context
+    ): LanPreflightResult {
+
+        // ---- 1. Location / nearby-devices permissions ---------------------
+        val statuses = lanPermissionStatuses(context)
+
+        _lanPermissionState.value = toLanPermissionUiState(statuses)
+
+        val missing = statuses.filterValues { it !is PermissionStatus.Granted }
+
+        if (missing.isNotEmpty()) {
+
+            val labels = missingLanPermissionLabels(statuses)
+
+            val canPrompt = missing.values.any {
+                it is PermissionStatus.RequestPermission ||
+                        it is PermissionStatus.ShowRationale
+            }
+
+            return if (canPrompt) {
+                LanPreflightResult.Blocked(
+                    title = "$labels Access Required",
+                    message = "SiliGuide needs $labels access to scan for nearby WiFi " +
+                            "networks and find your IoT device. It is never stored or shared.",
+                    action = LanPreflightAction.REQUEST_PERMISSION
+                )
+            } else {
+                LanPreflightResult.Blocked(
+                    title = "$labels Access Required",
+                    message = "Please open App Settings, go to Permissions, and allow " +
+                            "$labels so SiliGuide can scan for WiFi networks.",
+                    action = LanPreflightAction.OPEN_APP_SETTINGS
+                )
+            }
+        }
+
+        // ---- 2. Location service -----------------------------------------
+        if (!deviceSettingsChecker.isLocationServiceEnabled()) {
+
+            return LanPreflightResult.Blocked(
+                title = "Location is Off",
+                message = "Please turn on Location in your phone's settings. Android will " +
+                        "not return WiFi scan results while Location is off.",
+                action = LanPreflightAction.OPEN_LOCATION_SETTINGS
+            )
+        }
+
+        // ---- 3. Wi-Fi radio ----------------------------------------------
+        if (!deviceSettingsChecker.isWifiEnabled()) {
+
+            return LanPreflightResult.Blocked(
+                title = "WiFi is Off",
+                message = "Please turn on WiFi so SiliGuide can scan for the network your " +
+                        "IoT device will join.",
+                action = LanPreflightAction.OPEN_WIFI_SETTINGS
+            )
+        }
+
+        return LanPreflightResult.Ready
+    }
+
+    /**
+     * Runs the gate and records the outcome.
+     *
+     * Backs both the Grant Permission and the Continue button — the gate is
+     * the same either way, only the artwork differs.
+     *
+     * On success emits [lanPreflightPassed]. On failure writes [lanBlocker] —
+     * every blocker, including the permission one, so the UI always has the
+     * matching action to take.
+     */
+    fun continueFromLanPermission(context: Context) {
+        viewModelScope.launch {
+
+            when (val result = evaluateLanPreflight(context)) {
+
+                LanPreflightResult.Ready -> {
+                    error = null
+                    lanBlocker = null
+                    _lanPreflightPassed.emit(Unit)
+                }
+
+                is LanPreflightResult.Blocked -> {
+                    error = result.message
+                    lanBlocker = result
+                }
+            }
+        }
+    }
+
+    /** Persist that the OS prompt was shown, before launching it. */
+    fun markLanPermissionRequested() {
+        viewModelScope.launch {
+            permissionManager.markRequested(lanPermissionRequests)
+        }
+    }
+
+    /** Result of the OS permission prompt. */
+    fun onLanPermissionResult(
+        context: Context,
+        granted: Boolean
+    ) {
+        lanBlocker = null
+
+        if (granted) {
+            error = null
+            // Re-run the gate — Location service and Wi-Fi still unchecked
+            continueFromLanPermission(context)
+        } else {
+            error = "Permission was denied."
+            refreshLanPermissionState(context)
+        }
+    }
+
+    /**
+     * Refresh only the Requesting / Granted / Denied artwork on ON_RESUME.
+     *
+     * Deliberately does NOT emit navigation or raise a blocker — otherwise it
+     * races the settings launcher callback and can navigate twice.
+     */
+    fun refreshLanPermissionState(context: Context) {
+        viewModelScope.launch {
+            _lanPermissionState.value =
+                toLanPermissionUiState(lanPermissionStatuses(context))
+        }
+    }
+
+    /** Rationale shown by the "Why is this needed?" link on Step 1. */
+    fun showLanPermissionRationale() {
+        showValidationDialog(
+            title = "Why These Permissions",
+            message = "Android ties WiFi scanning to location access, and on Android 13 and " +
+                    "newer it also requires Nearby devices access. Without both, the system " +
+                    "returns an empty network list, so SiliGuide cannot show the WiFi network " +
+                    "your IoT device should join. SiliGuide never stores or shares your location."
+        )
+    }
+
+    fun resetLanSetup() {
+        _lanPermissionState.value = LanPermissionUiState.Requesting
+        lanBlocker = null
+        error = null
+        validationDialog = null
+    }
+
 
 }
