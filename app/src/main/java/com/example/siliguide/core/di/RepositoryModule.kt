@@ -4,10 +4,12 @@ import com.example.siliguide.data.repository.AnalysisRepositoryImpl
 import com.example.siliguide.data.repository.AuthRepositoryImpl
 import com.example.siliguide.data.repository.IoTRepositoryImpl
 import com.example.siliguide.data.repository.PlantRepositoryImpl
+import com.example.siliguide.data.repository.WifiScannerImpl
 import com.example.siliguide.domain.repository.AnalysisRepository
 import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.repository.IoTRepository
 import com.example.siliguide.domain.repository.PlantRepository
+import com.example.siliguide.domain.repository.WifiScanRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -38,4 +40,10 @@ abstract class RepositoryModule {
     abstract fun bindIoTRepository(
         ioTRepositoryImpl: IoTRepositoryImpl
     ): IoTRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindWifiScanRepository(
+       impl: WifiScannerImpl
+    ): WifiScanRepository
 }

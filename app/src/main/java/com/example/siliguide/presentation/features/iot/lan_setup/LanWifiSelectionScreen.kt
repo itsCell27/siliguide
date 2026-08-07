@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,14 +21,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.core.ui.theme.Black
 import com.example.siliguide.core.ui.theme.Border
+import com.example.siliguide.core.ui.theme.DMSans
 import com.example.siliguide.core.ui.theme.GrayBody
+import com.example.siliguide.core.ui.theme.GrayHint
 import com.example.siliguide.core.ui.theme.GrayMedium
 import com.example.siliguide.core.ui.theme.GreenBgLight
 import com.example.siliguide.core.ui.theme.GreenDark
@@ -34,6 +44,8 @@ import com.example.siliguide.core.ui.theme.GreenPrimary
 import com.example.siliguide.core.ui.theme.OffWhite
 import com.example.siliguide.core.ui.theme.SiliGuideTheme
 import com.example.siliguide.core.ui.theme.White
+import com.example.siliguide.domain.model.WifiNetwork
+import com.example.siliguide.domain.model.WifiSignal
 import com.example.siliguide.presentation.features.iot.lan_setup.components.CheckCircleIcon
 import com.example.siliguide.presentation.features.iot.lan_setup.components.EyeIcon
 import com.example.siliguide.presentation.features.iot.lan_setup.components.LanWizardScaffold
@@ -45,16 +57,6 @@ import com.example.siliguide.presentation.features.iot.lan_setup.components.Wiza
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WizardUppercaseLabel
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WizardWaitingButton
 
-/** Rough signal bucket reported by the scan. */
-enum class WifiSignal { STRONG, MEDIUM, WEAK }
-
-/** One scanned access point. */
-data class WifiNetwork(
-    val ssid: String,
-    val security: String? = "WPA2",
-    val signal: WifiSignal = WifiSignal.STRONG
-)
-
 /**
  * Step 2 of 4 — Connect to Home Wi-Fi.
  *
@@ -62,11 +64,19 @@ data class WifiNetwork(
  * Bluetooth) later deliver these same credentials to the ESP32.
  */
 sealed interface LanWifiUiState {
+
     /** Scan in flight. */
     data object Scanning : LanWifiUiState
 
     /** Scan returned nothing. */
     data object Empty : LanWifiUiState
+
+    /**
+     * Scanning is impossible right now — permission revoked, Location off, or
+     * Wi-Fi off. The matching dialog is raised separately; this is the copy
+     * shown inside the card so the screen never looks blank.
+     */
+    data class Unavailable(val message: String) : LanWifiUiState
 
     /** Networks available; one may be selected and its password entered. */
     data class Ready(
@@ -88,9 +98,13 @@ fun LanWifiSelectionScreen(
     onContinue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val selectedNetwork = (state as? LanWifiUiState.Ready)
+        ?.let { ready -> ready.networks.firstOrNull { it.ssid == ready.selectedSsid } }
+
+    // Open networks need no password
     val canContinue = state is LanWifiUiState.Ready &&
-            state.selectedSsid != null &&
-            state.password.isNotEmpty()
+            selectedNetwork != null &&
+            (selectedNetwork.isOpen || state.password.isNotEmpty())
 
     LanWizardScaffold(
         flowLabel = "LAN Setup",
@@ -118,6 +132,7 @@ fun LanWifiSelectionScreen(
                 .border(1.dp, Border, RoundedCornerShape(13.dp))
         ) {
             when (state) {
+
                 LanWifiUiState.Scanning -> {
                     SectionHeader(label = "Available networks", onRefresh = onRefresh)
                     PlaceholderRow(text = "Scanning for networks…")
@@ -128,8 +143,13 @@ fun LanWifiSelectionScreen(
                     PlaceholderRow(text = "No networks found. Tap refresh to scan again.")
                 }
 
+                is LanWifiUiState.Unavailable -> {
+                    SectionHeader(label = "Available networks", onRefresh = onRefresh)
+                    PlaceholderRow(text = state.message)
+                }
+
                 is LanWifiUiState.Ready -> {
-                    val selected = state.networks.firstOrNull { it.ssid == state.selectedSsid }
+                    val selected = selectedNetwork
                     val others = state.networks.filter { it.ssid != state.selectedSsid }
 
                     SectionHeader(
@@ -143,12 +163,14 @@ fun LanWifiSelectionScreen(
                             onClick = { onSelectNetwork(selected.ssid) }
                         )
 
-                        PasswordPanel(
-                            password = state.password,
-                            passwordVisible = state.passwordVisible,
-                            onPasswordChange = onPasswordChange,
-                            onToggleVisibility = onTogglePasswordVisibility
-                        )
+                        if (!selected.isOpen) {
+                            PasswordPanel(
+                                password = state.password,
+                                passwordVisible = state.passwordVisible,
+                                onPasswordChange = onPasswordChange,
+                                onToggleVisibility = onTogglePasswordVisibility
+                            )
+                        }
                     }
 
                     if (others.isNotEmpty()) {
@@ -299,7 +321,7 @@ private fun PlaceholderRow(text: String) {
         modifier = Modifier
             .fillMaxWidth()
             .background(White)
-            .padding(vertical = 22.dp),
+            .padding(horizontal = 16.dp, vertical = 22.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -341,17 +363,42 @@ private fun PasswordPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = if (passwordVisible) password else "\u2022".repeat(password.length),
-                    fontSize = 13.sp,
-                    color = Black,
-                    letterSpacing = if (passwordVisible) 0.sp else 3.sp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onPasswordChange(password) }
+                BasicTextField(
+                    value = password,
+                    onValueChange = onPasswordChange,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontFamily = DMSans,
+                        fontSize = 13.sp,
+                        color = Black,
+                        letterSpacing = if (passwordVisible) 0.sp else 2.sp
+                    ),
+                    visualTransformation =
+                        if (passwordVisible) VisualTransformation.None
+                        else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    cursorBrush = SolidColor(GreenPrimary),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (password.isEmpty()) {
+                                Text(
+                                    text = "Enter WiFi password",
+                                    fontSize = 13.sp,
+                                    color = GrayHint
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
                 )
 
-                Box(Modifier.clickable(onClick = onToggleVisibility)) { EyeIcon() }
+                Box(Modifier.clickable(onClick = onToggleVisibility)) {
+                    EyeIcon(color = if (passwordVisible) GreenPrimary else GrayBody)
+                }
             }
         }
     }
@@ -360,10 +407,10 @@ private fun PasswordPanel(
 /* ── Previews ──────────────────────────────────────────────────────────── */
 
 private val previewNetworks = listOf(
-    WifiNetwork("Home_2.4GHz", "WPA2", WifiSignal.STRONG),
-    WifiNetwork("PLDT_HOME", "WPA2", WifiSignal.STRONG),
-    WifiNetwork("Neighbor_Net", null, WifiSignal.WEAK),
-    WifiNetwork("Home_5GHz", "WPA2", WifiSignal.MEDIUM)
+    WifiNetwork("Home_2.4GHz", "WPA2", WifiSignal.STRONG, -48),
+    WifiNetwork("PLDT_HOME", "WPA2", WifiSignal.STRONG, -55),
+    WifiNetwork("Neighbor_Net", null, WifiSignal.WEAK, -82),
+    WifiNetwork("Home_5GHz", "WPA3", WifiSignal.MEDIUM, -66)
 )
 
 private val previewReady = LanWifiUiState.Ready(
@@ -433,7 +480,27 @@ private fun LanWifiSelectionLargePreview() {
 }
 
 @Preview(
-    name = "No selection · Standard 360x740",
+    name = "Password visible 360x740",
+    showSystemUi = true,
+    device = "spec:width=360dp,height=740dp,dpi=420"
+)
+@Composable
+private fun LanWifiSelectionPasswordVisiblePreview() {
+    SiliGuideTheme {
+        LanWifiSelectionScreen(
+            state = previewReady.copy(passwordVisible = true),
+            onBack = {},
+            onRefresh = {},
+            onSelectNetwork = {},
+            onPasswordChange = {},
+            onTogglePasswordVisibility = {},
+            onContinue = {}
+        )
+    }
+}
+
+@Preview(
+    name = "No selection 360x740",
     showSystemUi = true,
     device = "spec:width=360dp,height=740dp,dpi=420"
 )
@@ -453,7 +520,7 @@ private fun LanWifiSelectionNoSelectionPreview() {
 }
 
 @Preview(
-    name = "Scanning · Standard 360x740",
+    name = "Scanning 360x740",
     showSystemUi = true,
     device = "spec:width=360dp,height=740dp,dpi=420"
 )
@@ -473,7 +540,29 @@ private fun LanWifiSelectionScanningPreview() {
 }
 
 @Preview(
-    name = "Empty · Standard 360x740",
+    name = "Unavailable 360x740",
+    showSystemUi = true,
+    device = "spec:width=360dp,height=740dp,dpi=420"
+)
+@Composable
+private fun LanWifiSelectionUnavailablePreview() {
+    SiliGuideTheme {
+        LanWifiSelectionScreen(
+            state = LanWifiUiState.Unavailable(
+                "WiFi is turned off. Turn it on to scan for networks."
+            ),
+            onBack = {},
+            onRefresh = {},
+            onSelectNetwork = {},
+            onPasswordChange = {},
+            onTogglePasswordVisibility = {},
+            onContinue = {}
+        )
+    }
+}
+
+@Preview(
+    name = "Empty 360x740",
     showSystemUi = true,
     device = "spec:width=360dp,height=740dp,dpi=420"
 )

@@ -474,6 +474,7 @@ fun SiliGuideNavGraph(
                     )
                 }
             }
+
             // ── Step 2 of 4 — Connect to Home Wi-Fi ────────────────────
             composable(Screen.LanWifiSelection.route) { backStackEntry ->
 
@@ -483,16 +484,118 @@ fun SiliGuideNavGraph(
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
-                // TODO: wire scan results, selection and password into IoTViewModel
+                val context = LocalContext.current
+
+                val wifiState by viewModel.lanWifiState.collectAsState()
+
+                // Returning from Location / WiFi settings — scan again
+                val settingsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    viewModel.startLanWifiScan(context)
+                }
+
+                // First scan on entry
+                LaunchedEffect(Unit) {
+                    viewModel.startLanWifiScan(context)
+                }
+
+                // Step 2 → Step 3
+                LaunchedEffect(Unit) {
+                    viewModel.lanCredentialsReady.collect {
+                        if (navController.currentDestination?.route ==
+                            Screen.LanWifiSelection.route
+                        ) {
+                            // TODO: point at Step 3 once its route exists
+                            // navController.navigate(Screen.LanSetupMethod.route)
+                        }
+                    }
+                }
+
+                // A radio flipped off while the user sat here — rescan on resume
+                val lifecycleOwner = LocalLifecycleOwner.current
+
+                DisposableEffect(lifecycleOwner) {
+
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            viewModel.startLanWifiScan(context)
+                        }
+                    }
+
+                    lifecycleOwner.lifecycle.addObserver(observer)
+
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
                 LanWifiSelectionScreen(
-                    state = LanWifiUiState.Scanning,
+                    state = wifiState,
                     onBack = { navController.popBackStack() },
-                    onRefresh = {},
-                    onSelectNetwork = {},
-                    onPasswordChange = {},
-                    onTogglePasswordVisibility = {},
-                    onContinue = {}
+                    onRefresh = { viewModel.startLanWifiScan(context) },
+                    onSelectNetwork = { viewModel.selectLanWifiNetwork(it) },
+                    onPasswordChange = { viewModel.updateLanWifiPassword(it) },
+                    onTogglePasswordVisibility = { viewModel.toggleLanWifiPasswordVisibility() },
+                    onContinue = { viewModel.continueFromLanWifi() }
                 )
+
+                // WiFi off, Location off, permission revoked
+                val blocker = viewModel.lanBlocker
+
+                if (blocker != null) {
+                    PermissionDialog(
+                        title = blocker.title,
+                        message = blocker.message,
+
+                        confirmText = when (blocker.action) {
+                            LanPreflightAction.OPEN_WIFI_SETTINGS -> "Open WiFi Settings"
+                            LanPreflightAction.OPEN_LOCATION_SETTINGS -> "Open Location Settings"
+                            else -> "Open App Settings"
+                        },
+
+                        dismissText = "Cancel",
+
+                        onConfirm = {
+                            val action = blocker.action
+
+                            viewModel.dismissLanBlocker()
+
+                            when (action) {
+
+                                LanPreflightAction.OPEN_WIFI_SETTINGS ->
+                                    settingsLauncher.launch(
+                                        Intent(Settings.ACTION_WIFI_SETTINGS)
+                                    )
+
+                                LanPreflightAction.OPEN_LOCATION_SETTINGS ->
+                                    settingsLauncher.launch(
+                                        Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                                    )
+
+                                // Permission was revoked mid-flow — settings is
+                                // the only reliable way back
+                                LanPreflightAction.REQUEST_PERMISSION,
+                                LanPreflightAction.OPEN_APP_SETTINGS ->
+                                    PermissionUtils.openAppSettings(context)
+                            }
+                        },
+
+                        onDismiss = { viewModel.dismissLanBlocker() }
+                    )
+                }
+
+                // "Password Required" and other validation copy
+                viewModel.validationDialog?.let { dialog ->
+                    PermissionDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = "OK",
+                        dismissText = "Close",
+                        onConfirm = { viewModel.dismissValidationDialog() },
+                        onDismiss = { viewModel.dismissValidationDialog() }
+                    )
+                }
             }
         }
 

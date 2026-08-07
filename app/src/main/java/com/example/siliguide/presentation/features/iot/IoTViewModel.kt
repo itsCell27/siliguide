@@ -50,9 +50,11 @@ import com.example.siliguide.core.permission.DeviceSettingsChecker
 import com.example.siliguide.core.permission.PermissionRequest
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.domain.usecase.ScanWifiNetworksUseCase
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPermissionUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightResult
+import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
 
 data class ValidationDialogState(
     val title: String,
@@ -78,6 +80,7 @@ class IoTViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
 
     private val deviceSettingsChecker: DeviceSettingsChecker,
+    private val scanWifiNetworksUseCase: ScanWifiNetworksUseCase,
     val permissionManager: PermissionManager
 ) : ViewModel() {
 
@@ -1099,4 +1102,144 @@ class IoTViewModel @Inject constructor(
     }
 
 
+    // ---- Step 2 of 4: Wi-Fi scan and credentials --------------------------
+
+    private val _lanWifiState =
+        MutableStateFlow<LanWifiUiState>(LanWifiUiState.Scanning)
+
+    val lanWifiState: StateFlow<LanWifiUiState> = _lanWifiState.asStateFlow()
+
+    /** Emitted when a network is chosen and its password entered. */
+    private val _lanCredentialsReady = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanCredentialsReady: SharedFlow<Unit> = _lanCredentialsReady.asSharedFlow()
+
+    /** Home Wi-Fi credentials handed to the ESP32 by whichever path runs. */
+    var lanSelectedSsid: String? = null
+        private set
+
+    var lanSelectedPassword: String = ""
+        private set
+
+    /**
+     * Re-checks the gate, then scans.
+     *
+     * The user can revoke permission or flip a radio off while sitting on this
+     * screen, so the same preflight that guarded Step 1 runs again here rather
+     * than trusting that it passed a moment ago.
+     */
+    fun startLanWifiScan(context: Context) {
+        viewModelScope.launch {
+
+            when (val result = evaluateLanPreflight(context)) {
+
+                LanPreflightResult.Ready -> {
+                    lanBlocker = null
+                    error = null
+
+                    _lanWifiState.value = LanWifiUiState.Scanning
+
+                    val networks = runCatching { scanWifiNetworksUseCase() }
+                        .getOrElse { emptyList() }
+
+                    _lanWifiState.value =
+                        if (networks.isEmpty()) {
+                            LanWifiUiState.Empty
+                        } else {
+                            LanWifiUiState.Ready(
+                                networks = networks,
+                                // Keep the choice across a refresh
+                                selectedSsid = lanSelectedSsid
+                                    ?.takeIf { ssid -> networks.any { it.ssid == ssid } },
+                                password = lanSelectedPassword,
+                                passwordVisible = currentPasswordVisible()
+                            )
+                        }
+                }
+
+                is LanPreflightResult.Blocked -> {
+                    error = result.message
+                    lanBlocker = result
+
+                    _lanWifiState.value =
+                        LanWifiUiState.Unavailable(scanUnavailableMessage(result.action))
+                }
+            }
+        }
+    }
+
+    private fun currentPasswordVisible(): Boolean =
+        (_lanWifiState.value as? LanWifiUiState.Ready)?.passwordVisible == true
+
+    private fun scanUnavailableMessage(action: LanPreflightAction): String = when (action) {
+
+        LanPreflightAction.OPEN_WIFI_SETTINGS ->
+            "WiFi is turned off. Turn it on to scan for nearby networks."
+
+        LanPreflightAction.OPEN_LOCATION_SETTINGS ->
+            "Location is turned off. Turn it on to scan for nearby networks."
+
+        LanPreflightAction.REQUEST_PERMISSION,
+        LanPreflightAction.OPEN_APP_SETTINGS ->
+            "Permission is required before SiliGuide can scan for nearby networks."
+    }
+
+    fun selectLanWifiNetwork(ssid: String) {
+
+        val ready = _lanWifiState.value as? LanWifiUiState.Ready ?: return
+
+        // Re-tapping the same row keeps whatever was typed
+        val password = if (ready.selectedSsid == ssid) ready.password else ""
+
+        lanSelectedSsid = ssid
+        lanSelectedPassword = password
+
+        _lanWifiState.value = ready.copy(
+            selectedSsid = ssid,
+            password = password,
+            passwordVisible = false
+        )
+    }
+
+    fun updateLanWifiPassword(password: String) {
+
+        val ready = _lanWifiState.value as? LanWifiUiState.Ready ?: return
+
+        lanSelectedPassword = password
+
+        _lanWifiState.value = ready.copy(password = password)
+    }
+
+    fun toggleLanWifiPasswordVisibility() {
+
+        val ready = _lanWifiState.value as? LanWifiUiState.Ready ?: return
+
+        _lanWifiState.value = ready.copy(passwordVisible = !ready.passwordVisible)
+    }
+
+    /** Step 2 → Step 3. */
+    fun continueFromLanWifi() {
+
+        val ready = _lanWifiState.value as? LanWifiUiState.Ready ?: return
+
+        val selected = ready.networks.firstOrNull { it.ssid == ready.selectedSsid } ?: return
+
+        if (!selected.isOpen && ready.password.isEmpty()) {
+            showValidationDialog(
+                title = "Password Required",
+                message = "Enter the password for ${selected.ssid} to continue."
+            )
+            return
+        }
+
+        lanSelectedSsid = selected.ssid
+        lanSelectedPassword = ready.password
+
+        viewModelScope.launch { _lanCredentialsReady.emit(Unit) }
+    }
+
+    fun resetLanWifiSelection() {
+        _lanWifiState.value = LanWifiUiState.Scanning
+        lanSelectedSsid = null
+        lanSelectedPassword = ""
+    }
 }
