@@ -78,4 +78,6 @@ sealed class Screen(val route: String) {
     object LanLocationPermission : Screen("lan_location_permission")
     object LanWifiSelection : Screen("lan_wifi_selection")
     object LanSetupMethod : Screen("lan_setup_method")
+    object LanApProvisioning : Screen("lan_ap_provisioning")
+    object LanBluetoothProvisioning : Screen("lan_bluetooth_provisioning")
 }

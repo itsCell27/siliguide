@@ -240,6 +240,16 @@ class IoTViewModel @Inject constructor(
     private suspend fun verifyEsp32ConnectionViaIp() = withContext(Dispatchers.IO) {
         Log.d("AP_DEBUG", "Pinging 192.168.4.1/info via Ktor...")
 
+        if (!isWifiEnabled()) {
+            _apConnectionState.value = "WIFI_OFF"
+            error = "WiFi is turned off. Please enable WiFi to connect to the IoT device."
+            showValidationDialog(
+                title = "WiFi is off",
+                message = "Please enable WiFi to connect to the IoT device."
+            )
+            return@withContext
+        }
+
         repeat(3) { attempt ->
             val result = verifyDeviceConnectionUseCase("192.168.4.1")
 
@@ -815,7 +825,43 @@ class IoTViewModel @Inject constructor(
     // LAN SETUP FUNCTIONS
     // =========================================================================
 
-    /** Drives Step 1 of 4 — Location Permission. */
+    // ---- Step 1 of 4: Choose Setup Method ---------------------------------
+
+    private val _lanSetupMethodState = MutableStateFlow(LanSetupMethodUiState())
+
+    val lanSetupMethodState: StateFlow<LanSetupMethodUiState> =
+        _lanSetupMethodState.asStateFlow()
+
+    /** Emitted when the user commits to a provisioning transport. */
+    private val _lanMethodChosen =
+        MutableSharedFlow<LanProvisioningMethod>(extraBufferCapacity = 1)
+
+    val lanMethodChosen: SharedFlow<LanProvisioningMethod> =
+        _lanMethodChosen.asSharedFlow()
+
+    /** Which transport the wizard is on — read by Step 3 to pick Step 4. */
+    val lanProvisioningMethod: LanProvisioningMethod
+        get() = _lanSetupMethodState.value.selectedMethod
+
+    fun selectLanProvisioningMethod(method: LanProvisioningMethod) {
+        _lanSetupMethodState.value =
+            _lanSetupMethodState.value.copy(selectedMethod = method)
+    }
+
+    /**
+     * Step 1 → Step 2.
+     *
+     * No gate here — choosing a method needs no permissions. Both transports
+     * require the same ones, so the preflight runs on Step 2 either way.
+     */
+    fun continueFromLanSetupMethod() {
+        viewModelScope.launch {
+            _lanMethodChosen.emit(_lanSetupMethodState.value.selectedMethod)
+        }
+    }
+
+    // ---- Step 2 of 4: Location Permission ---------------------------------
+
     private val _lanPermissionState =
         MutableStateFlow<LanPermissionUiState>(LanPermissionUiState.Requesting)
 
@@ -831,7 +877,7 @@ class IoTViewModel @Inject constructor(
     private val _lanPreflightPassed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val lanPreflightPassed: SharedFlow<Unit> = _lanPreflightPassed.asSharedFlow()
 
-    /** Whatever is currently blocking Step 1, or null when nothing is. */
+    /** Whatever is currently blocking the wizard, or null when nothing is. */
     var lanBlocker by mutableStateOf<LanPreflightResult.Blocked?>(null)
         private set
 
@@ -885,7 +931,7 @@ class IoTViewModel @Inject constructor(
         }
 
     /**
-     * Turns per-permission statuses into the Step 1 artwork state.
+     * Turns per-permission statuses into the Step 2 artwork state.
      *
      * Granted when nothing is missing. Denied only when something is
      * permanently denied — if a missing permission can still be prompted, the
@@ -949,7 +995,7 @@ class IoTViewModel @Inject constructor(
     }
 
     /**
-     * Single gate for Step 1 → Step 2.
+     * Single gate for Step 2 → Step 3.
      *
      * Checked in the order the user can act on them: permissions first, then
      * the Location service, then the Wi-Fi radio.
@@ -1085,7 +1131,7 @@ class IoTViewModel @Inject constructor(
         }
     }
 
-    /** Rationale shown by the "Why is this needed?" link on Step 1. */
+    /** Rationale shown by the "Why is this needed?" link on Step 2. */
     fun showLanPermissionRationale() {
         showValidationDialog(
             title = "Why These Permissions",
@@ -1096,15 +1142,7 @@ class IoTViewModel @Inject constructor(
         )
     }
 
-    fun resetLanSetup() {
-        _lanPermissionState.value = LanPermissionUiState.Requesting
-        lanBlocker = null
-        error = null
-        validationDialog = null
-    }
-
-
-    // ---- Step 2 of 4: Wi-Fi scan and credentials --------------------------
+    // ---- Step 3 of 4: Wi-Fi scan and credentials --------------------------
 
     private val _lanWifiState =
         MutableStateFlow<LanWifiUiState>(LanWifiUiState.Scanning)
@@ -1126,7 +1164,7 @@ class IoTViewModel @Inject constructor(
      * Re-checks the gate, then scans.
      *
      * The user can revoke permission or flip a radio off while sitting on this
-     * screen, so the same preflight that guarded Step 1 runs again here rather
+     * screen, so the same preflight that guarded Step 2 runs again here rather
      * than trusting that it passed a moment ago.
      */
     fun startLanWifiScan(context: Context) {
@@ -1218,7 +1256,7 @@ class IoTViewModel @Inject constructor(
         _lanWifiState.value = ready.copy(passwordVisible = !ready.passwordVisible)
     }
 
-    /** Step 2 → Step 3. */
+    /** Step 3 → Step 4a (AP) or Step 4b (Bluetooth). */
     fun continueFromLanWifi() {
 
         val ready = _lanWifiState.value as? LanWifiUiState.Ready ?: return
@@ -1236,58 +1274,31 @@ class IoTViewModel @Inject constructor(
         lanSelectedSsid = selected.ssid
         lanSelectedPassword = ready.password
 
-        // Carry the credentials forward — Step 3 shows which network they
-        // belong to, and both provisioning paths read them from here
-        _lanSetupMethodState.value = _lanSetupMethodState.value.copy(
-            ssid = selected.ssid,
-            password = ready.password
-        )
-
         viewModelScope.launch { _lanCredentialsReady.emit(Unit) }
     }
 
+    /**
+     * Clears the network choice only.
+     *
+     * The provisioning method came from Step 1, so a rescan must not wipe it.
+     */
     fun resetLanWifiSelection() {
         _lanWifiState.value = LanWifiUiState.Scanning
         lanSelectedSsid = null
         lanSelectedPassword = ""
+    }
+
+    // ---- Wizard teardown --------------------------------------------------
+
+    /** Backing out of Step 1 abandons the whole wizard. */
+    fun resetLanSetup() {
         _lanSetupMethodState.value = LanSetupMethodUiState()
-    }
-
-    // ---- Step 3 of 4: Choose Setup Method ---------------------------------
-
-    private val _lanSetupMethodState = MutableStateFlow(LanSetupMethodUiState())
-
-    val lanSetupMethodState: StateFlow<LanSetupMethodUiState> =
-        _lanSetupMethodState.asStateFlow()
-
-    /** Emitted when the user commits to a provisioning transport. */
-    private val _lanMethodChosen =
-        MutableSharedFlow<LanProvisioningMethod>(extraBufferCapacity = 1)
-
-    val lanMethodChosen: SharedFlow<LanProvisioningMethod> =
-        _lanMethodChosen.asSharedFlow()
-
-    fun selectLanProvisioningMethod(method: LanProvisioningMethod) {
-        _lanSetupMethodState.value =
-            _lanSetupMethodState.value.copy(selectedMethod = method)
-    }
-
-    /** Step 3 → Step 4a (AP) or Step 4b (Bluetooth). */
-    fun continueFromLanSetupMethod() {
-
-        val state = _lanSetupMethodState.value
-
-        // Nothing to provision with — send the user back to pick a network
-        if (state.ssid.isBlank()) {
-            showValidationDialog(
-                title = "No Network Selected",
-                message = "Go back and choose the WiFi network your IoT device should join."
-            )
-            return
-        }
-
-        viewModelScope.launch {
-            _lanMethodChosen.emit(state.selectedMethod)
-        }
+        _lanPermissionState.value = LanPermissionUiState.Requesting
+        _lanWifiState.value = LanWifiUiState.Scanning
+        lanSelectedSsid = null
+        lanSelectedPassword = ""
+        lanBlocker = null
+        error = null
+        validationDialog = null
     }
 }

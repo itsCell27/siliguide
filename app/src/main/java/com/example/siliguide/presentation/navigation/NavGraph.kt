@@ -49,6 +49,7 @@ import com.example.siliguide.core.permission.PermissionUtils
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothSelectionScreen
 
 import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.presentation.features.iot.lan_setup.LanApProvisioningScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanLocationPermissionScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiSelectionScreen
@@ -314,10 +315,47 @@ fun SiliGuideNavGraph(
          */
         navigation(
             route = Screen.LanSetupGraph.route,
-            startDestination = Screen.LanLocationPermission.route
+            startDestination = Screen.LanSetupMethod.route
         ) {
 
-            // ── Step 1 of 4 — Location Permission ──────────────────────
+            // ── Step 1 of 4 — Choose Setup Method ──────────────────────
+            composable(Screen.LanSetupMethod.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                val methodState by viewModel.lanSetupMethodState.collectAsState()
+
+                // Step 1 → Step 2. Both transports need the same permissions,
+                // so the choice only decides which Step 4 runs later.
+                LaunchedEffect(Unit) {
+                    viewModel.lanMethodChosen.collect {
+                        if (navController.currentDestination?.route ==
+                            Screen.LanSetupMethod.route
+                        ) {
+                            navController.navigate(Screen.LanLocationPermission.route)
+                        }
+                    }
+                }
+
+                LanSetupMethodScreen(
+                    state = methodState,
+
+                    onBack = {
+                        viewModel.resetLanSetup()
+                        navController.popBackStack()
+                    },
+
+                    onSelectMethod = { viewModel.selectLanProvisioningMethod(it) },
+
+                    onContinue = { viewModel.continueFromLanSetupMethod() }
+                )
+            }
+
+            // ── Step 2 of 4 — Location Permission ──────────────────────
             composable(Screen.LanLocationPermission.route) { backStackEntry ->
 
                 val parentEntry = remember(backStackEntry) {
@@ -349,7 +387,7 @@ fun SiliGuideNavGraph(
                     viewModel.continueFromLanPermission(context)
                 }
 
-                // Step 1 → Step 2
+                // Step 2 → Step 3
                 LaunchedEffect(Unit) {
                     viewModel.lanPreflightPassed.collect {
 
@@ -395,10 +433,8 @@ fun SiliGuideNavGraph(
                 LanLocationPermissionScreen(
                     state = permissionState,
 
-                    onBack = {
-                        viewModel.resetLanSetup()
-                        navController.popBackStack()
-                    },
+                    // Back returns to Step 1, it does not abandon the wizard
+                    onBack = { navController.popBackStack() },
 
                     onGrantPermission = {
                         viewModel.continueFromLanPermission(context)
@@ -477,7 +513,7 @@ fun SiliGuideNavGraph(
                 }
             }
 
-            // ── Step 2 of 4 — Connect to Home Wi-Fi ────────────────────
+            // ── Step 3 of 4 — Connect to Home Wi-Fi ────────────────────
             composable(Screen.LanWifiSelection.route) { backStackEntry ->
 
                 val parentEntry = remember(backStackEntry) {
@@ -502,13 +538,24 @@ fun SiliGuideNavGraph(
                     viewModel.startLanWifiScan(context)
                 }
 
-                // Step 2 → Step 3
+                // Step 3 → Step 4a (AP) or Step 4b (Bluetooth), decided by
+                // the method chosen back on Step 1
                 LaunchedEffect(Unit) {
                     viewModel.lanCredentialsReady.collect {
-                        if (navController.currentDestination?.route ==
+
+                        if (navController.currentDestination?.route !=
                             Screen.LanWifiSelection.route
                         ) {
-                            navController.navigate(Screen.LanSetupMethod.route)
+                            return@collect
+                        }
+
+                        when (viewModel.lanProvisioningMethod) {
+
+                            LanProvisioningMethod.ACCESS_POINT ->
+                                navController.navigate(Screen.LanApProvisioning.route)
+
+                            LanProvisioningMethod.BLUETOOTH ->
+                                navController.navigate(Screen.LanBluetoothProvisioning.route)
                         }
                     }
                 }
@@ -599,8 +646,8 @@ fun SiliGuideNavGraph(
                 }
             }
 
-            // ── Step 3 of 4 — Choose Setup Method ──────────────────────
-            composable(Screen.LanSetupMethod.route) { backStackEntry ->
+            // ── Step 4 of 4 — Device Hotspot (AP) Provisioning Path ────
+            composable(Screen.LanApProvisioning.route) { backStackEntry ->
 
                 val parentEntry = remember(backStackEntry) {
                     navController.getBackStackEntry(Screen.LanSetupGraph.route)
@@ -608,51 +655,23 @@ fun SiliGuideNavGraph(
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
-                // Carries the SSID and password captured in Step 2
-                val methodState by viewModel.lanSetupMethodState.collectAsState()
+                // TODO: wire LanApProvisioningScreen.
+                // Credentials are in viewModel.lanSelectedSsid and
+                // viewModel.lanSelectedPassword.
+            }
 
-                // Step 3 → Step 4a (AP) or Step 4b (Bluetooth)
-                LaunchedEffect(Unit) {
-                    viewModel.lanMethodChosen.collect { method ->
+            // ── Step 4 of 4 — Bluetooth Provisioning Path ──────────────
+            composable(Screen.LanBluetoothProvisioning.route) { backStackEntry ->
 
-                        if (navController.currentDestination?.route !=
-                            Screen.LanSetupMethod.route
-                        ) {
-                            return@collect
-                        }
-
-                        when (method) {
-                            LanProvisioningMethod.ACCESS_POINT -> {
-                                // TODO: point at Step 4a once its route exists
-                                // navController.navigate(Screen.LanApProvisioning.route)
-                            }
-
-                            LanProvisioningMethod.BLUETOOTH -> {
-                                // TODO: point at Step 4b once its route exists
-                                // navController.navigate(Screen.LanBluetoothProvisioning.route)
-                            }
-                        }
-                    }
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
                 }
 
-                LanSetupMethodScreen(
-                    state = methodState,
-                    onBack = { navController.popBackStack() },
-                    onSelectMethod = { viewModel.selectLanProvisioningMethod(it) },
-                    onContinue = { viewModel.continueFromLanSetupMethod() }
-                )
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
-                // "No Network Selected" and other validation copy
-                viewModel.validationDialog?.let { dialog ->
-                    PermissionDialog(
-                        title = dialog.title,
-                        message = dialog.message,
-                        confirmText = "OK",
-                        dismissText = "Close",
-                        onConfirm = { viewModel.dismissValidationDialog() },
-                        onDismiss = { viewModel.dismissValidationDialog() }
-                    )
-                }
+                // TODO: wire LanBluetoothProvisioningScreen.
+                // Credentials are in viewModel.lanSelectedSsid and
+                // viewModel.lanSelectedPassword.
             }
         }
 

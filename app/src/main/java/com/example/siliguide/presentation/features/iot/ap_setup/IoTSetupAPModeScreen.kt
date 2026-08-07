@@ -124,6 +124,15 @@ fun IoTSetupAPModeScreen(
 
     var previousWifiOff by remember { mutableStateOf(false) }
 
+    val apPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.all { it }
+        if (granted) {
+
+        }
+    }
+
     LaunchedEffect(wifiOff) {
         if (wifiOff && !previousWifiOff) {
             showWifiModal = true
