@@ -1,6 +1,7 @@
 package com.example.siliguide.data.remote.iot
 
 import android.util.Log
+import com.example.siliguide.core.security.AesGcmCrypto
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
 import com.example.siliguide.data.remote.iot.dto.ClaimResponseDto // Make sure to create this simple DTO
@@ -9,7 +10,8 @@ import javax.inject.Inject
 
 class BluetoothApi @Inject constructor(
     private val bluetoothManager: BluetoothManager,
-    private val bluetoothDiscoveryManager: BluetoothDiscoveryManager
+    private val bluetoothDiscoveryManager: BluetoothDiscoveryManager,
+    private val crypto: AesGcmCrypto
 ) {
 
     init {
@@ -60,18 +62,32 @@ class BluetoothApi @Inject constructor(
     }
 
     /**
-     * LOCKED GATEWAY: Pulls raw microclimate logs.
+     * LOCKED GATEWAY: Pulls raw sensor data.
      * Required once deviceClaimed == true.
-     * Format Sent: "GET_DATA:abc123xyz"
      */
     @Throws(Exception::class)
-    suspend fun getSensorData(token: String): SensorResponseDto {
-        // Appends the token via delimiter as expected by processBluetoothCommand()
-        val secureCommand = "${BluetoothCommands.GET_DATA}:$token"
-        val response = bluetoothManager.executeCommand(secureCommand)
+    suspend fun getSensorData(token: String? = null): SensorResponseDto {
+        // Zero-Knowledge Architecture: We DO NOT send the token over the air.
+        // We only send the exact command string.
+        val command = BluetoothCommands.GET_DATA
+        val response = bluetoothManager.executeCommand(command)
 
-        Log.d("BluetoothApi", "Sensor Response: $response")
-        return json.decodeFromString(response)
+        Log.d("BluetoothApi", "Sensor Response received")
+
+        // 1. Setup Mode (Unclaimed): Parse the raw JSON directly
+        if (token == null) {
+            return json.decodeFromString(response.trim())
+        }
+
+        // 2. Secure Mode (Claimed): Decrypt the Base64 AES-GCM payload locally
+        val decryptedJson = crypto.decrypt(response.trim(), token)
+
+        // 3. Fail-Safe: Catch bit-flipping attacks or incorrect tokens
+        if (decryptedJson == null) {
+            throw SecurityException("Failed to decrypt Bluetooth payload. Invalid token or tampered data.")
+        }
+
+        return json.decodeFromString(decryptedJson)
     }
 
     /**

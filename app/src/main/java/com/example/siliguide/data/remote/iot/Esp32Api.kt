@@ -13,9 +13,10 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import javax.inject.Inject
 
-class Esp32Api(
-    private val crypto: AesGcmCrypto = AesGcmCrypto()
+class Esp32Api @Inject constructor(
+    private val crypto: AesGcmCrypto
 ) {
 
     // Same Json config the ContentNegotiation plugin uses, reused for manual

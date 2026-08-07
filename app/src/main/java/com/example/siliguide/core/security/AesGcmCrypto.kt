@@ -5,6 +5,7 @@ import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import javax.inject.Inject
 
 /**
  * AES-256-GCM helper matching the ESP32 firmware's mbedtls_gcm implementation.
@@ -17,7 +18,7 @@ import javax.crypto.spec.SecretKeySpec
  * encrypt and expects it appended on decrypt, so no manual tag splicing is needed
  * once the IV is separated from the payload.
  */
-class AesGcmCrypto {
+class AesGcmCrypto @Inject constructor() {
 
     private val ivLengthBytes = 12
     private val tagLengthBytes = 16

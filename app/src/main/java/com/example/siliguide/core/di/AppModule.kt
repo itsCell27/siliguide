@@ -21,12 +21,6 @@ import android.bluetooth.BluetoothManager as AndroidBluetoothManager
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    @Provides
-    @Singleton
-    fun provideEsp32Api(): Esp32Api {
-        return Esp32Api()
-    }
-
     // Bluetooth
     @Provides
     @Singleton
