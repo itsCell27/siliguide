@@ -55,6 +55,8 @@ import com.example.siliguide.presentation.features.iot.lan_setup.LanPermissionUi
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightResult
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
+import com.example.siliguide.presentation.features.iot.lan_setup.LanProvisioningMethod
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupMethodUiState
 
 data class ValidationDialogState(
     val title: String,
@@ -1234,6 +1236,13 @@ class IoTViewModel @Inject constructor(
         lanSelectedSsid = selected.ssid
         lanSelectedPassword = ready.password
 
+        // Carry the credentials forward — Step 3 shows which network they
+        // belong to, and both provisioning paths read them from here
+        _lanSetupMethodState.value = _lanSetupMethodState.value.copy(
+            ssid = selected.ssid,
+            password = ready.password
+        )
+
         viewModelScope.launch { _lanCredentialsReady.emit(Unit) }
     }
 
@@ -1241,5 +1250,44 @@ class IoTViewModel @Inject constructor(
         _lanWifiState.value = LanWifiUiState.Scanning
         lanSelectedSsid = null
         lanSelectedPassword = ""
+        _lanSetupMethodState.value = LanSetupMethodUiState()
+    }
+
+    // ---- Step 3 of 4: Choose Setup Method ---------------------------------
+
+    private val _lanSetupMethodState = MutableStateFlow(LanSetupMethodUiState())
+
+    val lanSetupMethodState: StateFlow<LanSetupMethodUiState> =
+        _lanSetupMethodState.asStateFlow()
+
+    /** Emitted when the user commits to a provisioning transport. */
+    private val _lanMethodChosen =
+        MutableSharedFlow<LanProvisioningMethod>(extraBufferCapacity = 1)
+
+    val lanMethodChosen: SharedFlow<LanProvisioningMethod> =
+        _lanMethodChosen.asSharedFlow()
+
+    fun selectLanProvisioningMethod(method: LanProvisioningMethod) {
+        _lanSetupMethodState.value =
+            _lanSetupMethodState.value.copy(selectedMethod = method)
+    }
+
+    /** Step 3 → Step 4a (AP) or Step 4b (Bluetooth). */
+    fun continueFromLanSetupMethod() {
+
+        val state = _lanSetupMethodState.value
+
+        // Nothing to provision with — send the user back to pick a network
+        if (state.ssid.isBlank()) {
+            showValidationDialog(
+                title = "No Network Selected",
+                message = "Go back and choose the WiFi network your IoT device should join."
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _lanMethodChosen.emit(state.selectedMethod)
+        }
     }
 }

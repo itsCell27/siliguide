@@ -45,9 +45,12 @@ enum class LanProvisioningMethod { ACCESS_POINT, BLUETOOTH }
  * Step 3 of 4 — Choose Setup Method.
  *
  * Neither option is a communication mode. Both only deliver the credentials
- * captured in step 2; afterwards everything runs over LAN.
+ * captured in step 2 — carried here as [ssid] and [password] — and afterwards
+ * everything runs over LAN.
  */
 data class LanSetupMethodUiState(
+    val ssid: String = "",
+    val password: String = "",
     val selectedMethod: LanProvisioningMethod = LanProvisioningMethod.ACCESS_POINT
 )
 
@@ -77,7 +80,7 @@ fun LanSetupMethodScreen(
         )
 
         MethodCard(
-            emoji = "\uD83D\uDCE1",
+            emoji = "📡",
             title = "Device Hotspot (AP)",
             description = "Temporarily connect to your IoT device's Wi-Fi hotspot to securely " +
                     "transfer the selected Wi-Fi credentials.",
@@ -86,7 +89,7 @@ fun LanSetupMethodScreen(
         )
 
         MethodCard(
-            emoji = "\uD83D\uDD35",
+            emoji = "ᛒ",
             title = "Bluetooth",
             description = "Use Bluetooth to securely send the selected Wi-Fi credentials without " +
                     "leaving your current Wi-Fi network.",
@@ -155,6 +158,12 @@ private fun MethodCard(
 
 /* ── Previews ──────────────────────────────────────────────────────────── */
 
+private val previewState = LanSetupMethodUiState(
+    ssid = "Home_2.4GHz",
+    password = "12345678",
+    selectedMethod = LanProvisioningMethod.ACCESS_POINT
+)
+
 @Preview(
     name = "AP selected · Small 320x640",
     showSystemUi = true,
@@ -164,7 +173,7 @@ private fun MethodCard(
 private fun LanSetupMethodApSmallPreview() {
     SiliGuideTheme {
         LanSetupMethodScreen(
-            state = LanSetupMethodUiState(LanProvisioningMethod.ACCESS_POINT),
+            state = previewState,
             onBack = {},
             onSelectMethod = {},
             onContinue = {}
@@ -181,7 +190,7 @@ private fun LanSetupMethodApSmallPreview() {
 private fun LanSetupMethodApStandardPreview() {
     SiliGuideTheme {
         LanSetupMethodScreen(
-            state = LanSetupMethodUiState(LanProvisioningMethod.ACCESS_POINT),
+            state = previewState,
             onBack = {},
             onSelectMethod = {},
             onContinue = {}
@@ -198,7 +207,7 @@ private fun LanSetupMethodApStandardPreview() {
 private fun LanSetupMethodApLargePreview() {
     SiliGuideTheme {
         LanSetupMethodScreen(
-            state = LanSetupMethodUiState(LanProvisioningMethod.ACCESS_POINT),
+            state = previewState,
             onBack = {},
             onSelectMethod = {},
             onContinue = {}
@@ -215,7 +224,7 @@ private fun LanSetupMethodApLargePreview() {
 private fun LanSetupMethodBluetoothPreview() {
     SiliGuideTheme {
         LanSetupMethodScreen(
-            state = LanSetupMethodUiState(LanProvisioningMethod.BLUETOOTH),
+            state = previewState.copy(selectedMethod = LanProvisioningMethod.BLUETOOTH),
             onBack = {},
             onSelectMethod = {},
             onContinue = {}
@@ -224,15 +233,15 @@ private fun LanSetupMethodBluetoothPreview() {
 }
 
 @Preview(
-    name = "Bluetooth selected · Large 412x915",
+    name = "Open network · Standard 360x740",
     showSystemUi = true,
-    device = "spec:width=412dp,height=915dp,dpi=420"
+    device = "spec:width=360dp,height=740dp,dpi=420"
 )
 @Composable
-private fun LanSetupMethodBluetoothLargePreview() {
+private fun LanSetupMethodOpenNetworkPreview() {
     SiliGuideTheme {
         LanSetupMethodScreen(
-            state = LanSetupMethodUiState(LanProvisioningMethod.BLUETOOTH),
+            state = previewState.copy(ssid = "Cafe_Guest", password = ""),
             onBack = {},
             onSelectMethod = {},
             onContinue = {}

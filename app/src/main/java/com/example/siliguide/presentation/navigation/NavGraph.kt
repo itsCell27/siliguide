@@ -53,6 +53,8 @@ import com.example.siliguide.presentation.features.iot.lan_setup.LanLocationPerm
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiSelectionScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
+import com.example.siliguide.presentation.features.iot.lan_setup.LanProvisioningMethod
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupMethodScreen
 
 @Composable
 fun SiliGuideNavGraph(
@@ -506,8 +508,7 @@ fun SiliGuideNavGraph(
                         if (navController.currentDestination?.route ==
                             Screen.LanWifiSelection.route
                         ) {
-                            // TODO: point at Step 3 once its route exists
-                            // navController.navigate(Screen.LanSetupMethod.route)
+                            navController.navigate(Screen.LanSetupMethod.route)
                         }
                     }
                 }
@@ -586,6 +587,62 @@ fun SiliGuideNavGraph(
                 }
 
                 // "Password Required" and other validation copy
+                viewModel.validationDialog?.let { dialog ->
+                    PermissionDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = "OK",
+                        dismissText = "Close",
+                        onConfirm = { viewModel.dismissValidationDialog() },
+                        onDismiss = { viewModel.dismissValidationDialog() }
+                    )
+                }
+            }
+
+            // ── Step 3 of 4 — Choose Setup Method ──────────────────────
+            composable(Screen.LanSetupMethod.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                // Carries the SSID and password captured in Step 2
+                val methodState by viewModel.lanSetupMethodState.collectAsState()
+
+                // Step 3 → Step 4a (AP) or Step 4b (Bluetooth)
+                LaunchedEffect(Unit) {
+                    viewModel.lanMethodChosen.collect { method ->
+
+                        if (navController.currentDestination?.route !=
+                            Screen.LanSetupMethod.route
+                        ) {
+                            return@collect
+                        }
+
+                        when (method) {
+                            LanProvisioningMethod.ACCESS_POINT -> {
+                                // TODO: point at Step 4a once its route exists
+                                // navController.navigate(Screen.LanApProvisioning.route)
+                            }
+
+                            LanProvisioningMethod.BLUETOOTH -> {
+                                // TODO: point at Step 4b once its route exists
+                                // navController.navigate(Screen.LanBluetoothProvisioning.route)
+                            }
+                        }
+                    }
+                }
+
+                LanSetupMethodScreen(
+                    state = methodState,
+                    onBack = { navController.popBackStack() },
+                    onSelectMethod = { viewModel.selectLanProvisioningMethod(it) },
+                    onContinue = { viewModel.continueFromLanSetupMethod() }
+                )
+
+                // "No Network Selected" and other validation copy
                 viewModel.validationDialog?.let { dialog ->
                     PermissionDialog(
                         title = dialog.title,

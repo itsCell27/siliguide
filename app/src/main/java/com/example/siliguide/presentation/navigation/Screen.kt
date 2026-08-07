@@ -77,4 +77,5 @@ sealed class Screen(val route: String) {
     object LanSetupGraph : Screen("lan_setup_graph")
     object LanLocationPermission : Screen("lan_location_permission")
     object LanWifiSelection : Screen("lan_wifi_selection")
+    object LanSetupMethod : Screen("lan_setup_method")
 }
