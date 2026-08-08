@@ -1,10 +1,8 @@
 package com.example.siliguide.presentation.features.iot.ap_setup
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -14,20 +12,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,15 +29,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.presentation.features.iot.IoTViewModel
 
 @Composable
 fun APStep1Content(
+    viewModel: IoTViewModel,
     onScanQrClick: () -> Unit,
     isChecking: Boolean = false,
     onManualRetry: () -> Unit = {},
 ) {
-    val context = LocalContext.current
+    val wifiSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        // This callback runs EXACTLY when the user returns back to the app from Wi-Fi settings
+        viewModel.forceCheckConnection()
+    }
 
 
     Column(
@@ -193,7 +196,7 @@ fun APStep1Content(
                 .border(1.dp, Border, RoundedCornerShape(11.dp))
                 .clickable {
                     val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
-                    context.startActivity(intent)
+                    wifiSettingsLauncher.launch(intent)
                 }
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically

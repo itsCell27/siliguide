@@ -180,25 +180,11 @@ fun IoTSetupAPModeScreen(
         }
     }
 
-    // STEP 4: Setup lifecycle listener for when user returns from Wi-Fi settings
+    // STEP 4: Setup lifecycle listener to disconnect from device when leaving screen
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
-                    // User came back from Wi-Fi settings - check connection immediately
-                    isChecking = true
-                    viewModel.forceCheckConnection()
-                }
-                else -> {}
-            }
-        }
-
-        lifecycleOwner.lifecycle.addObserver(observer)
-
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
             // Disconnect Wi-Fi when leaving screen completely
             viewModel.disconnectFromDeviceWifi()
         }
@@ -441,6 +427,7 @@ fun IoTSetupAPModeScreen(
 
                         // STEP 1: Connect to Device
                         1 -> APStep1Content(
+                            viewModel = viewModel,
                             onScanQrClick = {
                                 handleScanQrClick()
                             },
