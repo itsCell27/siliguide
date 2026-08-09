@@ -19,10 +19,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.core.ui.theme.Black
 import com.example.siliguide.core.ui.theme.GrayBody
-import com.example.siliguide.core.ui.theme.GrayMedium
 import com.example.siliguide.core.ui.theme.GreenBgLight
 import com.example.siliguide.core.ui.theme.GreenDark
+import com.example.siliguide.core.ui.theme.GreenLight
 import com.example.siliguide.core.ui.theme.SiliGuideTheme
+import com.example.siliguide.core.ui.theme.White
 import com.example.siliguide.core.ui.theme.WizardCaptionStyle
 import com.example.siliguide.core.ui.theme.WizardWarningBg
 import com.example.siliguide.core.ui.theme.WizardWarningBorder
@@ -46,19 +47,19 @@ import com.example.siliguide.presentation.features.iot.lan_setup.components.Wiza
 /**
  * Step 4 of 4 — Device Hotspot (AP) Provisioning Path.
  *
- * The phone temporarily joins the ESP32's own hotspot, hands over the Home
- * Wi-Fi credentials collected in step 2, then the ESP32 drops its hotspot and
- * joins the LAN.
+ * The phone temporarily joins the ESP32's own hotspot so the app can verify it
+ * is an unclaimed SiliGuide device and hand over the Home Wi-Fi credentials
+ * collected in Step 3.
  */
 sealed interface LanApProvisioningUiState {
     /** Instructions shown; app polls until the phone lands on the device hotspot. */
-    data class Waiting(val deviceSsid: String = "SiliGuide_IoT_XXXX") : LanApProvisioningUiState
+    data class Waiting(val deviceSsid: String = "SiliGuide_IoT") : LanApProvisioningUiState
 
-    /** Hotspot detected; credentials are being pushed to the ESP32. */
+    /** Hotspot detected; the app is talking to the ESP32. */
     data object SendingCredentials : LanApProvisioningUiState
 
-    /** Hotspot never appeared — offer retry or fall back to Bluetooth. */
-    data class Error(val deviceSsid: String = "SiliGuide_IoT_XXXX") : LanApProvisioningUiState
+    /** Hotspot never appeared, or the device failed a check. */
+    data class Error(val deviceSsid: String = "SiliGuide_IoT") : LanApProvisioningUiState
 }
 
 @Composable
@@ -168,34 +169,27 @@ fun LanApProvisioningScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     WizardHeroBadge(
-                        bgColor = com.example.siliguide.core.ui.theme.White,
-                        borderColor = com.example.siliguide.core.ui.theme.GreenLight,
+                        bgColor = White,
+                        borderColor = GreenLight,
                         size = 58.dp,
                         borderWidth = 2.dp
                     ) { WifiBroadcastIcon() }
 
                     Text(
-                        text = "Sending Wi-Fi credentials…",
+                        text = "Connecting to SiliGuide IoT Device\nAP Hotspot…",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = Black,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Text(
-                        text = "ESP32 connecting to Home Wi-Fi…",
-                        style = WizardCaptionStyle,
-                        color = GrayMedium,
                         textAlign = TextAlign.Center
                     )
                 }
             }
 
             is LanApProvisioningUiState.Error -> {
-                WizardHeading(text = "Couldn't detect the device hotspot")
+                WizardHeading(text = "Couldn't reach the device hotspot")
 
                 WizardBody(
-                    text = "We couldn't detect your IoT device's hotspot. Please make sure the " +
+                    text = "We couldn't reach your IoT device's hotspot. Please make sure the " +
                             "device is powered on and connect to its Wi-Fi network."
                 )
 
@@ -221,6 +215,13 @@ fun LanApProvisioningScreen(
                         color = WizardWarningText
                     )
                 }
+
+                WizardActionRow(
+                    title = "Open Wi-Fi Settings",
+                    subtitle = "Find ${state.deviceSsid}",
+                    tileColor = GreenBgLight,
+                    onClick = onOpenWifiSettings
+                ) { WifiSettingsIcon() }
             }
         }
     }
@@ -283,7 +284,7 @@ private fun LanApWaitingLargePreview() {
 }
 
 @Preview(
-    name = "Sending · Standard 360x740",
+    name = "Connecting · Standard 360x740",
     showSystemUi = true,
     device = "spec:width=360dp,height=740dp,dpi=420"
 )

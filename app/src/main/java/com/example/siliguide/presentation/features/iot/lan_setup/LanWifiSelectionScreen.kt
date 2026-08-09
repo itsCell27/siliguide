@@ -91,6 +91,7 @@ sealed interface LanWifiUiState {
 fun LanWifiSelectionScreen(
     state: LanWifiUiState,
     onBack: () -> Unit,
+    hasReconfiguredDeviceId: Boolean = false,
     onRefresh: () -> Unit,
     onSelectNetwork: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
@@ -106,11 +107,14 @@ fun LanWifiSelectionScreen(
             selectedNetwork != null &&
             (selectedNetwork.isOpen || state.password.isNotEmpty())
 
+    val showBack = !hasReconfiguredDeviceId
+
     LanWizardScaffold(
         flowLabel = "LAN Setup",
         stepLabel = "Step 2 of 4",
         progress = 0.5f,
         onBack = onBack,
+        showBack = showBack,
         modifier = modifier,
         contentArrangement = Arrangement.spacedBy(9.dp),
         bottomBar = {

@@ -50,13 +50,22 @@ import com.example.siliguide.core.permission.DeviceSettingsChecker
 import com.example.siliguide.core.permission.PermissionRequest
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.domain.usecase.CheckDeviceWiFiStatusUseCase
+import com.example.siliguide.domain.usecase.ConnectDeviceToWiFUseCase
 import com.example.siliguide.domain.usecase.ScanWifiNetworksUseCase
+import com.example.siliguide.domain.usecase.UpdateDeviceIpUseCase
+import com.example.siliguide.presentation.features.iot.lan_setup.LanApProvisioningUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPermissionUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightResult
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanProvisioningMethod
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupMethodUiState
+import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
+import com.example.siliguide.domain.usecase.UpdateDeviceConnectionModeUseCase
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveAction
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveDialogState
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
 
 data class ValidationDialogState(
     val title: String,
@@ -64,6 +73,7 @@ data class ValidationDialogState(
 )
 
 const val DEVICE_NAME_MAX_LENGTH = 12
+const val DEFAULT_AP_IP = "192.168.4.1"
 
 @HiltViewModel
 class IoTViewModel @Inject constructor(
@@ -83,6 +93,10 @@ class IoTViewModel @Inject constructor(
 
     private val deviceSettingsChecker: DeviceSettingsChecker,
     private val scanWifiNetworksUseCase: ScanWifiNetworksUseCase,
+    private val connectDeviceToWiFUseCase: ConnectDeviceToWiFUseCase,
+    private val checkDeviceWiFiStatusUseCase: CheckDeviceWiFiStatusUseCase,
+    private val updateDeviceIpUseCase: UpdateDeviceIpUseCase,
+    private val updateDeviceConnectionModeUseCase: UpdateDeviceConnectionModeUseCase,
     val permissionManager: PermissionManager
 ) : ViewModel() {
 
@@ -251,7 +265,7 @@ class IoTViewModel @Inject constructor(
         }
 
         repeat(3) { attempt ->
-            val result = verifyDeviceConnectionUseCase("192.168.4.1")
+            val result = verifyDeviceConnectionUseCase(host = DEFAULT_AP_IP)
 
             result.onSuccess { info ->
 
@@ -300,7 +314,7 @@ class IoTViewModel @Inject constructor(
 
                         showValidationDialog(
                             title = "Device Already Claimed",
-                            message = "This SiliGuide device has already been claimed and cannot be paired again unless it is factory reset."
+                            message = "This SiliGuide device has already been claimed and cannot be paired again unless you reset it manually."
                         )
 
                         _apConnectionState.value = "FAILED"
@@ -573,7 +587,7 @@ class IoTViewModel @Inject constructor(
                         if (info.claimed) {
                             showValidationDialog(
                                 title = "Device Already Claimed",
-                                message = "This SiliGuide device has already been claimed and cannot be paired again unless it is factory reset."
+                                message = "This SiliGuide device has already been claimed and cannot be paired again unless you reset it manually."
                             )
                             setBluetoothUnsupported("Device is permanently locked to another user.")
                             bluetoothManager.disconnect()
@@ -1181,12 +1195,21 @@ class IoTViewModel @Inject constructor(
                     val networks = runCatching { scanWifiNetworksUseCase() }
                         .getOrElse { emptyList() }
 
+                    // Filter OUT SiliGuide devices and blank hidden networks
+                    val filteredNetworks = networks.filter { network ->
+                        val ssid = network.ssid
+
+                        // 1. Must not be null or completely empty (hides ghost networks)
+                        // 2. Must NOT contain the word "SiliGuide"
+                        !ssid.isNullOrBlank() && !ssid.contains("SiliGuide", ignoreCase = true)
+                    }
+
                     _lanWifiState.value =
-                        if (networks.isEmpty()) {
+                        if (filteredNetworks.isEmpty()) {
                             LanWifiUiState.Empty
                         } else {
                             LanWifiUiState.Ready(
-                                networks = networks,
+                                networks = filteredNetworks,
                                 // Keep the choice across a refresh
                                 selectedSsid = lanSelectedSsid
                                     ?.takeIf { ssid -> networks.any { it.ssid == ssid } },
@@ -1205,6 +1228,14 @@ class IoTViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun finishDeviceWiFiSetupDialog() {
+        showValidationDialog(
+            title = "Finish WiFi Setup",
+            message = "Your device is saved but not on a network yet. " +
+                    "Choose a WiFi network and enter its password to finish."
+        )
     }
 
     private fun currentPasswordVisible(): Boolean =
@@ -1256,8 +1287,14 @@ class IoTViewModel @Inject constructor(
         _lanWifiState.value = ready.copy(passwordVisible = !ready.passwordVisible)
     }
 
-    /** Step 3 → Step 4a (AP) or Step 4b (Bluetooth). */
+    /** Step 3 → Step 4, or straight back to /configure when re-provisioning. */
     fun continueFromLanWifi() {
+
+        // Reusing Step 3 to fix a saved device — skip the rest of the wizard
+        if (lanReconfigureDeviceId != null) {
+            sendWifiToSavedDevice()
+            return
+        }
 
         val ready = _lanWifiState.value as? LanWifiUiState.Ready ?: return
 
@@ -1288,15 +1325,594 @@ class IoTViewModel @Inject constructor(
         lanSelectedPassword = ""
     }
 
+    // ---- Step 4a of 4: Device Hotspot (AP) provisioning -------------------
+
+    /** SSID prefix the ESP32 broadcasts while unclaimed. */
+    private val lanApDeviceSsid = "SiliGuide_IoT"
+
+    private val _lanApProvisioningState = MutableStateFlow<LanApProvisioningUiState>(
+        LanApProvisioningUiState.Waiting(lanApDeviceSsid)
+    )
+
+    val lanApProvisioningState: StateFlow<LanApProvisioningUiState> =
+        _lanApProvisioningState.asStateFlow()
+
+    /** Emitted once an unclaimed SiliGuide device answers on 192.168.4.1. */
+    private val _lanApVerified = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanApVerified: SharedFlow<Unit> = _lanApVerified.asSharedFlow()
+
+    private var lanApWatchJob: Job? = null
+
+    /**
+     * Starts watching [apConnectionState] and mirrors it onto the wizard state.
+     *
+     * verifyEsp32ConnectionViaIp() already owns the real work — the ping, the
+     * SiliGuide check, the already-registered check and the already-claimed
+     * check — and raises its own validationDialog on each failure. This only
+     * translates its status string into screen states and fires navigation.
+     */
+    fun startLanApProvisioning() {
+
+        // Clear any verdict from a previous visit. apConnectionState is a
+        // StateFlow, so a stale "CONNECTED" would replay the instant the
+        // collector attaches and re-fire lanApVerified.
+        _apConnectionState.value = "IDLE"
+
+        _lanApProvisioningState.value =
+            LanApProvisioningUiState.Waiting(lanApDeviceSsid)
+
+        lanApWatchJob?.cancel()
+
+        lanApWatchJob = viewModelScope.launch {
+            apConnectionState.collect { status ->
+
+                when (status) {
+
+                    "CONNECTING" ->
+                        _lanApProvisioningState.value =
+                            LanApProvisioningUiState.SendingCredentials
+
+                    "CONNECTED" -> {
+                        _lanApProvisioningState.value =
+                            LanApProvisioningUiState.SendingCredentials
+
+                        _lanApVerified.emit(Unit)
+                    }
+
+                    "FAILED", "WIFI_OFF" ->
+                        _lanApProvisioningState.value =
+                            LanApProvisioningUiState.Error(lanApDeviceSsid)
+
+                    else ->
+                        _lanApProvisioningState.value =
+                            LanApProvisioningUiState.Waiting(lanApDeviceSsid)
+                }
+            }
+        }
+    }
+
+    /** Forget the last hotspot verdict so Step 4 re-verifies on return. */
+    fun resetLanApVerification() {
+        _apConnectionState.value = "IDLE"
+        _lanApProvisioningState.value =
+            LanApProvisioningUiState.Waiting(lanApDeviceSsid)
+    }
+
+    /** Re-pings the hotspot after the user fixes whatever was wrong. */
+    fun retryLanApProvisioning() {
+        dismissValidationDialog()
+        forceCheckConnection()
+    }
+
+    fun stopLanApProvisioning() {
+        lanApWatchJob?.cancel()
+        lanApWatchJob = null
+    }
+
+    // ---- Success screen ---------------------------------------------------
+
+    // ---- Success: claim, save, provision ----------------------------------
+
+    /** Blocking message raised while claiming, saving or provisioning. */
+    var lanSaveDialog by mutableStateOf<LanSaveDialogState?>(null)
+        private set
+
+    fun dismissLanSaveDialog() {
+        lanSaveDialog = null
+    }
+
+    var isFinalizingLan by mutableStateOf(false)
+        private set
+
+    /** Which half of the Success screen is showing. */
+    var lanSuccessStage by mutableStateOf(LanSuccessStage.NAMING)
+        private set
+
+    /** Network the device joined — the one the phone has to rejoin. */
+    var lanDeviceIp by mutableStateOf("")
+        private set
+
+    /** A verification attempt already came back empty. */
+    var lanSwitchFailed by mutableStateOf(false)
+        private set
+
+    /** Emitted when the device is claimed, saved and on the LAN. */
+    private val _lanSetupFinished = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanSetupFinished: SharedFlow<Unit> = _lanSetupFinished.asSharedFlow()
+
+    /**
+     * Emitted when a device is provisioned and the phone hand-off starts.
+     *
+     * Separate from lanSetupFinished: that one means fully done, this one means
+     * "go show the SWITCH_NETWORK screen". The re-provisioning path fires from
+     * Step 3, which has to pop back to Success before the hand-off UI can show.
+     */
+    private val _lanHandoffReady = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanHandoffReady: SharedFlow<Unit> = _lanHandoffReady.asSharedFlow()
+
+    /** Emitted with a deviceId when the user has to pick a different network. */
+    private val _lanReconfigureRequested = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val lanReconfigureRequested: SharedFlow<String> = _lanReconfigureRequested.asSharedFlow()
+
+    /**
+     * Set while Step 3 is being reused to re-provision an already saved device.
+     *
+     * When non-null, Continue on the Wi-Fi screen pushes credentials straight
+     * to the device instead of walking forward through the wizard.
+     */
+    var lanReconfigureDeviceId by mutableStateOf<String?>(null)
+        private set
+
+    fun startLanWifiReconfigure(deviceId: String) {
+        lanReconfigureDeviceId = deviceId
+    }
+
+    fun clearLanWifiReconfigure() {
+        lanReconfigureDeviceId = null
+    }
+
+    /** Human label for whichever path delivered the device. */
+    val lanProvisioningPathLabel: String
+        get() = when (lanProvisioningMethod) {
+            LanProvisioningMethod.ACCESS_POINT -> "AP Hotspot"
+            LanProvisioningMethod.BLUETOOTH -> "Bluetooth"
+        }
+
+    /**
+     * Save Device on the Success screen, AP path.
+     *
+     * Order matters and is dictated by the firmware:
+     *
+     *  1. POST /claim  — only answers while the device is unclaimed.
+     *  2. Save locally — the row has to exist before we can update its IP.
+     *  3. POST /configure — 403s unless the device is already claimed, which
+     *     is why it cannot run before step 1.
+     *  4. GET /wifi-status — the ESP32 runs WIFI_AP_STA, so its hotspot stays
+     *     up while it joins the home network and we can keep polling it.
+     *  5. Update last_known_ip, then move the phone over to the same network.
+     */
+    fun finalizeLanAPMode() {
+
+        _iotUiState.update { currentState ->
+            currentState.copy(
+                isLoading = true,
+                loadingMessage = "Saving device..."
+            )
+        }
+
+        val deviceId = connectedDeviceId
+        val token = pairingToken
+        val ssid = lanSelectedSsid
+        val name = deviceName.trim()
+
+        if (deviceId == null || token.isNullOrBlank()) {
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = false,
+                    loadingMessage = "Loading..."
+                )
+            }
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Not Connected",
+                message = "The device is no longer reachable. Go back and reconnect to its hotspot."
+            )
+            return
+        }
+
+        if (ssid.isNullOrBlank()) {
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = false,
+                    loadingMessage = "Loading..."
+                )
+            }
+            lanSaveDialog = LanSaveDialogState(
+                title = "No Network Selected",
+                message = "Go back and choose the WiFi network this device should join.",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+            return
+        }
+
+        if (name.isBlank()) {
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = false,
+                    loadingMessage = "Loading..."
+                )
+            }
+            lanSaveDialog = LanSaveDialogState(
+                title = "Name Required",
+                message = "Give this device a name before saving it."
+            )
+            return
+        }
+
+        val password = lanSelectedPassword
+
+        viewModelScope.launch {
+
+            isFinalizingLan = true
+
+            try {
+                val userId = authRepository.getUserId()
+
+                if (userId == null) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Not Signed In",
+                        message = "Sign in again before adding a device."
+                    )
+                    return@launch
+                }
+
+                // ---- 1. Claim -------------------------------------------
+                val claimed = runCatching {
+                    claimIoTDeviceUseCase(host = DEFAULT_AP_IP, token = token)
+                }
+
+                if (claimed.isFailure) {
+                    Log.e("IoTViewModel", "Claim failed", claimed.exceptionOrNull())
+
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Couldn't Claim Device",
+                        message = "The device rejected the pairing request. Make sure your " +
+                                "phone is still connected to its hotspot, then try again."
+                    )
+                    return@launch
+                }
+
+                // ---- 2. Save locally ------------------------------------
+                val saved = runCatching {
+                    saveIoTDeviceUseCase(
+                        IoTDevice(
+                            deviceId = deviceId,
+                            userId = userId,
+                            deviceName = name.take(DEVICE_NAME_MAX_LENGTH),
+                            pairingToken = token,
+                            isActive = true,
+                            // Filled in once the device reports its LAN address
+                            lastKnownIp = "",
+                            // Set to AP for now since device is not yet connected to LAN
+                            connectionMode = ConnectionMode.AP,
+                            isSynced = false,
+                            dateAdded = System.currentTimeMillis()
+                        )
+                    )
+                }
+
+                if (saved.isFailure) {
+                    Log.e("IoTViewModel", "Save failed", saved.exceptionOrNull())
+
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Couldn't Save Device",
+                        message = "The device was claimed but could not be saved to this " +
+                                "device. Please try again."
+                    )
+                    return@launch
+                }
+
+                // ---- 3, 4, 5. Provision --------------------------------
+                provisionSavedDevice(
+                    deviceId = deviceId,
+                    token = token,
+                    ssid = ssid,
+                    password = password
+                )
+
+            } finally {
+                _iotUiState.update { currentState ->
+                    currentState.copy(
+                        isLoading = false,
+                        loadingMessage = "Loading..."
+                    )
+                }
+                isFinalizingLan = false
+            }
+        }
+    }
+
+    /**
+     * Continue on Step 3 when the wizard is re-provisioning a saved device.
+     *
+     * The device is already claimed and in the database, so only /configure
+     * and the status poll are repeated.
+     */
+    fun sendWifiToSavedDevice() {
+
+        // Continue on Step 3 isn't gated by isFinalizingLan
+        if (isFinalizingLan) return
+
+        val deviceId = lanReconfigureDeviceId
+        val token = pairingToken
+        val ready = _lanWifiState.value as? LanWifiUiState.Ready
+
+        val selected = ready?.networks?.firstOrNull { it.ssid == ready.selectedSsid }
+
+        if (deviceId == null || token.isNullOrBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Not Reachable",
+                message = "Lost track of the device being set up. Restart the setup wizard " +
+                        "and reconnect to its hotspot."
+            )
+            return
+        }
+
+        if (selected == null) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "No Network Selected",
+                message = "Choose a WiFi network and enter its password to continue."
+            )
+            return
+        }
+
+        if (!selected.isOpen && ready.password.isEmpty()) {
+            showValidationDialog(
+                title = "Password Required",
+                message = "Enter the password for ${selected.ssid} to continue."
+            )
+            return
+        }
+
+        lanSelectedSsid = selected.ssid
+        lanSelectedPassword = ready.password
+
+        viewModelScope.launch {
+
+            isFinalizingLan = true
+
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    loadingMessage = "Connecting..."
+                )
+            }
+
+            try {
+                provisionSavedDevice(
+                    deviceId = deviceId,
+                    token = token,
+                    ssid = selected.ssid,
+                    password = ready.password
+                )
+            } finally {
+                _iotUiState.update { currentState ->
+                    currentState.copy(
+                        isLoading = false
+                    )
+                }
+                isFinalizingLan = false
+            }
+        }
+    }
+
+    /**
+     * Pushes credentials to a claimed device, waits for it to join, records its
+     * IP, then moves the phone onto the same network.
+     */
+    private suspend fun provisionSavedDevice(
+        deviceId: String,
+        token: String,
+        ssid: String,
+        password: String
+    ) {
+        // ---- Send credentials over the hotspot ----------------------------
+        val configured = runCatching {
+            connectDeviceToWiFUseCase(
+                host = DEFAULT_AP_IP,
+                token = token,
+                ssid = ssid,
+                password = password
+            )
+        }
+
+        if (configured.isFailure) {
+            Log.e("IoTViewModel", "/configure failed", configured.exceptionOrNull())
+
+            lanSaveDialog = LanSaveDialogState(
+                title = "Couldn't Send WiFi Details",
+                message = "The device did not accept the WiFi details for \"$ssid\". " +
+                        "Choose a network again and re-enter the password.",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+            return
+        }
+
+        // ---- Wait for the device to actually join -------------------------
+        val status = awaitDeviceOnLan()
+
+        if (status == null) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Couldn't Join \"$ssid\"",
+                message = "The device could not connect to \"$ssid\". The password may be " +
+                        "wrong, or the network may be out of range of the device. Choose a " +
+                        "network again and re-enter the password.",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+            return
+        }
+
+        // ---- Record where it landed ---------------------------------------
+        runCatching { updateDeviceIpUseCase(deviceId, status.ip) }
+            .onFailure { Log.e("IoTViewModel", "updateDeviceIp failed", it) }
+
+        // ---- Update connection mode to LAN ---------------------------------------
+        runCatching { updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.LAN) }
+            .onFailure { Log.e("IoTViewModel", "updateConnectionMode failed", it) }
+
+
+        clearLanWifiReconfigure()
+        error = null
+        lanSaveDialog = null
+
+        // ---- Hand the phone over ------------------------------------------
+        // Drop the process binding to the hotspot so a normal Wi-Fi switch in
+        // Settings actually takes effect for our traffic.
+        disconnectFromDeviceWifiUseCase()
+
+        lanDeviceIp = status.ip
+        lanSwitchFailed = false
+        lanSuccessStage = LanSuccessStage.SWITCH_NETWORK
+
+        // Step 3 has to pop back to Success before the hand-off UI is visible.
+        // No-op when we are already on Success (the finalize path).
+        _lanHandoffReady.emit(Unit)
+
+        // Deliberately no _lanSetupFinished here. The device is on the LAN but
+        // the phone is not, so navigating now would show a "Connected" card
+        // the app cannot actually reach.
+        verifyPhoneOnDeviceNetwork()
+    }
+
+    /**
+     * Polls /wifi-status on the hotspot until the device reports a real IP.
+     *
+     * The firmware gives up after WIFI_TIMEOUT (10s) and then retries every 5s,
+     * so this window covers one full attempt plus a retry.
+     */
+    private suspend fun awaitDeviceOnLan(): WiFiStatusDto? {
+
+        repeat(WIFI_STATUS_POLL_ATTEMPTS) { attempt ->
+
+            delay(WIFI_STATUS_POLL_DELAY_MS)
+
+            val status = runCatching {
+                checkDeviceWiFiStatusUseCase(DEFAULT_AP_IP)
+            }.getOrNull()
+
+            Log.d(
+                "AP_DEBUG",
+                "wifi-status attempt ${attempt + 1}: connected=${status?.connected} ip=${status?.ip}"
+            )
+
+            if (status != null &&
+                status.connected &&
+                status.ip.isNotBlank() &&
+                status.ip != "0.0.0.0"
+            ) {
+                return status
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Pings the device at its LAN address to prove the phone followed it over.
+     *
+     * Called on entry to SWITCH_NETWORK, on every ON_RESUME, and from the
+     * "I'm Connected" button. Only a real answer advances the wizard.
+     */
+    fun verifyPhoneOnDeviceNetwork() {
+
+        val ip = lanDeviceIp
+
+        if (ip.isBlank()) return
+
+        // Already checking, or already done
+        if (lanSuccessStage != LanSuccessStage.SWITCH_NETWORK) return
+
+        viewModelScope.launch {
+
+            lanSuccessStage = LanSuccessStage.VERIFYING
+
+            var reached = false
+
+            repeat(PHONE_SWITCH_POLL_ATTEMPTS) { attempt ->
+
+                if (reached) return@repeat
+
+                val result = verifyDeviceConnectionUseCase(host = ip)
+
+                result.onSuccess { info ->
+                    Log.d("AP_DEBUG", "Reached ${info.deviceId} at $ip")
+                    reached = true
+                }
+
+                result.onFailure {
+                    Log.d(
+                        "AP_DEBUG",
+                        "Phone not on device network yet (attempt ${attempt + 1})"
+                    )
+                }
+
+                if (!reached) delay(PHONE_SWITCH_POLL_DELAY_MS)
+            }
+
+            if (reached) {
+                lanSwitchFailed = false
+                lanSuccessStage = LanSuccessStage.SWITCH_NETWORK
+                _lanSetupFinished.emit(Unit)
+            } else {
+                lanSwitchFailed = true
+                lanSuccessStage = LanSuccessStage.SWITCH_NETWORK
+            }
+        }
+    }
+
+    fun connectToSameWiFiDialog() {
+        showValidationDialog(
+            title = "Finish WiFi Setup",
+            message = "Reconnect this phone to \"${lanSelectedSsid}\" " +
+                    "so SiliGuide can reach your device and finish setup."
+        )
+    }
+
+    private companion object {
+        const val WIFI_STATUS_POLL_ATTEMPTS = 3
+        const val WIFI_STATUS_POLL_DELAY_MS = 1_500L
+
+        const val PHONE_SWITCH_POLL_ATTEMPTS = 3
+        const val PHONE_SWITCH_POLL_DELAY_MS = 1_200L
+    }
+
     // ---- Wizard teardown --------------------------------------------------
 
-    /** Backing out of Step 1 abandons the whole wizard. */
+    /**
+     * Wipes every scrap of wizard state.
+     *
+     * lanReconfigureDeviceId matters most — leave it set and the NEXT wizard
+     * run enters Step 3 already in reconfigure mode, so Continue forks to
+     * sendWifiToSavedDevice() against a stale device instead of Step 4.
+     */
     fun resetLanSetup() {
         _lanSetupMethodState.value = LanSetupMethodUiState()
         _lanPermissionState.value = LanPermissionUiState.Requesting
         _lanWifiState.value = LanWifiUiState.Scanning
+        _lanApProvisioningState.value =
+            LanApProvisioningUiState.Waiting(lanApDeviceSsid)
+
         lanSelectedSsid = null
         lanSelectedPassword = ""
+        lanReconfigureDeviceId = null
+
+        lanSuccessStage = LanSuccessStage.NAMING
+        lanDeviceIp = ""
+        lanSwitchFailed = false
+
+        lanSaveDialog = null
         lanBlocker = null
         error = null
         validationDialog = null

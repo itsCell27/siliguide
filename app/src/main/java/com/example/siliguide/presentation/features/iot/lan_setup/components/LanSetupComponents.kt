@@ -76,6 +76,8 @@ fun LanWizardScaffold(
     stepLabel: String,
     progress: Float,
     onBack: () -> Unit,
+    showBack: Boolean = true,
+    enableBack: Boolean = true,
     modifier: Modifier = Modifier,
     contentAlignment: Alignment.Horizontal = Alignment.Start,
     contentArrangement: Arrangement.Vertical = Arrangement.spacedBy(13.dp),
@@ -96,19 +98,23 @@ fun LanWizardScaffold(
                     .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(OffWhite)
-                        .border(1.dp, Border, RoundedCornerShape(50))
-                        .clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center
-                ) {
-                    BackChevronIcon()
-                }
+                if (showBack) {
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(OffWhite)
+                            .border(1.dp, Border, RoundedCornerShape(50))
+                            .clickable(onClick = onBack, enabled = enableBack),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BackChevronIcon(
+                            color = if (enableBack) GrayBody else GrayHint
+                        )
+                    }
 
-                Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(10.dp))
+                }
 
                 Text(
                     text = flowLabel,
@@ -240,7 +246,7 @@ fun WizardOutlinedButton(
 @Composable
 fun WizardWaitingButton(
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier

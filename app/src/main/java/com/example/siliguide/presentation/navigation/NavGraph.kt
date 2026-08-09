@@ -2,7 +2,9 @@ package com.example.siliguide.presentation.navigation
 
 import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -56,6 +58,14 @@ import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiSelectio
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanProvisioningMethod
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupMethodScreen
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessScreen
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessUiState
+import androidx.navigation.navArgument
+import com.example.siliguide.core.ui.components.LoadingOverlay
+import com.example.siliguide.core.ui.components.MessageDialog
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveAction
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessScreen
+import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
 
 @Composable
 fun SiliGuideNavGraph(
@@ -396,7 +406,7 @@ fun SiliGuideNavGraph(
                         if (navController.currentDestination?.route ==
                             Screen.LanLocationPermission.route
                         ) {
-                            navController.navigate(Screen.LanWifiSelection.route)
+                            navController.navigate(Screen.LanWifiSelection.createRoute())
                         }
                     }
                 }
@@ -514,7 +524,16 @@ fun SiliGuideNavGraph(
             }
 
             // ── Step 3 of 4 — Connect to Home Wi-Fi ────────────────────
-            composable(Screen.LanWifiSelection.route) { backStackEntry ->
+            composable(
+                route = Screen.LanWifiSelection.route,
+                arguments = listOf(
+                    navArgument("deviceId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
 
                 val parentEntry = remember(backStackEntry) {
                     navController.getBackStackEntry(Screen.LanSetupGraph.route)
@@ -525,6 +544,49 @@ fun SiliGuideNavGraph(
                 val context = LocalContext.current
 
                 val wifiState by viewModel.lanWifiState.collectAsState()
+                val iotUiState by viewModel.iotUiState.collectAsState()
+
+                // Present only when Step 3 is reused to fix a saved device
+                val reconfigureDeviceId = backStackEntry.arguments
+                    ?.getString("deviceId")
+                    ?.takeIf { it.isNotBlank() && !it.startsWith("{") }
+
+                val hasReconfiguredDeviceId = reconfigureDeviceId != null
+
+                LaunchedEffect(reconfigureDeviceId) {
+                    if (reconfigureDeviceId != null) {
+                        viewModel.startLanWifiReconfigure(reconfigureDeviceId)
+                    } else {
+                        viewModel.clearLanWifiReconfigure()
+                    }
+                }
+
+                // Device is already claimed and saved — there is nowhere sane to
+                // go back to, so swallow system back while re-provisioning
+                BackHandler(enabled = reconfigureDeviceId != null) {
+                    viewModel.finishDeviceWiFiSetupDialog()
+                }
+
+                // Re-provisioning worked — back to Success for the hand-off
+                LaunchedEffect(Unit) {
+                    viewModel.lanHandoffReady.collect {
+
+                        if (navController.currentDestination?.route !=
+                            Screen.LanWifiSelection.route
+                        ) {
+                            return@collect
+                        }
+
+                        val popped = navController.popBackStack(
+                            route = Screen.LanSetupSuccess.route,
+                            inclusive = false
+                        )
+
+                        if (!popped) {
+                            navController.navigate(Screen.LanSetupSuccess.route)
+                        }
+                    }
+                }
 
                 // Returning from Location / WiFi settings — scan again
                 val settingsLauncher = rememberLauncherForActivityResult(
@@ -578,15 +640,32 @@ fun SiliGuideNavGraph(
                     }
                 }
 
-                LanWifiSelectionScreen(
-                    state = wifiState,
-                    onBack = { navController.popBackStack() },
-                    onRefresh = { viewModel.startLanWifiScan(context) },
-                    onSelectNetwork = { viewModel.selectLanWifiNetwork(it) },
-                    onPasswordChange = { viewModel.updateLanWifiPassword(it) },
-                    onTogglePasswordVisibility = { viewModel.toggleLanWifiPasswordVisibility() },
-                    onContinue = { viewModel.continueFromLanWifi() }
-                )
+                // Re-provisioning succeeded — device is on the LAN and saved
+                LaunchedEffect(Unit) {
+                    viewModel.lanSetupFinished.collect {
+                        viewModel.resetLanSetup()
+
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.LanSetupGraph.route) { inclusive = true }
+                        }
+                    }
+                }
+
+                LoadingOverlay(
+                    isLoading = iotUiState.isLoading,
+                    message = iotUiState.loadingMessage
+                ) {
+                    LanWifiSelectionScreen(
+                        state = wifiState,
+                        onBack = { navController.popBackStack() },
+                        hasReconfiguredDeviceId = hasReconfiguredDeviceId,
+                        onRefresh = { viewModel.startLanWifiScan(context) },
+                        onSelectNetwork = { viewModel.selectLanWifiNetwork(it) },
+                        onPasswordChange = { viewModel.updateLanWifiPassword(it) },
+                        onTogglePasswordVisibility = { viewModel.toggleLanWifiPasswordVisibility() },
+                        onContinue = { viewModel.continueFromLanWifi() }
+                    )
+                }
 
                 // WiFi off, Location off, permission revoked
                 val blocker = viewModel.lanBlocker
@@ -644,6 +723,16 @@ fun SiliGuideNavGraph(
                         onDismiss = { viewModel.dismissValidationDialog() }
                     )
                 }
+
+                // Re-provisioning failure — let the user try another network
+                viewModel.lanSaveDialog?.let { dialog ->
+                    MessageDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = dialog.confirmText,
+                        onConfirm = { viewModel.dismissLanSaveDialog() }
+                    )
+                }
             }
 
             // ── Step 4 of 4 — Device Hotspot (AP) Provisioning Path ────
@@ -655,9 +744,209 @@ fun SiliGuideNavGraph(
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
-                // TODO: wire LanApProvisioningScreen.
-                // Credentials are in viewModel.lanSelectedSsid and
-                // viewModel.lanSelectedPassword.
+                val apState by viewModel.lanApProvisioningState.collectAsState()
+
+                // Coming back from Wi-Fi settings is the cue to ping the device
+                val wifiSettingsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    viewModel.forceCheckConnection()
+                }
+
+                // Start mirroring apConnectionState onto the wizard state
+                DisposableEffect(Unit) {
+                    viewModel.startLanApProvisioning()
+                    onDispose { viewModel.stopLanApProvisioning() }
+                }
+
+                // Verified an unclaimed SiliGuide device → Success
+                LaunchedEffect(Unit) {
+                    viewModel.lanApVerified.collect {
+                        if (navController.currentDestination?.route ==
+                            Screen.LanApProvisioning.route
+                        ) {
+                            navController.navigate(Screen.LanSetupSuccess.route)
+                        }
+                    }
+                }
+
+                LanApProvisioningScreen(
+                    state = apState,
+
+                    onBack = {
+                        viewModel.disconnectFromDeviceWifi()
+                        navController.popBackStack()
+                    },
+
+                    onOpenWifiSettings = {
+                        wifiSettingsLauncher.launch(Intent(Settings.ACTION_WIFI_SETTINGS))
+                    },
+
+                    onRetry = { viewModel.retryLanApProvisioning() },
+
+                    onSwitchToBluetooth = {
+                        viewModel.selectLanProvisioningMethod(
+                            LanProvisioningMethod.BLUETOOTH
+                        )
+                        navController.navigate(Screen.LanBluetoothProvisioning.route) {
+                            popUpTo(Screen.LanApProvisioning.route) { inclusive = true }
+                        }
+                    }
+                )
+
+                // Unsupported device, already registered, already claimed,
+                // WiFi off, unreachable — all raised by verifyEsp32ConnectionViaIp
+                viewModel.validationDialog?.let { dialog ->
+                    PermissionDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = "Open WiFi Settings",
+                        dismissText = "Close",
+                        onConfirm = {
+                            viewModel.dismissValidationDialog()
+                            wifiSettingsLauncher.launch(Intent(Settings.ACTION_WIFI_SETTINGS))
+                        },
+                        onDismiss = { viewModel.dismissValidationDialog() }
+                    )
+                }
+            }
+
+            // ── Success — reached from either provisioning path ─────────
+            composable(Screen.LanSetupSuccess.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                val context = LocalContext.current
+
+                val successState = LanSetupSuccessUiState(
+                    stage = viewModel.lanSuccessStage,
+                    provisioningPath = viewModel.lanProvisioningPathLabel,
+                    deviceName = viewModel.deviceName,
+                    linkedPlantName = null,
+                    isSaving = viewModel.isFinalizingLan,
+                    targetSsid = viewModel.lanSelectedSsid.orEmpty(),
+                    deviceIp = viewModel.lanDeviceIp,
+                    switchFailed = viewModel.lanSwitchFailed
+                )
+
+                // Coming back from Wi-Fi settings is the cue to re-check
+                val wifiSettingsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    viewModel.verifyPhoneOnDeviceNetwork()
+                }
+
+                /**
+                 * Settings.Panel.ACTION_WIFI shows an inline Wi-Fi sheet with no
+                 * app chooser. ACTION_WIFI_SETTINGS matches several activities on
+                 * some OEM builds, which is why an "Open with" dialog appeared.
+                 */
+                fun openWifiPicker() {
+                    val intent =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            Intent(Settings.Panel.ACTION_WIFI)
+                        } else {
+                            Intent(Settings.ACTION_WIFI_SETTINGS)
+                        }
+
+                    wifiSettingsLauncher.launch(intent)
+                }
+
+                // Phone verified on the same network as the device → Dashboard
+                LaunchedEffect(Unit) {
+                    viewModel.lanSetupFinished.collect {
+                        viewModel.resetLanSetup()
+
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.LanSetupGraph.route) { inclusive = true }
+                        }
+                    }
+                }
+
+                BackHandler(enabled = viewModel.lanSuccessStage != LanSuccessStage.NAMING) {
+                    viewModel.connectToSameWiFiDialog()
+                }
+
+                // The user may switch networks from the notification shade
+                // without ever leaving the app, so ON_RESUME re-checks too
+                val lifecycleOwner = LocalLifecycleOwner.current
+
+                DisposableEffect(lifecycleOwner) {
+
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME &&
+                            viewModel.lanSuccessStage == LanSuccessStage.SWITCH_NETWORK
+                        ) {
+                            viewModel.verifyPhoneOnDeviceNetwork()
+                        }
+                    }
+
+                    lifecycleOwner.lifecycle.addObserver(observer)
+
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
+                LanSetupSuccessScreen(
+                    state = successState,
+
+                    onBack = {
+                        // Backing out mid-hand-off would abandon a saved device
+                        if (viewModel.lanSuccessStage == LanSuccessStage.NAMING) {
+                            viewModel.resetLanApVerification()
+                            navController.popBackStack()
+                        }
+                    },
+
+                    onDeviceNameChange = { viewModel.updateDeviceName(it) },
+
+                    onPickPlant = {
+                        // TODO: plant picker — linking stays optional for now
+                    },
+
+                    onSaveDevice = { viewModel.finalizeLanAPMode() },
+
+                    onOpenWifiSettings = { openWifiPicker() },
+
+                    onCheckConnection = { viewModel.verifyPhoneOnDeviceNetwork() }
+                )
+
+                // Claim / save / provisioning failures
+                viewModel.lanSaveDialog?.let { dialog ->
+                    MessageDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = dialog.confirmText,
+                        onConfirm = {
+                            val action = dialog.action
+                            val deviceId = viewModel.connectedDeviceId
+
+                            viewModel.dismissLanSaveDialog()
+
+                            if (action == LanSaveAction.RECONFIGURE_WIFI && deviceId != null) {
+                                navController.navigate(
+                                    Screen.LanWifiSelection.createRoute(deviceId)
+                                )
+                            }
+                        }
+                    )
+                }
+
+                if (viewModel.lanSaveDialog == null) {
+                    viewModel.validationDialog?.let { dialog ->
+                        MessageDialog(
+                            title = dialog.title,
+                            message = dialog.message,
+                            confirmText = "Got it",
+                            onConfirm = { viewModel.dismissValidationDialog() }
+                        )
+                    }
+                }
             }
 
             // ── Step 4 of 4 — Bluetooth Provisioning Path ──────────────

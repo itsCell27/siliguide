@@ -76,8 +76,16 @@ sealed class Screen(val route: String) {
     object IoTSetupLAN : Screen("iot_setup_lan")
     object LanSetupGraph : Screen("lan_setup_graph")
     object LanLocationPermission : Screen("lan_location_permission")
-    object LanWifiSelection : Screen("lan_wifi_selection")
+
+    // deviceId is set only when re-provisioning an already saved device
+    object LanWifiSelection : Screen("lan_wifi_selection?deviceId={deviceId}") {
+         fun createRoute(deviceId: String? = null): String =
+             if (deviceId == null) "lan_wifi_selection"
+             else "lan_wifi_selection?deviceId=$deviceId"
+    }
+
     object LanSetupMethod : Screen("lan_setup_method")
     object LanApProvisioning : Screen("lan_ap_provisioning")
     object LanBluetoothProvisioning : Screen("lan_bluetooth_provisioning")
+    object LanSetupSuccess : Screen("lan_setup_success")
 }
