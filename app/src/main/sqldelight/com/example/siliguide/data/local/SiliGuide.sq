@@ -136,6 +136,9 @@ UPDATE iot_devices SET device_name = ? WHERE device_id = ?;
 updateDeviceIp:
 UPDATE iot_devices SET last_known_ip = ? WHERE device_id = ?;
 
+updateDeviceConnectionMode:
+UPDATE iot_devices SET connection_mode = ? WHERE device_id = ?;
+
 updateDeviceActiveStatus:
 UPDATE iot_devices SET is_active = ? WHERE device_id = ?;
 
