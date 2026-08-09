@@ -1,6 +1,8 @@
 package com.example.siliguide.domain.repository
 
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
+import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
+import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.SensorResponse
 import kotlinx.coroutines.flow.Flow
@@ -35,11 +37,24 @@ interface IoTRepository {
 
     fun disconnectFromWifi()
 
+    suspend fun configureWiFi(
+        host: String,
+        token: String,
+        ssid: String,
+        password: String
+    )
+
+    suspend fun checkWiFiStatus(host: String): WiFiStatusDto
+
     suspend fun saveDevice(device: IoTDevice)
     suspend fun deleteDevice(deviceId: String)
 
     // UPDATED: Now requires userId for multi-user isolation
     fun getAllDevices(userId: String): Flow<List<IoTDevice>>
+
+    suspend fun updateDeviceIp(deviceId: String, ip: String)
+
+    suspend fun updateDeviceConnectionMode(deviceId: String, connectionMode: ConnectionMode)
 
     // ADDED: Crucial for the sync process
     suspend fun markDeviceSynced(deviceId: String)

@@ -3,6 +3,7 @@ package com.example.siliguide.data.remote.iot
 import com.example.siliguide.core.security.AesGcmCrypto
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
+import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -14,6 +15,9 @@ import io.ktor.client.request.post
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 
 class Esp32Api @Inject constructor(
     private val crypto: AesGcmCrypto
@@ -73,6 +77,37 @@ class Esp32Api @Inject constructor(
         }
 
         return json.decodeFromString(decryptedJson)
+    }
+
+    // Send WiFi credentials to IoT Device securely via AES-GCM
+    suspend fun configureWiFi(
+        host: String,
+        token: String,
+        ssid: String,
+        password: String
+    ) {
+        // 1. Format credentials into the JSON string expected by ESP32 C++ parser
+        val unencryptedPayload = """{"ssid":"$ssid","pass":"$password"}"""
+
+        // 2. Encrypt the JSON into a Base64 string using the pairing token
+        val encryptedBase64Payload = crypto.encrypt(unencryptedPayload, token)
+            ?: throw SecurityException("Failed to encrypt Wi-Fi payload.")
+
+        // 3. POST the raw encrypted Base64 string to /configure
+        val response = client.post("http://$host/configure") {
+            contentType(ContentType.Text.Plain)
+            setBody(encryptedBase64Payload)
+        }
+
+        // Optional: Validate response status code or throw on HTTP errors
+        if (response.status.value !in 200..299) {
+            throw IllegalStateException("Failed to configure Wi-Fi. HTTP Status: ${response.status.value}")
+        }
+    }
+
+    // Check IoT device WiFi Status
+    suspend fun checkWiFiStatus(host: String): WiFiStatusDto {
+        return client.get("http://$host/wifi-status").body()
     }
 
     // get device /info for discovery — always unlocked, never encrypted.

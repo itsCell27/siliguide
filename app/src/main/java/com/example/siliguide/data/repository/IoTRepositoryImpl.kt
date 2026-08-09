@@ -31,6 +31,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.example.siliguide.data.local.mapper.toIotDomain
 import com.example.siliguide.data.remote.iot.BluetoothApi
+import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
 import com.example.siliguide.domain.model.ConnectionMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -90,7 +91,7 @@ class IoTRepositoryImpl @Inject constructor(
 
                 val ip = device.lastKnownIp
 
-                api.getSensorData(ip)
+                api.getSensorData(host = ip, token = device.pairingToken)
                     .toDomain()
             }
 
@@ -182,12 +183,38 @@ class IoTRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun configureWiFi(
+        host: String,
+        token: String,
+        ssid: String,
+        password: String
+    ) {
+        api.configureWiFi(
+            host = host,
+            token = token,
+            ssid = ssid,
+            password = password
+        )
+    }
+
+    override suspend fun checkWiFiStatus(host: String): WiFiStatusDto {
+        return api.checkWiFiStatus(host)
+    }
+
     // --- DATABASE OPERATIONS ---
 
     override suspend fun getDeviceById(deviceId: String): IoTDevice? {
         return queries.getDeviceById(deviceId)
             .executeAsOneOrNull()
             ?.toIotDomain()
+    }
+
+    override suspend fun updateDeviceIp(deviceId: String, ip: String) {
+        queries.updateDeviceIp(ip, deviceId)
+    }
+
+    override suspend fun updateDeviceConnectionMode(deviceId: String, connectionMode: ConnectionMode) {
+        queries.updateDeviceConnectionMode(deviceId, connectionMode.name)
     }
 
     override suspend fun deleteDevice(deviceId: String) {
