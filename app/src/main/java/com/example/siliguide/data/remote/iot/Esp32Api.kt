@@ -18,6 +18,7 @@ import javax.inject.Inject
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.client.plugins.timeout
 
 class Esp32Api @Inject constructor(
     private val crypto: AesGcmCrypto
@@ -112,8 +113,15 @@ class Esp32Api @Inject constructor(
 
     // get device /info for discovery — always unlocked, never encrypted.
     // Device masks the token field itself once claimed; nothing to decrypt here.
-    suspend fun getDeviceInfo(host: String): DeviceInfoDto {
-        return client.get("http://$host/info").body()
+    suspend fun getDeviceInfo(host: String, quick: Boolean = false): DeviceInfoDto {
+        return client.get("http://$host/info") {
+            if (quick) {
+                timeout {
+                    connectTimeoutMillis = 800
+                    requestTimeoutMillis = 1_200
+                }
+            }
+        }.body()
     }
 
     // Add the Handshake lock endpoint so your repository can claim the device.
