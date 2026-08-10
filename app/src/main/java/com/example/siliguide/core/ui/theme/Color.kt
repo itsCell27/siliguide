@@ -61,3 +61,75 @@ val WizardWarningText = Color(0xFF784212)
 val WizardErrorBg = Color(0xFFFCEBEB)
 val WizardErrorBorder = Color(0xFFF7C1C1)
 val WizardErrorText = Color(0xFFA32D2D)
+
+// ── Camera viewfinder tokens (screen 08) ───────────────────────────────────
+
+/** Dim outside the framing box (~45% black). */
+val CameraScrim = Color(0x73000000)
+
+/** Floating chip / round button surface (~55% black). */
+val CameraChipBg = Color(0x8C000000)
+val CameraChipBorder = Color(0x1FFFFFFF)
+
+/** Frosted-glass square buttons (gallery / tips). */
+val CameraGlassBg = Color(0x1FFFFFFF)
+val CameraGlassBorder = Color(0x38FFFFFF)
+
+/** Uppercase hint pill under the box. */
+val CameraHintBg = Color(0x59000000)
+val CameraHintBorder = Color(0x1AFFFFFF)
+val CameraHintText = Color(0xC7FFFFFF)
+
+/** Bottom controls gradient stops. */
+val CameraControlsGradientMid = Color(0x8C000000)
+val CameraControlsGradientEnd = Color(0xB3000000)
+
+/** Glow ring around the shutter (~15% white). */
+val CameraShutterGlow = Color(0x26FFFFFF)
+
+/** Corner bracket colors. */
+val CameraBracket = Color(0xFFFFFFFF)
+val CameraBracketError = Color(0xFFFF8A8A)
+
+/** Tap-to-focus ring states. */
+val CameraFocusRing = Color(0xCCFFFFFF)
+val CameraFocusOk = Color(0xFF97C459)
+val CameraFocusFail = Color(0xFFFF8A8A)
+
+/** Example thumbnail borders / marks in the guide sheet. */
+val ExampleBadBorder = Color(0xFFD96B6B)
+val ExampleBadMark = Color(0xFFC9302C)
+val ExampleGoodBorder = Color(0xFF97C459)
+val ExampleGoodMark = Color(0xFF3B6D11)
+
+/** Sheet grabber. */
+val SheetHandle = Color(0xFFD8D8D8)
+
+/** Backdrop behind a camera bottom sheet. */
+val CameraSheetBackdrop = Color(0x59000000)
+
+/** Full-screen dim behind the Capturing Tips dialog (~60% black). */
+val CameraDialogBackdrop = Color(0x99000000)
+
+/** Glass square button while its dialog is open (~22% white). */
+val CameraGlassBgActive = Color(0x38FFFFFF)
+
+// ── Crop / Adjust tokens (screen 09) ───────────────────────────────────────
+
+/** Dim outside the crop box (~55% black). */
+val CropScrim = Color(0x8C000000)
+
+/** Gesture hint pill. */
+val CropHintBg = Color(0x66000000)
+val CropHintText = Color(0xD9FFFFFF)
+
+/** Rule-of-thirds grid + slider/step track (~18% white). */
+val CropGridLine = Color(0x2EFFFFFF)
+
+/** Pipeline loading overlay (~66% black). */
+val CropLoadingScrim = Color(0xA8000000)
+
+/** Pipeline step states. */
+val CropStepDone = Color(0xFF97C459)
+val CropStepActive = Color(0xFFFFFFFF)
+val CropStepPending = Color(0x80FFFFFF)

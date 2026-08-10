@@ -118,6 +118,107 @@ val WizardMonoStyle = TextStyle(
     fontSize = 10.sp
 )
 
+// ── Camera viewfinder text styles (screen 08) ──────────────────────────────
+
+/** Floating instruction pill over the viewfinder — 11sp */
+val CameraPillStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp
+)
+
+/** Uppercase micro hint under the framing box — 10sp */
+val CameraHintStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 10.sp,
+    letterSpacing = 0.4.sp
+)
+
+/** Camera bottom-sheet heading — 20sp Fraunces */
+val CameraSheetTitleStyle = TextStyle(
+    fontFamily = Fraunces,
+    fontWeight = FontWeight.Bold,
+    fontSize = 20.sp,
+    letterSpacing = (-0.3).sp
+)
+
+/** Camera bottom-sheet body — 12sp, 1.55 line height */
+val CameraSheetBodyStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 12.sp,
+    lineHeight = 18.6.sp
+)
+
+/** "How to take a better picture:" heading — 12sp */
+val CameraTipHeadingStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 12.sp
+)
+
+/** Example thumbnail caption — 11sp */
+val CameraExampleLabelStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp
+)
+
+/** Pill CTA inside camera sheet — 14sp */
+val CameraSheetButtonStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 14.sp
+)
+
+/** Numbered badge inside the Capturing Tips dialog — 11sp bold */
+val CameraTipNumberStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Bold,
+    fontSize = 11.sp
+)
+
+/** Tip body line — 13sp, 1.5 line height */
+val CameraTipTextStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 13.sp,
+    lineHeight = 19.5.sp
+)
+
+// ── Crop / Adjust text styles (screen 09) ──────────────────────────────────
+
+/** Top bar title — 16sp Fraunces */
+val CropTopBarTitleStyle = TextStyle(
+    fontFamily = Fraunces,
+    fontWeight = FontWeight.Bold,
+    fontSize = 16.sp,
+    letterSpacing = (-0.2).sp
+)
+
+/** "Pinch to zoom · Drag to reposition" — 11sp */
+val CropHintStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp,
+    letterSpacing = 0.2.sp
+)
+
+/** Loading headline — 14sp */
+val CropLoadingTitleStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 14.sp
+)
+
+/** Loading sub-line + step rows — 11sp */
+val CropLoadingStepStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Normal,
+    fontSize = 11.sp
+)
+
 val Typography = Typography(
 
     // Large headings - Fraunces serif
