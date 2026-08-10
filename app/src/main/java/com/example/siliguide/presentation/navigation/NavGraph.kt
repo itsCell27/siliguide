@@ -66,6 +66,8 @@ import com.example.siliguide.core.ui.components.MessageDialog
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
+import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningScreen
+import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningUiState
 
 @Composable
 fun SiliGuideNavGraph(
@@ -811,6 +813,130 @@ fun SiliGuideNavGraph(
                 }
             }
 
+
+            // ── Step 4 of 4 — Bluetooth Provisioning Path ──────────────
+            composable(Screen.LanBluetoothProvisioning.route) { backStackEntry ->
+
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
+                }
+
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                val context = LocalContext.current
+
+                val btState by viewModel.lanBluetoothState.collectAsState()
+                val iotUiState by viewModel.iotUiState.collectAsState()
+
+                // BLUETOOTH_CONNECT on API 31+
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions()
+                ) { grants ->
+                    if (grants.values.all { it }) {
+                        viewModel.startLanBluetoothProvisioning(context)
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    viewModel.lanBluetoothPermissionNeeded.collect {
+                        viewModel.markLanBluetoothPermissionRequested()
+                        permissionLauncher.launch(viewModel.lanBluetoothPermissionArray)
+                    }
+                }
+
+                // Returning from Bluetooth Settings is the cue to look again
+                val btSettingsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    viewModel.startLanBluetoothProvisioning(context)
+                }
+
+                // Verified a paired, unclaimed SiliGuide device → Success
+                LaunchedEffect(Unit) {
+                    viewModel.lanBluetoothVerified.collect {
+                        if (navController.currentDestination?.route ==
+                            Screen.LanBluetoothProvisioning.route
+                        ) {
+                            navController.navigate(Screen.LanSetupSuccess.route)
+                        }
+                    }
+                }
+
+                // Pairing happens in Android Settings, so re-check on resume
+//                val lifecycleOwner = LocalLifecycleOwner.current
+//
+//                DisposableEffect(lifecycleOwner) {
+//
+//                    val observer = LifecycleEventObserver { _, event ->
+//                        if (event == Lifecycle.Event.ON_RESUME) {
+//                            viewModel.startLanBluetoothProvisioning(context)
+//                        }
+//                    }
+//
+//                    lifecycleOwner.lifecycle.addObserver(observer)
+//
+//                    onDispose {
+//                        lifecycleOwner.lifecycle.removeObserver(observer)
+//                    }
+//                }
+
+
+
+                LoadingOverlay(
+                    isLoading = iotUiState.isLoading,
+                    message = iotUiState.loadingMessage
+                ) {
+                    LanBluetoothProvisioningScreen(
+                        state = btState,
+
+                        onBack = {
+                            viewModel.stopLanBluetoothProvisioning()
+                            navController.popBackStack()
+                        },
+
+                        onOpenBluetoothSettings = {
+                            btSettingsLauncher.launch(
+                                Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                            )
+                        },
+
+                        onSelectDevice = { viewModel.selectLanBluetoothDevice(it) },
+
+                        onRetry = { viewModel.retryLanBluetoothProvisioning(context) },
+
+                        onSwitchToDeviceHotspot = {
+                            viewModel.stopLanBluetoothProvisioning()
+                            viewModel.selectLanProvisioningMethod(
+                                LanProvisioningMethod.ACCESS_POINT
+                            )
+                            navController.navigate(Screen.LanApProvisioning.route) {
+                                popUpTo(Screen.LanBluetoothProvisioning.route) {
+                                    inclusive = true
+                                }
+                            }
+                        }
+                    )
+                }
+
+                // Bluetooth off, permission denied, already registered / claimed
+                viewModel.validationDialog?.let { dialog ->
+                    PermissionDialog(
+                        title = dialog.title,
+                        message = dialog.message,
+                        confirmText = "Open Bluetooth Settings",
+                        dismissText = "Close",
+                        onConfirm = {
+                            viewModel.dismissValidationDialog()
+                            btSettingsLauncher.launch(
+                                Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                            )
+                        },
+                        onDismiss = { viewModel.dismissValidationDialog() }
+                    )
+                }
+            }
+
+
             // ── Success — reached from either provisioning path ─────────
             composable(Screen.LanSetupSuccess.route) { backStackEntry ->
 
@@ -909,7 +1035,15 @@ fun SiliGuideNavGraph(
                         // TODO: plant picker — linking stays optional for now
                     },
 
-                    onSaveDevice = { viewModel.finalizeLanAPMode() },
+                    onSaveDevice = {
+                        when (viewModel.lanProvisioningMethod) {
+                            LanProvisioningMethod.ACCESS_POINT ->
+                                viewModel.finalizeLanAPMode()
+
+                            LanProvisioningMethod.BLUETOOTH ->
+                                viewModel.finalizeLanBluetoothMode()
+                        }
+                    },
 
                     onOpenWifiSettings = { openWifiPicker() },
 
@@ -949,19 +1083,6 @@ fun SiliGuideNavGraph(
                 }
             }
 
-            // ── Step 4 of 4 — Bluetooth Provisioning Path ──────────────
-            composable(Screen.LanBluetoothProvisioning.route) { backStackEntry ->
-
-                val parentEntry = remember(backStackEntry) {
-                    navController.getBackStackEntry(Screen.LanSetupGraph.route)
-                }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
-
-                // TODO: wire LanBluetoothProvisioningScreen.
-                // Credentials are in viewModel.lanSelectedSsid and
-                // viewModel.lanSelectedPassword.
-            }
         }
 
         // Old entry point kept so existing callers keep working

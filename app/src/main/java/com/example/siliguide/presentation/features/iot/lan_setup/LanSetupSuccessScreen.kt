@@ -342,8 +342,13 @@ private fun ColumnScope.SwitchNetworkContent(
         )
         Spacer(Modifier.height(3.dp))
         WizardBody(
-            text = "Your device joined the network. Your phone is still on the device " +
-                    "hotspot — switch it back so the app can reach the device.",
+            text = if (state.provisioningPath == "Bluetooth") {
+                "Your device joined the network. Connect this phone to the same " +
+                        "network so the app can reach it."
+            } else {
+                "Your device joined the network. Your phone is still on the device " +
+                        "hotspot — switch it back so the app can reach the device."
+            },
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )

@@ -66,6 +66,7 @@ import com.example.siliguide.domain.usecase.UpdateDeviceConnectionModeUseCase
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveDialogState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
+import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningUiState
 
 data class ValidationDialogState(
     val title: String,
@@ -1689,12 +1690,24 @@ class IoTViewModel @Inject constructor(
             }
 
             try {
-                provisionSavedDevice(
-                    deviceId = deviceId,
-                    token = token,
-                    ssid = selected.ssid,
-                    password = ready.password
-                )
+                when (lanProvisioningMethod) {
+
+                    LanProvisioningMethod.ACCESS_POINT ->
+                        provisionSavedDevice(
+                            deviceId = deviceId,
+                            token = token,
+                            ssid = selected.ssid,
+                            password = ready.password
+                        )
+
+                    LanProvisioningMethod.BLUETOOTH ->
+                        provisionSavedDeviceViaBluetooth(
+                            deviceId = deviceId,
+                            token = token,
+                            ssid = selected.ssid,
+                            password = ready.password
+                        )
+                }
             } finally {
                 _iotUiState.update { currentState ->
                     currentState.copy(
@@ -1881,12 +1894,615 @@ class IoTViewModel @Inject constructor(
     }
 
     private companion object {
-        const val WIFI_STATUS_POLL_ATTEMPTS = 3
+        const val WIFI_STATUS_POLL_ATTEMPTS = 12
         const val WIFI_STATUS_POLL_DELAY_MS = 1_500L
 
         const val PHONE_SWITCH_POLL_ATTEMPTS = 3
         const val PHONE_SWITCH_POLL_DELAY_MS = 1_200L
     }
+
+
+    // ---- Step 4b of 4: Bluetooth provisioning -----------------------------
+
+    private var isVerifyingLanBluetooth = false
+
+    private val _lanBluetoothState =
+        MutableStateFlow<LanBluetoothProvisioningUiState>(
+            LanBluetoothProvisioningUiState.Pairing
+        )
+
+    val lanBluetoothState: StateFlow<LanBluetoothProvisioningUiState> =
+        _lanBluetoothState.asStateFlow()
+
+    /** Emitted once a paired, unclaimed SiliGuide device answers over SPP. */
+    private val _lanBluetoothVerified = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanBluetoothVerified: SharedFlow<Unit> = _lanBluetoothVerified.asSharedFlow()
+
+    /** Emitted when BLUETOOTH_CONNECT has to be requested before anything else. */
+    private val _lanBluetoothPermissionNeeded =
+        MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val lanBluetoothPermissionNeeded: SharedFlow<Unit> =
+        _lanBluetoothPermissionNeeded.asSharedFlow()
+
+    /** The device we verified — kept so finalize can reopen a dropped socket. */
+    private var lanBluetoothDevice: BluetoothDevice? = null
+
+    /**
+     * BLUETOOTH_CONNECT gates bondedDevices and createRfcommSocket on API 31+.
+     * Below that the manifest install-time grants are enough.
+     */
+    val lanBluetoothPermissions: List<PermissionRequest>
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listOf(
+                PermissionRequest(
+                    permission = Manifest.permission.BLUETOOTH_CONNECT,
+                    type = PermissionType.BLUETOOTH
+                ),
+                PermissionRequest(
+                    permission = Manifest.permission.BLUETOOTH_SCAN,
+                    type = PermissionType.BLUETOOTH
+                )
+            )
+        } else {
+            emptyList()
+        }
+
+    val lanBluetoothPermissionArray: Array<String>
+        get() = lanBluetoothPermissions
+            .map { it.permission }
+            .toTypedArray()
+
+    fun markLanBluetoothPermissionRequested() {
+        viewModelScope.launch {
+            permissionManager.markRequested(lanBluetoothPermissions)
+        }
+    }
+
+    /**
+     * device.name requires BLUETOOTH_CONNECT on API 31+. Suppression on
+     * BluetoothDiscoveryManager doesn't cover reads made from here, so this
+     * wraps every read site with an explicit catch instead of a blanket
+     * @SuppressLint the linter can't verify.
+     */
+    private fun BluetoothDevice.safeName(): String =
+        try {
+            name ?: "SiliGuide device"
+        } catch (_: SecurityException) {
+            "SiliGuide device"
+        }
+
+    /**
+     * Entry point for Step 4b.
+     *
+     * Runs on screen entry, on ON_RESUME (the user comes back from Bluetooth
+     * Settings after pairing), and from Retry.
+     */
+    fun startLanBluetoothProvisioning(context: Context) {
+
+        if (isVerifyingLanBluetooth ||
+            _lanBluetoothState.value is LanBluetoothProvisioningUiState.SendingCredentials
+        ) return
+
+        viewModelScope.launch {
+
+            isVerifyingLanBluetooth = true
+
+            try {
+                // ---- 1. Permission ------------------------------------------
+                val status = permissionManager.getCombinedPermissionStatus(
+                    context = context,
+                    requests = lanBluetoothPermissions
+                )
+
+                if (status !is PermissionStatus.Granted) {
+
+                    _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
+
+                    if (status is PermissionStatus.PermanentlyDenied) {
+                        showValidationDialog(
+                            title = "Bluetooth Permission Required",
+                            message = "Open App Settings and allow Nearby devices so SiliGuide " +
+                                    "can talk to your IoT device over Bluetooth."
+                        )
+                    } else {
+                        _lanBluetoothPermissionNeeded.emit(Unit)
+                    }
+
+                    return@launch
+                }
+
+                // ---- 2. Radio -----------------------------------------------
+                if (!bluetoothManager.isBluetoothOn()) {
+
+                    _lanBluetoothState.value = LanBluetoothProvisioningUiState.Error
+
+                    showValidationDialog(
+                        title = "Bluetooth is Off",
+                        message = "Turn on Bluetooth in your phone's settings, then tap Retry."
+                    )
+
+                    return@launch
+                }
+
+                // ---- 3. Paired devices --------------------------------------
+                val paired = withContext(Dispatchers.IO) {
+                    runCatching { bluetoothDiscoveryManager.getPairedSiliGuideDevices() }
+                        .getOrElse { emptyList() }
+                }
+
+                if (paired.isEmpty()) {
+                    // Not an error — the user simply has not paired yet
+                    _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
+                    return@launch
+                }
+
+                // ---- 4. One device: go. Several: let the user choose ---------
+                if (paired.size == 1) {
+                    verifyLanBluetoothDevice(listOf(paired.first()))
+                    return@launch
+                }
+
+                // Don't hold a selection screen open over a live socket
+                withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+
+                _lanBluetoothState.value = LanBluetoothProvisioningUiState.SelectDevice(
+                    devices = paired.map { device ->
+                        PairedSiliGuideDevice(
+                            name = device.safeName(),
+                            deviceId = device.address,
+                            device = device
+                        )
+                    }
+                )
+            } finally {
+                isVerifyingLanBluetooth = false
+            }
+        }
+    }
+
+    /** A row on the SelectDevice list was tapped. */
+    fun selectLanBluetoothDevice(paired: PairedSiliGuideDevice) {
+        viewModelScope.launch {
+            verifyLanBluetoothDevice(listOf(paired.device))
+        }
+    }
+
+    /**
+     * Where to land after a device fails verification.
+     *
+     * With several bonded devices the list is more useful than a dead Error
+     * screen — the user probably just tapped the wrong one.
+     */
+    private suspend fun lanBluetoothFallbackState(): LanBluetoothProvisioningUiState {
+
+        val bonded = withContext(Dispatchers.IO) {
+            runCatching { bluetoothDiscoveryManager.getPairedSiliGuideDevices() }
+                .getOrElse { emptyList() }
+        }
+
+        return if (bonded.size > 1) {
+            LanBluetoothProvisioningUiState.SelectDevice(
+                devices = bonded.map { device ->
+                    PairedSiliGuideDevice(
+                        name = device.safeName(),
+                        deviceId = device.address,
+                        device = device
+                    )
+                }
+            )
+        } else {
+            LanBluetoothProvisioningUiState.Error
+        }
+    }
+
+    /**
+     * Connects to the first paired SiliGuide device that answers, then runs the
+     * same three checks the AP path runs: is it SiliGuide, is it already in the
+     * database, is it already claimed.
+     */
+    private suspend fun verifyLanBluetoothDevice(candidates: List<BluetoothDevice>) {
+
+        _iotUiState.update {
+            it.copy(isLoading = true, loadingMessage = "Connecting…")
+        }
+
+        try {
+            for (device in candidates) {
+
+                val info = withContext(Dispatchers.IO) {
+                    try {
+                        bluetoothManager.connect(device)
+                        Log.d("BT_DEBUG", "Socket open, asking GET_INFO")
+                        bluetoothApi.getDeviceInfo()
+                    } catch (e: Exception) {
+                        Log.e(
+                            "BT_DEBUG",
+                            "Verify failed for ${device.safeName()}: ${e.javaClass.simpleName}: ${e.message}",
+                            e
+                        )
+                        null
+                    }
+                }
+
+//                val info = withContext(Dispatchers.IO) {
+//                    runCatching {
+//                        bluetoothManager.connect(device)
+//                        bluetoothApi.getDeviceInfo()
+//                    }.getOrNull()
+//                }
+
+                if (info == null) {
+                    withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+                    continue
+                }
+
+                if (info.device != "SiliGuide") {
+                    withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+                    continue
+                }
+
+                if (getIoTDeviceByIdUseCase(info.deviceId) != null) {
+                    withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+
+                    _lanBluetoothState.value = lanBluetoothFallbackState()
+
+                    showValidationDialog(
+                        title = "Device Already Registered",
+                        message = "This SiliGuide device is already registered in your account."
+                    )
+                    return
+                }
+
+                if (info.claimed) {
+                    withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+
+                    _lanBluetoothState.value = lanBluetoothFallbackState()
+
+                    showValidationDialog(
+                        title = "Device Already Claimed",
+                        message = "This SiliGuide device has already been claimed and cannot " +
+                                "be paired again unless it is factory reset."
+                    )
+                    return
+                }
+
+                // Passed everything — socket stays open for finalize
+                lanBluetoothDevice = device
+                connectedDeviceId = info.deviceId
+                pairingToken = info.token
+
+                if (deviceName.isEmpty()) {
+                    deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                }
+
+                error = null
+
+                _lanBluetoothState.value =
+                    LanBluetoothProvisioningUiState.SendingCredentials(
+                        deviceName = device.safeName()
+                    )
+
+                _lanBluetoothVerified.emit(Unit)
+                return
+            }
+
+            // Nothing answered. With several devices bonded, drop back to the
+            // list so the user can try a different one.
+            val bonded = withContext(Dispatchers.IO) {
+                runCatching { bluetoothDiscoveryManager.getPairedSiliGuideDevices() }
+                    .getOrElse { emptyList() }
+            }
+
+            _lanBluetoothState.value =
+                if (bonded.size > 1) {
+                    LanBluetoothProvisioningUiState.SelectDevice(
+                        devices = bonded.map { device ->
+                            PairedSiliGuideDevice(
+                                name = device.safeName(),
+                                deviceId = device.address,
+                                device = device
+                            )
+                        }
+                    )
+                } else {
+                    LanBluetoothProvisioningUiState.Error
+                }
+
+            showValidationDialog(
+                title = "Couldn't Reach the Device",
+                message = "That SiliGuide device didn't answer. Make sure it is powered on " +
+                        "and nearby, then try again."
+            )
+
+        } finally {
+            _iotUiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun retryLanBluetoothProvisioning(context: Context) {
+        dismissValidationDialog()
+        _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
+        startLanBluetoothProvisioning(context)
+    }
+
+    /**
+     * Reopens a socket that dropped while the user was naming the device.
+     *
+     * socket.isConnected only reflects local state — Android never clears it
+     * when the remote end goes away, so a PING is the only honest check. The
+     * ESP32 drops RFCOMM fairly often during WiFi retries, since Bluedroid and
+     * WiFi share the same radio.
+     */
+    private suspend fun ensureLanBluetoothConnected(): Boolean {
+
+        if (bluetoothManager.isConnected()) {
+            val alive = withContext(Dispatchers.IO) {
+                runCatching { bluetoothApi.ping() }.getOrDefault(false)
+            }
+
+            if (alive) return true
+
+            Log.d("BT_DEBUG", "Socket looked connected but PING failed — reopening")
+
+            withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+        }
+
+        val device = lanBluetoothDevice ?: return false
+
+        return withContext(Dispatchers.IO) {
+            runCatching { bluetoothManager.connect(device) }.isSuccess
+        }
+    }
+
+    /**
+     * Save Device on the Success screen, Bluetooth path.
+     *
+     * Same firmware ordering as AP — CLAIM before CONFIGURE, since the device
+     * answers "unauthorized_bluetooth_access" until it is claimed.
+     */
+    fun finalizeLanBluetoothMode() {
+
+        val deviceId = connectedDeviceId
+        val token = pairingToken
+        val ssid = lanSelectedSsid
+        val name = deviceName.trim()
+
+        if (deviceId == null || token.isNullOrBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Not Connected",
+                message = "Lost the Bluetooth link to the device. Go back and reconnect."
+            )
+            return
+        }
+
+        if (ssid.isNullOrBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "No Network Selected",
+                message = "Go back and choose the WiFi network this device should join.",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+            return
+        }
+
+        if (name.isBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Name Required",
+                message = "Give this device a name before saving it."
+            )
+            return
+        }
+
+        val password = lanSelectedPassword
+
+        viewModelScope.launch {
+
+            isFinalizingLan = true
+
+            try {
+                val userId = authRepository.getUserId()
+
+                if (userId == null) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Not Signed In",
+                        message = "Sign in again before adding a device."
+                    )
+                    return@launch
+                }
+
+                if (!ensureLanBluetoothConnected()) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Bluetooth Disconnected",
+                        message = "Lost the Bluetooth link. Make sure the device is powered " +
+                                "on and nearby, then try again."
+                    )
+                    return@launch
+                }
+
+                // ---- 1. Claim over SPP -----------------------------------
+                val claim = withContext(Dispatchers.IO) {
+                    runCatching { bluetoothApi.claimDevice(token) }
+                }
+
+                val claimResult = claim.getOrNull()
+
+                if (claim.isFailure || !claimResult?.error.isNullOrBlank()) {
+                    Log.e("IoTViewModel", "BT claim failed", claim.exceptionOrNull())
+
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Couldn't Claim Device",
+                        message = claimResult?.error
+                            ?: "The device rejected the pairing request. Try again."
+                    )
+                    return@launch
+                }
+
+                // ---- 2. Save locally ------------------------------------
+                val saved = runCatching {
+                    saveIoTDeviceUseCase(
+                        IoTDevice(
+                            deviceId = deviceId,
+                            userId = userId,
+                            deviceName = name.take(DEVICE_NAME_MAX_LENGTH),
+                            pairingToken = token,
+                            isActive = true,
+                            // Filled in once the device reports its LAN address
+                            lastKnownIp = "",
+                            connectionMode = ConnectionMode.LAN,
+                            isSynced = false,
+                            dateAdded = System.currentTimeMillis()
+                        )
+                    )
+                }
+
+                if (saved.isFailure) {
+                    Log.e("IoTViewModel", "Save failed", saved.exceptionOrNull())
+
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Couldn't Save Device",
+                        message = "The device was claimed but could not be saved. Try again."
+                    )
+                    return@launch
+                }
+
+                // ---- 3, 4, 5. Provision --------------------------------
+                provisionSavedDeviceViaBluetooth(
+                    deviceId = deviceId,
+                    token = token,
+                    ssid = ssid,
+                    password = password
+                )
+
+            } finally {
+                isFinalizingLan = false
+            }
+        }
+    }
+
+    /**
+     * Pushes credentials over SPP, waits for the device to join, records its IP.
+     *
+     * No phone hand-off: the phone was never on the device hotspot, so once the
+     * IP is stored the wizard is finished.
+     */
+    private suspend fun provisionSavedDeviceViaBluetooth(
+        deviceId: String,
+        token: String,
+        ssid: String,
+        password: String
+    ) {
+        if (!ensureLanBluetoothConnected()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Bluetooth Disconnected",
+                message = "Lost the Bluetooth link. Make sure the device is powered on and " +
+                        "nearby, then try again."
+            )
+            return
+        }
+
+        // ---- Send credentials ---------------------------------------------
+        val configure = withContext(Dispatchers.IO) {
+            runCatching {
+                bluetoothApi.configureWiFi(
+                    token = token,
+                    ssid = ssid,
+                    password = password
+                )
+            }
+        }
+
+        val configureResult = configure.getOrNull()
+
+        if (configure.isFailure || !configureResult?.error.isNullOrBlank()) {
+            Log.e("IoTViewModel", "BT /configure failed", configure.exceptionOrNull())
+
+            lanSaveDialog = LanSaveDialogState(
+                title = "Couldn't Send WiFi Details",
+                message = "The device did not accept the WiFi details for \"$ssid\". " +
+                        "Choose a network again and re-enter the password.",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+            return
+        }
+
+        // ---- Wait for it to join, over the same socket ---------------------
+        val status = awaitDeviceOnLanViaBluetooth()
+
+        if (status == null) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Couldn't Join \"$ssid\"",
+                message = "The device could not connect to \"$ssid\". The password may be " +
+                        "wrong, or the network may be out of range of the device. Choose a " +
+                        "network again and re-enter the password.",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+            return
+        }
+
+        runCatching { updateDeviceIpUseCase(deviceId, status.ip) }
+            .onFailure { Log.e("IoTViewModel", "updateDeviceIp failed", it) }
+
+        // Bluetooth was only the delivery channel — LAN mode takes over now
+        withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+
+        clearLanWifiReconfigure()
+        error = null
+        lanSaveDialog = null
+
+        // The phone was never moved, but that does NOT mean it is on the same
+        // network the device just joined — it could be on another AP, on mobile
+        // data, or on the 5GHz twin of a 2.4GHz-only SSID. Run the same
+        // verification the AP path runs; if the phone is already there the ping
+        // succeeds on the first try and this is invisible.
+        lanDeviceIp = status.ip
+        lanSwitchFailed = false
+        lanSuccessStage = LanSuccessStage.SWITCH_NETWORK
+
+        _lanHandoffReady.emit(Unit)
+
+        verifyPhoneOnDeviceNetwork()
+    }
+
+    private suspend fun awaitDeviceOnLanViaBluetooth(): WiFiStatusDto? {
+
+        repeat(WIFI_STATUS_POLL_ATTEMPTS) { attempt ->
+
+            delay(WIFI_STATUS_POLL_DELAY_MS)
+
+            val status = withContext(Dispatchers.IO) {
+                runCatching { bluetoothApi.getWifiStatus() }.getOrNull()
+            }
+
+            if (status == null && !ensureLanBluetoothConnected()) {
+                Log.d("BT_DEBUG", "Lost Bluetooth link mid-poll, giving up")
+                return null
+            }
+
+            Log.d(
+                "BT_DEBUG",
+                "wifi-status attempt ${attempt + 1}: connected=${status?.connected} ip=${status?.ip}"
+            )
+
+            if (status != null &&
+                status.connected &&
+                status.ip.isNotBlank() &&
+                status.ip != "0.0.0.0"
+            ) {
+                return status
+            }
+        }
+
+        return null
+    }
+
+    fun stopLanBluetoothProvisioning() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+        }
+    }
+
 
     // ---- Wizard teardown --------------------------------------------------
 
@@ -1916,5 +2532,8 @@ class IoTViewModel @Inject constructor(
         lanBlocker = null
         error = null
         validationDialog = null
+
+        _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
+        lanBluetoothDevice = null
     }
 }

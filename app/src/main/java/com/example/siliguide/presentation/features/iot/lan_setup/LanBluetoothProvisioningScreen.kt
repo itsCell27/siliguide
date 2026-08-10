@@ -36,9 +36,11 @@ import com.example.siliguide.core.ui.theme.WizardSubCaptionStyle
 import com.example.siliguide.core.ui.theme.WizardWarningBg
 import com.example.siliguide.core.ui.theme.WizardWarningBorder
 import com.example.siliguide.core.ui.theme.WizardWarningText
+import com.example.siliguide.presentation.features.iot.bluetooth_setup.PairedSiliGuideDevice
 import com.example.siliguide.presentation.features.iot.lan_setup.components.BluetoothGlyphIcon
 import com.example.siliguide.presentation.features.iot.lan_setup.components.CheckMarkIcon
 import com.example.siliguide.presentation.features.iot.lan_setup.components.LanWizardScaffold
+import com.example.siliguide.presentation.features.iot.lan_setup.components.PhoneOutlineIcon
 import com.example.siliguide.presentation.features.iot.lan_setup.components.TransferDots
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WifiBroadcastIcon
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WizardActionRow
@@ -52,18 +54,26 @@ import com.example.siliguide.presentation.features.iot.lan_setup.components.Wiza
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WizardPrimaryButton
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WizardStatusPanel
 import com.example.siliguide.presentation.features.iot.lan_setup.components.WizardWaitingButton
-import com.example.siliguide.presentation.features.iot.lan_setup.components.PhoneOutlineIcon
 
 /**
  * Step 4 of 4 — Bluetooth Provisioning Path.
  *
  * Android owns pairing, so the app guides the user to Bluetooth Settings and
- * then auto-detects the paired SiliGuide device. Once connected it pushes the
- * same Home Wi-Fi credentials the AP path would have sent.
+ * then picks up whatever SiliGuide devices are bonded. Once connected it pushes
+ * the same Home Wi-Fi credentials the AP path would have sent — but the phone
+ * never leaves its own network, so there is no hand-off afterwards.
  */
 sealed interface LanBluetoothProvisioningUiState {
-    /** Sub-step 1 of 2 — guide the user into Android Bluetooth Settings. */
+    /** Sub-step 1 of 2 — nothing bonded yet; guide into Bluetooth Settings. */
     data object Pairing : LanBluetoothProvisioningUiState
+
+    /**
+     * More than one bonded SiliGuide device. Picking for the user would be a
+     * guess, and the wrong guess claims the wrong hardware permanently.
+     */
+    data class SelectDevice(
+        val devices: List<PairedSiliGuideDevice>
+    ) : LanBluetoothProvisioningUiState
 
     /** Paired and connected; credentials are being pushed over SPP. */
     data class SendingCredentials(
@@ -79,18 +89,23 @@ fun LanBluetoothProvisioningScreen(
     state: LanBluetoothProvisioningUiState,
     onBack: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
+    onSelectDevice: (PairedSiliGuideDevice) -> Unit,
     onRetry: () -> Unit,
     onSwitchToDeviceHotspot: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEarlyStep = state is LanBluetoothProvisioningUiState.Pairing ||
+            state is LanBluetoothProvisioningUiState.SelectDevice
+
     LanWizardScaffold(
         flowLabel = "Bluetooth Setup",
-        stepLabel = if (state is LanBluetoothProvisioningUiState.Pairing) "Step 1 of 2" else "Step 4 of 4",
-        progress = if (state is LanBluetoothProvisioningUiState.Pairing) 0.5f else 1f,
+        stepLabel = if (isEarlyStep) "Step 1 of 2" else "Step 4 of 4",
+        progress = if (isEarlyStep) 0.5f else 1f,
         onBack = onBack,
         modifier = modifier,
         contentArrangement = when (state) {
             LanBluetoothProvisioningUiState.Pairing -> Arrangement.spacedBy(13.dp)
+            is LanBluetoothProvisioningUiState.SelectDevice -> Arrangement.spacedBy(11.dp)
             is LanBluetoothProvisioningUiState.SendingCredentials -> Arrangement.spacedBy(11.dp)
             LanBluetoothProvisioningUiState.Error -> Arrangement.spacedBy(9.dp)
         },
@@ -99,6 +114,12 @@ fun LanBluetoothProvisioningScreen(
                 LanBluetoothProvisioningUiState.Pairing ->
                     WizardPrimaryButton(
                         text = "Open Bluetooth Settings",
+                        onClick = onOpenBluetoothSettings
+                    )
+
+                is LanBluetoothProvisioningUiState.SelectDevice ->
+                    WizardOutlinedButton(
+                        text = "Pair Another Device",
                         onClick = onOpenBluetoothSettings
                     )
 
@@ -141,6 +162,31 @@ fun LanBluetoothProvisioningScreen(
 
                     WizardBulletRow(
                         text = "Returning here shows every paired SiliGuide device to choose from",
+                        showDivider = false
+                    ) { CheckMarkIcon() }
+                }
+            }
+
+            is LanBluetoothProvisioningUiState.SelectDevice -> {
+                WizardHeading(text = "Select your device")
+
+                WizardBody(
+                    text = "More than one SiliGuide device is paired with this phone. " +
+                            "Choose the one you want to set up."
+                )
+
+                state.devices.forEach { device ->
+                    WizardActionRow(
+                        title = device.name,
+                        subtitle = "Device ID: ${device.deviceId}",
+                        tileColor = InfoBlue,
+                        onClick = { onSelectDevice(device) }
+                    ) { BluetoothGlyphIcon(color = Info) }
+                }
+
+                WizardCard {
+                    WizardBulletRow(
+                        text = "Tap a device to connect and verify it automatically",
                         showDivider = false
                     ) { CheckMarkIcon() }
                 }
@@ -278,6 +324,7 @@ private fun LanBtPairingSmallPreview() {
             state = LanBluetoothProvisioningUiState.Pairing,
             onBack = {},
             onOpenBluetoothSettings = {},
+            onSelectDevice = {},
             onRetry = {},
             onSwitchToDeviceHotspot = {}
         )
@@ -296,6 +343,7 @@ private fun LanBtPairingStandardPreview() {
             state = LanBluetoothProvisioningUiState.Pairing,
             onBack = {},
             onOpenBluetoothSettings = {},
+            onSelectDevice = {},
             onRetry = {},
             onSwitchToDeviceHotspot = {}
         )
@@ -314,6 +362,26 @@ private fun LanBtPairingLargePreview() {
             state = LanBluetoothProvisioningUiState.Pairing,
             onBack = {},
             onOpenBluetoothSettings = {},
+            onSelectDevice = {},
+            onRetry = {},
+            onSwitchToDeviceHotspot = {}
+        )
+    }
+}
+
+@Preview(
+    name = "Select device · Standard 360x740",
+    showSystemUi = true,
+    device = "spec:width=360dp,height=740dp,dpi=420"
+)
+@Composable
+private fun LanBtSelectDevicePreview() {
+    SiliGuideTheme {
+        LanBluetoothProvisioningScreen(
+            state = LanBluetoothProvisioningUiState.SelectDevice(emptyList()),
+            onBack = {},
+            onOpenBluetoothSettings = {},
+            onSelectDevice = {},
             onRetry = {},
             onSwitchToDeviceHotspot = {}
         )
@@ -332,6 +400,7 @@ private fun LanBtSendingPreview() {
             state = LanBluetoothProvisioningUiState.SendingCredentials(),
             onBack = {},
             onOpenBluetoothSettings = {},
+            onSelectDevice = {},
             onRetry = {},
             onSwitchToDeviceHotspot = {}
         )
@@ -350,6 +419,7 @@ private fun LanBtErrorPreview() {
             state = LanBluetoothProvisioningUiState.Error,
             onBack = {},
             onOpenBluetoothSettings = {},
+            onSelectDevice = {},
             onRetry = {},
             onSwitchToDeviceHotspot = {}
         )
@@ -368,6 +438,7 @@ private fun LanBtErrorLargePreview() {
             state = LanBluetoothProvisioningUiState.Error,
             onBack = {},
             onOpenBluetoothSettings = {},
+            onSelectDevice = {},
             onRetry = {},
             onSwitchToDeviceHotspot = {}
         )
