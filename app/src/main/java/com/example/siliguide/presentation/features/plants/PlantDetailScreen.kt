@@ -1,5 +1,6 @@
 package com.example.siliguide.presentation.features.plants
 
+import android.text.format.DateFormat
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -794,7 +795,7 @@ fun AnalysisHistoryRow(
             verticalArrangement = Arrangement.spacedBy(if (compact) 1.dp else 2.dp)
         ) {
             Text(
-                text      = item.symptom,
+                text      = formatPrediction(item.symptom),
                 fontSize  = if (compact) 11.sp else 13.sp,
                 // 1. Force a tighter line height
                 lineHeight = if (compact) 13.sp else 15.sp,
@@ -1116,6 +1117,24 @@ fun TrashIcon(size: Int = 13, tint: Color = Danger) {
     }
 }
 
+fun formatLastAnalyzed(millis: Long): String {
+
+    val elapsed = System.currentTimeMillis() - millis
+
+    val minutes = elapsed / 60_000
+    val hours = elapsed / 3_600_000
+    val days = elapsed / 86_400_000
+
+    return when {
+        elapsed < 0L -> DateFormat.format("MMM dd, yyyy", millis).toString()
+        minutes < 1 -> "Just now"
+        minutes < 60 -> "$minutes ${if (minutes == 1L) "minute" else "minutes"} ago"
+        hours < 24 -> "$hours ${if (hours == 1L) "hour" else "hours"} ago"
+        days < 7 -> "$days ${if (days == 1L) "day" else "days"} ago"
+        else -> DateFormat.format("MMM dd, yyyy", millis).toString()
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PREVIEWS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1180,6 +1199,16 @@ private fun PlantDetailPreviewContent(
             }
         }
         FabSection(isFullAnalysis = fabIsFullAnalysis, note = fabNote, modifier = Modifier.align(Alignment.BottomCenter), onClick = {})
+    }
+}
+
+fun formatPrediction(string: String): String {
+    return when (string.lowercase()) {
+        "curling" -> "Leaf Curling"
+        "healthy" -> "Healthy Leaf"
+        "spots" -> "Leaf Spots"
+        "yellowing" -> "Yellowing Leaf"
+        else -> "Unknown"
     }
 }
 
