@@ -5,6 +5,8 @@ import com.example.siliguide.core.security.AesGcmCrypto
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
 import com.example.siliguide.data.remote.iot.dto.ClaimResponseDto // Make sure to create this simple DTO
+import com.example.siliguide.data.remote.iot.dto.ConfigureWiFiResponseDto
+import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
@@ -46,6 +48,57 @@ class BluetoothApi @Inject constructor(
         val response = bluetoothManager.executeCommand(BluetoothCommands.GET_INFO)
         Log.d("BluetoothApi", "Device Info Response: $response")
         return json.decodeFromString(response)
+    }
+
+    /**
+     * UNLOCKED: Fetches the current WiFi connection status.
+     */
+    suspend fun getWifiStatus(): WiFiStatusDto {
+        val response = bluetoothManager.executeCommand(BluetoothCommands.GET_WIFI_STATUS)
+        Log.d("BluetoothApi", "WiFi Status Response: $response")
+        return json.decodeFromString(response)
+    }
+
+    /**
+     * LOCKED GATEWAY: Hands the device its home Wi-Fi credentials.
+     *
+     * Firmware rejects this with "unauthorized_bluetooth_access" unless the
+     * device is already claimed, so claimDevice() has to run first.
+     *
+     * Wire format: CONFIGURE:base64( IV[12] + ciphertext + tag[16] )
+     * Plaintext:   {"ssid":"...","pass":"..."}
+     *
+     * The device parses that JSON with indexOf, not a real parser, so a quote
+     * or backslash in either value would corrupt the extraction.
+     */
+    @Throws(Exception::class)
+    suspend fun configureWiFi(
+        token: String,
+        ssid: String,
+        password: String
+    ): ConfigureWiFiResponseDto {
+
+        require(!ssid.contains('"') && !ssid.contains('\\')) {
+            "SSID cannot contain quotes or backslashes"
+        }
+        require(!password.contains('"') && !password.contains('\\')) {
+            "Password cannot contain quotes or backslashes"
+        }
+
+        // Field names must stay "ssid" and "pass" — firmware looks for exactly these
+        val plainPayload = """{"ssid":"$ssid","pass":"$password"}"""
+
+        val encryptedBase64 = crypto.encrypt(plainPayload, token)
+
+        // Base64 (NO_WRAP) contains no colon and no newline, so the single
+        // split on the device and the readResponse() line terminator both hold
+        val secureCommand = "${BluetoothCommands.CONFIGURE}:$encryptedBase64"
+
+        val response = bluetoothManager.executeCommand(secureCommand)
+
+        Log.d("BluetoothApi", "Configure Response: $response")
+
+        return json.decodeFromString(response.trim())
     }
 
     /**
