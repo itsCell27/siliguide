@@ -17,15 +17,27 @@ CREATE TABLE users (
 );
 
 CREATE TABLE iot_devices (
-    device_id          TEXT NOT NULL PRIMARY KEY, -- MAC address or hardware ID
-    user_id            TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    device_name        TEXT NOT NULL,
-    pairing_token      TEXT NOT NULL,
-    is_active          INTEGER NOT NULL DEFAULT 1,
-    last_known_ip      TEXT,          -- NULL if never connected via LAN
-    connection_mode    TEXT NOT NULL, -- AP | LAN | BLUETOOTH
-    is_synced          INTEGER NOT NULL DEFAULT 0,
-    date_added         INTEGER NOT NULL
+    device_id                   TEXT NOT NULL PRIMARY KEY, -- MAC address or hardware ID
+    user_id                     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    device_name                 TEXT NOT NULL,
+    pairing_token               TEXT NOT NULL,
+    is_active                   INTEGER NOT NULL DEFAULT 1,
+    last_known_ip               TEXT,          -- NULL if never connected via LAN
+    connection_mode             TEXT NOT NULL, -- AP | LAN | BLUETOOTH
+    is_synced                   INTEGER NOT NULL DEFAULT 0,
+    date_added                  INTEGER NOT NULL,
+    last_seen_at                INTEGER,
+
+    -- Latest known sensor values; NULL means no reading has been received yet
+    last_soil_moisture               REAL,
+    last_soil_temp                   REAL,
+    last_soil_ph                     REAL,
+    last_nitrogen                    INTEGER,
+    last_phosphorus                  INTEGER,
+    last_potassium                   INTEGER,
+    last_electrical_conductivity     INTEGER,
+    last_air_temp                    REAL,
+    last_light_intensity             INTEGER
 );
 
 CREATE TABLE plants (
@@ -130,6 +142,22 @@ SELECT * FROM iot_devices WHERE device_id = ?;
 getActiveDevicesByUser:
 SELECT * FROM iot_devices WHERE user_id = ? AND is_active = 1;
 
+getLastDeviceSensorData:
+SELECT
+    last_seen_at,
+    last_soil_moisture,
+    last_soil_temp,
+    last_soil_ph,
+    last_nitrogen,
+    last_phosphorus,
+    last_potassium,
+    last_electrical_conductivity,
+    last_air_temp,
+    last_light_intensity
+FROM iot_devices WHERE device_id = ?;
+
+
+
 updateDeviceName:
 UPDATE iot_devices SET device_name = ? WHERE device_id = ?;
 
@@ -141,6 +169,21 @@ UPDATE iot_devices SET connection_mode = ? WHERE device_id = ?;
 
 updateDeviceActiveStatus:
 UPDATE iot_devices SET is_active = ? WHERE device_id = ?;
+
+updateDeviceSensorData:
+UPDATE iot_devices
+SET
+    last_seen_at = ?,
+    last_soil_moisture = ?,
+    last_soil_temp = ?,
+    last_soil_ph = ?,
+    last_nitrogen = ?,
+    last_phosphorus = ?,
+    last_potassium = ?,
+    last_electrical_conductivity = ?,
+    last_air_temp = ?,
+    last_light_intensity = ?
+WHERE device_id = ?;
 
 markDeviceSynced:
 UPDATE iot_devices SET is_synced = 1 WHERE device_id = ?;
