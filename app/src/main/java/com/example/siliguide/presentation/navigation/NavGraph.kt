@@ -55,21 +55,19 @@ import com.example.siliguide.presentation.features.iot.lan_setup.LanApProvisioni
 import com.example.siliguide.presentation.features.iot.lan_setup.LanLocationPermissionScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiSelectionScreen
-import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanProvisioningMethod
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupMethodScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessUiState
-import androidx.navigation.navArgument
 import com.example.siliguide.core.ui.components.LoadingOverlay
 import com.example.siliguide.core.ui.components.MessageDialog
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveAction
-import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccessScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
 import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningScreen
-import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningUiState
 import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailScreen
 import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailViewModel
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavOptionsBuilder
 
 @Composable
 fun SiliGuideNavGraph(
@@ -109,16 +107,29 @@ fun SiliGuideNavGraph(
         }
 
         // --- DASHBOARD (HOME) ---
-        composable(route = Screen.Dashboard.route) {
+        composable(route = Screen.Dashboard.route) { backStackEntry ->
+
             DashboardScreen(
-                onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
-                onNavigateToAddPlant = { navController.navigate(Screen.AddPlant.route) },
-                onNavigateToAddIoT = { navController.navigate(Screen.IoTSetup.route) },
+                onNavigateToCamera = {
+                    navController.navigateSafely(backStackEntry, Screen.Camera.route)
+                },
+                onNavigateToAddPlant = {
+                    navController.navigateSafely(backStackEntry, Screen.AddPlant.route)
+                },
+                onNavigateToAddIoT = {
+                    navController.navigateSafely(backStackEntry, Screen.IoTSetup.route)
+                },
                 onNavigateToPlantDetail = { plantId ->
-                    navController.navigate(Screen.PlantDetail.createRoute(plantId))
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.PlantDetail.createRoute(plantId)
+                    )
                 },
                 onNavigateToDeviceDetail = { deviceId ->
-                    navController.navigate(Screen.IoTDeviceDetail.createRoute(deviceId))
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.IoTDeviceDetail.createRoute(deviceId)
+                    )
                 },
                 onNavigateToSeeAll = { /* Future: Navigate to history list */ }
             )
@@ -146,29 +157,29 @@ fun SiliGuideNavGraph(
 
             IoTDeviceDetailScreen(
                 state = state,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popSafely(backStackEntry) },
                 onReconnect = { viewModel.retryNow() },
                 onLinkPlant = { /* TODO: plant linking */ },
                 onUnlinkPlant = { /* TODO: plant unlinking */ },
                 onRemoveDevice = { /* TODO: device removal */ },
+                onRenameDevice = { viewModel.renameDevice(it)},
                 onModeChangeConfirmed = { /* TODO: mode switching */ }
             )
         }
 
 
         // --- PLANT MANAGEMENT ---
-        composable(route = Screen.AddPlant.route) {
+        composable(route = Screen.AddPlant.route) { backStackEntry ->
+
             AddPlantScreen(
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = { navController.popSafely(backStackEntry) },
                 onNavigateToCamera = { plantId ->
-
-                    navController.navigate(
-                        Screen.PreAnalysis.createRoute(plantId)
+                    navController.navigateSafely(
+                        from = backStackEntry,
+                        route = Screen.PreAnalysis.createRoute(plantId)
                     ) {
-
-                        popUpTo(Screen.AddPlant.route) {
-                            inclusive = true
-                        }
+                        launchSingleTop = true
+                        popUpTo(Screen.AddPlant.route) { inclusive = true }
                     }
                 }
             )
@@ -181,13 +192,18 @@ fun SiliGuideNavGraph(
             val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
             PlantDetailScreen(
                 plantId = plantId,
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = { navController.popSafely(backStackEntry) },
                 onNavigateToAnalysis = {
-                    // Navigate to PreAnalysis first
-                    navController.navigate(Screen.PreAnalysis.createRoute(plantId))
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.PreAnalysis.createRoute(plantId)
+                    )
                 },
                 onNavigateToAnalysisDetail = { sessionId ->
-                    navController.navigate(Screen.AnalysisHistoryResult.createRoute(sessionId))
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.AnalysisHistoryResult.createRoute(sessionId)
+                    )
                 }
             )
         }
@@ -196,20 +212,19 @@ fun SiliGuideNavGraph(
 
 
         // --- IOT SETUP WIZARD ---
-        composable(route = Screen.IoTSetup.route) {
+        composable(route = Screen.IoTSetup.route) { backStackEntry ->
             IoTSetupConnectionModeScreen(
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = { navController.popSafely(backStackEntry) },
                 onNext = { selectedMode ->
                     when (selectedMode) {
-                        ConnectionMode.AP -> {
-                            navController.navigate(Screen.IoTSetupAP.route)
-                        }
-                        ConnectionMode.BLUETOOTH -> {
-                            navController.navigate(Screen.BluetoothSetupGraph.route)
-                        }
-                        ConnectionMode.LAN -> {
-                            navController.navigate(Screen.IoTSetupLAN.route)
-                        }
+                        ConnectionMode.AP ->
+                            navController.navigateSafely(backStackEntry, Screen.IoTSetupAP.route)
+
+                        ConnectionMode.BLUETOOTH ->
+                            navController.navigateSafely(backStackEntry, Screen.BluetoothSetupGraph.route)
+
+                        ConnectionMode.LAN ->
+                            navController.navigateSafely(backStackEntry, Screen.IoTSetupLAN.route)
                     }
                 }
             )
@@ -233,13 +248,12 @@ fun SiliGuideNavGraph(
                     onContinue = {
                         viewModel.startBluetoothSetup()
 
-                        navController.navigate(
+                        navController.navigateSafely(
+                            backStackEntry,
                             Screen.BluetoothConnectionScreen.route
                         )
                     },
-                    onBack = {
-                        navController.popBackStack()
-                    }
+                    onBack = { navController.popSafely(backStackEntry) }
                 )
             }
 
@@ -260,7 +274,7 @@ fun SiliGuideNavGraph(
                 BluetoothConnectionScreen(
                     viewModel = viewModel,
                     onBack = {
-                        navController.popBackStack()
+                        navController.popSafely(backStackEntry)
                     }
                 )
             }
@@ -300,7 +314,7 @@ fun SiliGuideNavGraph(
                         bluetoothSettingsLauncher.launch(intent)
                     },
                     onBack = {
-                        navController.popBackStack()
+                        navController.popSafely(backStackEntry)
                     },
                     isLoading = uiState.isLoading,
                     message = uiState.loadingMessage
@@ -339,17 +353,18 @@ fun SiliGuideNavGraph(
                     },
 
                     onBack = {
-                        navController.popBackStack()
+                        navController.popSafely(backStackEntry)
                     }
                 )
             }
         }
 
         // AP Setup
-        composable(Screen.IoTSetupAP.route) {
+        composable(Screen.IoTSetupAP.route) { backStackEntry ->
+
             IoTSetupAPModeScreen(
                 navController = navController,
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = { navController.popSafely(backStackEntry) },
                 onSetupComplete = {
                     navController.popBackStack(Screen.Dashboard.route, false)
                 }
@@ -392,8 +407,10 @@ fun SiliGuideNavGraph(
                     state = methodState,
 
                     onBack = {
-                        viewModel.resetLanSetup()
-                        navController.popBackStack()
+                        if (backStackEntry.lifecycleIsResumed()) {
+                            viewModel.resetLanSetup()
+                            navController.popBackStack()
+                        }
                     },
 
                     onSelectMethod = { viewModel.selectLanProvisioningMethod(it) },
@@ -481,7 +498,7 @@ fun SiliGuideNavGraph(
                     state = permissionState,
 
                     // Back returns to Step 1, it does not abandon the wizard
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popSafely(backStackEntry) },
 
                     onGrantPermission = {
                         viewModel.continueFromLanPermission(context)
@@ -694,7 +711,7 @@ fun SiliGuideNavGraph(
                 ) {
                     LanWifiSelectionScreen(
                         state = wifiState,
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popSafely(backStackEntry) },
                         hasReconfiguredDeviceId = hasReconfiguredDeviceId,
                         onRefresh = { viewModel.startLanWifiScan(context) },
                         onSelectNetwork = { viewModel.selectLanWifiNetwork(it) },
@@ -811,8 +828,10 @@ fun SiliGuideNavGraph(
                     state = apState,
 
                     onBack = {
-                        viewModel.disconnectFromDeviceWifi()
-                        navController.popBackStack()
+                        if (backStackEntry.lifecycleIsResumed()) {
+                            viewModel.disconnectFromDeviceWifi()
+                            navController.popBackStack()
+                        }
                     },
 
                     onOpenWifiSettings = {
@@ -822,11 +841,14 @@ fun SiliGuideNavGraph(
                     onRetry = { viewModel.retryLanApProvisioning() },
 
                     onSwitchToBluetooth = {
-                        viewModel.selectLanProvisioningMethod(
-                            LanProvisioningMethod.BLUETOOTH
-                        )
-                        navController.navigate(Screen.LanBluetoothProvisioning.route) {
-                            popUpTo(Screen.LanApProvisioning.route) { inclusive = true }
+                        if (backStackEntry.lifecycleIsResumed()) {
+                            viewModel.selectLanProvisioningMethod(
+                                LanProvisioningMethod.BLUETOOTH
+                            )
+                            navController.navigate(Screen.LanBluetoothProvisioning.route) {
+                                launchSingleTop = true
+                                popUpTo(Screen.LanApProvisioning.route) { inclusive = true }
+                            }
                         }
                     }
                 )
@@ -925,8 +947,10 @@ fun SiliGuideNavGraph(
                         state = btState,
 
                         onBack = {
-                            viewModel.stopLanBluetoothProvisioning()
-                            navController.popBackStack()
+                            if (backStackEntry.lifecycleIsResumed()) {
+                                viewModel.stopLanBluetoothProvisioning()
+                                navController.popBackStack()
+                            }
                         },
 
                         onOpenBluetoothSettings = {
@@ -940,13 +964,16 @@ fun SiliGuideNavGraph(
                         onRetry = { viewModel.retryLanBluetoothProvisioning(context) },
 
                         onSwitchToDeviceHotspot = {
-                            viewModel.stopLanBluetoothProvisioning()
-                            viewModel.selectLanProvisioningMethod(
-                                LanProvisioningMethod.ACCESS_POINT
-                            )
-                            navController.navigate(Screen.LanApProvisioning.route) {
-                                popUpTo(Screen.LanBluetoothProvisioning.route) {
-                                    inclusive = true
+                            if (backStackEntry.lifecycleIsResumed()) {
+                                viewModel.stopLanBluetoothProvisioning()
+                                viewModel.selectLanProvisioningMethod(
+                                    LanProvisioningMethod.ACCESS_POINT
+                                )
+                                navController.navigate(Screen.LanApProvisioning.route) {
+                                    launchSingleTop = true
+                                    popUpTo(Screen.LanBluetoothProvisioning.route) {
+                                        inclusive = true
+                                    }
                                 }
                             }
                         }
@@ -1058,7 +1085,9 @@ fun SiliGuideNavGraph(
 
                     onBack = {
                         // Backing out mid-hand-off would abandon a saved device
-                        if (viewModel.lanSuccessStage == LanSuccessStage.NAMING) {
+                        if (viewModel.lanSuccessStage == LanSuccessStage.NAMING &&
+                            backStackEntry.lifecycleIsResumed()
+                        ) {
                             viewModel.resetLanApVerification()
                             navController.popBackStack()
                         }
@@ -1133,16 +1162,18 @@ fun SiliGuideNavGraph(
          */
 
 
-        composable(Screen.QrScanner.route) {
+        composable(Screen.QrScanner.route) { backStackEntry ->
             QrScannerScreen(
                 onQrScanned = { result ->
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("qr_result", result)
-                    navController.popBackStack()
+                    if (backStackEntry.lifecycleIsResumed()) {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set("qr_result", result)
+                        navController.popBackStack()
+                    }
                 },
-                onManualEntry = { navController.popBackStack() },
-                onBack = { navController.popBackStack() }
+                onManualEntry = { navController.popSafely(backStackEntry) },
+                onBack = { navController.popSafely(backStackEntry) }
             )
         }
 
@@ -1196,16 +1227,17 @@ fun SiliGuideNavGraph(
             fun continueToCamera(
                 navigate: () -> Unit
             ) {
+                // A tap arriving mid-transition would otherwise re-launch the
+                // permission prompt or stack a second Camera destination
+                if (!backStackEntry.lifecycleIsResumed()) return
 
                 when (viewModel.permissionStatus) {
 
                     PermissionStatus.Granted -> {
-
                         navigate()
                     }
 
                     PermissionStatus.RequestPermission -> {
-
                         viewModel.markCameraPermissionRequested()
 
                         permissionLauncher.launch(
@@ -1214,12 +1246,10 @@ fun SiliGuideNavGraph(
                     }
 
                     PermissionStatus.ShowRationale -> {
-
                         viewModel.showPermissionDialog()
                     }
 
                     PermissionStatus.PermanentlyDenied -> {
-
                         viewModel.showPermissionDialog()
                     }
                 }
@@ -1233,7 +1263,7 @@ fun SiliGuideNavGraph(
                 permissionStatus = viewModel.permissionStatus,
 
                 onBack = {
-                    navController.popBackStack()
+                    navController.popSafely(backStackEntry)
                 },
 
                 showPermissionDialog =
@@ -1310,10 +1340,7 @@ fun SiliGuideNavGraph(
                 },
 
                 onAddIoTDevice = {
-
-                    navController.navigate(
-                        Screen.IoTSetup.route
-                    )
+                    navController.navigateSafely(backStackEntry, Screen.IoTSetup.route)
                 }
             )
         }
@@ -1331,10 +1358,13 @@ fun SiliGuideNavGraph(
 
             CameraScreen(
                 onBack = {
+                    if (!backStackEntry.lifecycleIsResumed()) return@CameraScreen
+
                     if (plantId != null) {
                         val popped = navController.popBackStack(Screen.PlantDetail.route, false)
                         if (!popped) {
                             navController.navigate(Screen.PlantDetail.createRoute(plantId)) {
+                                launchSingleTop = true
                                 popUpTo(Screen.Dashboard.route) { inclusive = false }
                             }
                         }
@@ -1343,8 +1373,11 @@ fun SiliGuideNavGraph(
                     }
                 },
                 onImageCaptured = { rawUriString ->
-                    // Pass BOTH plantId and deviceId to the next screen
-                    navController.navigate(Screen.CropAdjust.createRoute(rawUriString, plantId, deviceId))
+                    // A double shutter tap would otherwise push CropAdjust twice
+                    navController.navigateSafely(
+                        from = backStackEntry,
+                        route = Screen.CropAdjust.createRoute(rawUriString, plantId, deviceId)
+                    )
                 }
             )
         }
@@ -1364,10 +1397,13 @@ fun SiliGuideNavGraph(
 
             CropAdjustScreen(
                 rawImageUri = decodedUri,
-                onCancel = { navController.popBackStack() },
+                onCancel = { navController.popSafely(backStackEntry) },
                 onCropped = { croppedUriString ->
-                    // Pass BOTH plantId and deviceId to the result screen
-                    navController.navigate(Screen.AnalysisResult.createRoute(croppedUriString, plantId, deviceId)) {
+                    navController.navigateSafely(
+                        from = backStackEntry,
+                        route = Screen.AnalysisResult.createRoute(croppedUriString, plantId, deviceId)
+                    ) {
+                        launchSingleTop = true
                         popUpTo(Screen.Camera.route) { inclusive = true }
                     }
                 }
@@ -1395,11 +1431,15 @@ fun SiliGuideNavGraph(
                 imageUri = decodedUri,
                 plantId = plantId, // Pass ID if needed for UI or saving
                 onNavigateBack = {
+                    if (!backStackEntry.lifecycleIsResumed()) return@AnalysisResultScreen
+
                     viewModel.clearCurrentCache()
+
                     if (plantId != null) {
                         val popped = navController.popBackStack(Screen.PlantDetail.route, false)
                         if (!popped) {
                             navController.navigate(Screen.PlantDetail.createRoute(plantId)) {
+                                launchSingleTop = true
                                 popUpTo(Screen.Dashboard.route) { inclusive = false }
                             }
                         }
@@ -1407,19 +1447,23 @@ fun SiliGuideNavGraph(
                         navController.popBackStack()
                     }
                 },
+
                 onSaveAsNote = {
-                    // Logic to save the analysis result
+                    if (!backStackEntry.lifecycleIsResumed()) return@AnalysisResultScreen
+
                     plantId?.let { id ->
                         viewModel.saveCurrentAnalysis(
                             plantId = id,
                             imagePath = decodedUri,
                             onSuccess = {
                                 viewModel.clearCurrentCache()
-                                // 3. Navigate back to PlantDetail on success
-                                val popped = navController.popBackStack(Screen.PlantDetail.route, false)
+
+                                val popped =
+                                    navController.popBackStack(Screen.PlantDetail.route, false)
+
                                 if (!popped) {
                                     navController.navigate(Screen.PlantDetail.createRoute(id)) {
-                                        // Clear the analysis pipeline from history
+                                        launchSingleTop = true
                                         popUpTo(Screen.Dashboard.route) { inclusive = false }
                                     }
                                 }
@@ -1452,9 +1496,7 @@ fun SiliGuideNavGraph(
                 imageUri = "",
                 plantId = null,
 
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
+                onNavigateBack = { navController.popSafely(backStackEntry) },
                 onSaveAsNote = { },
                 isHistoryMode = true
             )
@@ -1465,4 +1507,28 @@ fun SiliGuideNavGraph(
 
 
     }
+}
+
+/**
+ * True only while this entry is the one actually on screen.
+ *
+ * A destination that is animating away is STARTED, not RESUMED, so clicks
+ * and back presses that arrive during the transition are ignored instead of
+ * pushing duplicates or popping past the graph root.
+ */
+private fun NavBackStackEntry.lifecycleIsResumed(): Boolean =
+    lifecycle.currentState == Lifecycle.State.RESUMED
+
+/** navigate() that ignores taps arriving while the screen is transitioning. */
+private fun NavHostController.navigateSafely(
+    from: NavBackStackEntry,
+    route: String,
+    builder: NavOptionsBuilder.() -> Unit = { launchSingleTop = true }
+) {
+    if (from.lifecycleIsResumed()) navigate(route, builder)
+}
+
+/** popBackStack() that cannot pop an entry belonging to another screen. */
+private fun NavHostController.popSafely(from: NavBackStackEntry) {
+    if (from.lifecycleIsResumed()) popBackStack()
 }
