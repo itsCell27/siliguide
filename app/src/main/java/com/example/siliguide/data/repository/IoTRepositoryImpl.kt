@@ -211,6 +211,10 @@ class IoTRepositoryImpl @Inject constructor(
             ?.toIotDomain()
     }
 
+    override suspend fun updateDeviceName(deviceName: String, deviceId: String) {
+        queries.updateDeviceName(deviceName, deviceId)
+    }
+
     override suspend fun updateDeviceIp(deviceId: String, ip: String) {
         queries.updateDeviceIp(ip, deviceId)
     }

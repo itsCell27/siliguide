@@ -53,6 +53,7 @@ interface IoTRepository {
     // UPDATED: Now requires userId for multi-user isolation
     fun getAllDevices(userId: String): Flow<List<IoTDevice>>
 
+    suspend fun updateDeviceName(deviceName: String, deviceId: String)
     suspend fun updateDeviceIp(deviceId: String, ip: String)
 
     suspend fun updateDeviceConnectionMode(deviceId: String, connectionMode: ConnectionMode)
