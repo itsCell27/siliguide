@@ -30,9 +30,11 @@ import javax.inject.Inject
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.example.siliguide.data.local.mapper.toIotDomain
+import com.example.siliguide.data.local.mapper.toLastDeviceSensorDataDomain
 import com.example.siliguide.data.remote.iot.BluetoothApi
 import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
 import com.example.siliguide.domain.model.ConnectionMode
+import com.example.siliguide.domain.model.LastDeviceSensorData
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -214,7 +216,32 @@ class IoTRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateDeviceConnectionMode(deviceId: String, connectionMode: ConnectionMode) {
-        queries.updateDeviceConnectionMode(deviceId, connectionMode.name)
+        queries.updateDeviceConnectionMode(connectionMode.name, deviceId)
+    }
+
+    override suspend fun updateLastDeviceSensorData(
+        deviceId: String,
+        lastSensorData: LastDeviceSensorData
+    ) {
+        queries.updateDeviceSensorData(
+            last_seen_at = lastSensorData.lastSeenAt,
+            last_soil_moisture = lastSensorData.lastSoilMoisture,
+            last_soil_temp = lastSensorData.lastSoilTemp,
+            last_soil_ph = lastSensorData.lastSoilPh,
+            last_nitrogen = lastSensorData.lastNitrogen?.toLong(),
+            last_phosphorus = lastSensorData.lastPhosphorus?.toLong(),
+            last_potassium = lastSensorData.lastPotassium?.toLong(),
+            last_electrical_conductivity = lastSensorData.lastElectricalConductivity?.toLong(),
+            last_air_temp = lastSensorData.lastAirTemp,
+            last_light_intensity = lastSensorData.lastLightIntensity?.toLong(),
+            device_id = deviceId
+        )
+    }
+
+    override suspend fun getLastDeviceSensorData(deviceId: String): LastDeviceSensorData? {
+        return queries.getLastDeviceSensorData(deviceId)
+            .executeAsOneOrNull()
+            ?.toLastDeviceSensorDataDomain()
     }
 
     override suspend fun deleteDevice(deviceId: String) {

@@ -4,6 +4,7 @@ import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
 import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
+import com.example.siliguide.domain.model.LastDeviceSensorData
 import com.example.siliguide.domain.model.SensorResponse
 import kotlinx.coroutines.flow.Flow
 
@@ -55,6 +56,10 @@ interface IoTRepository {
     suspend fun updateDeviceIp(deviceId: String, ip: String)
 
     suspend fun updateDeviceConnectionMode(deviceId: String, connectionMode: ConnectionMode)
+
+    suspend fun updateLastDeviceSensorData(deviceId: String, lastSensorData: LastDeviceSensorData)
+
+    suspend fun getLastDeviceSensorData(deviceId: String): LastDeviceSensorData?
 
     // ADDED: Crucial for the sync process
     suspend fun markDeviceSynced(deviceId: String)
