@@ -68,6 +68,8 @@ import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupSuccess
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
 import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningUiState
+import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailScreen
+import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailViewModel
 
 @Composable
 fun SiliGuideNavGraph(
@@ -115,10 +117,43 @@ fun SiliGuideNavGraph(
                 onNavigateToPlantDetail = { plantId ->
                     navController.navigate(Screen.PlantDetail.createRoute(plantId))
                 },
+                onNavigateToDeviceDetail = { deviceId ->
+                    navController.navigate(Screen.IoTDeviceDetail.createRoute(deviceId))
+                },
                 onNavigateToSeeAll = { /* Future: Navigate to history list */ }
             )
         }
 
+
+        // --- IOT DEVICE DETAIL ---
+        composable(
+            route = Screen.IoTDeviceDetail.route,
+            arguments = listOf(
+                navArgument("deviceId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+
+            val rawDeviceId = backStackEntry.arguments?.getString("deviceId").orEmpty()
+            val deviceId = URLDecoder.decode(rawDeviceId, "UTF-8")
+
+            val viewModel: IoTDeviceDetailViewModel = hiltViewModel()
+            val state by viewModel.uiState.collectAsState()
+
+            DisposableEffect(deviceId) {
+                viewModel.start(deviceId)
+                onDispose { viewModel.stop() }
+            }
+
+            IoTDeviceDetailScreen(
+                state = state,
+                onBack = { navController.popBackStack() },
+                onReconnect = { viewModel.retryNow() },
+                onLinkPlant = { /* TODO: plant linking */ },
+                onUnlinkPlant = { /* TODO: plant unlinking */ },
+                onRemoveDevice = { /* TODO: device removal */ },
+                onModeChangeConfirmed = { /* TODO: mode switching */ }
+            )
+        }
 
 
         // --- PLANT MANAGEMENT ---

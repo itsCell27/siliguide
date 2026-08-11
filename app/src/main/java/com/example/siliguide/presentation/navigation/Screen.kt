@@ -88,4 +88,11 @@ sealed class Screen(val route: String) {
     object LanApProvisioning : Screen("lan_ap_provisioning")
     object LanBluetoothProvisioning : Screen("lan_bluetooth_provisioning")
     object LanSetupSuccess : Screen("lan_setup_success")
+
+
+    // deviceId is URL-encoded because MAC addresses contain ':'
+    object IoTDeviceDetail : Screen("iot_device_detail/{deviceId}") {
+        fun createRoute(deviceId: String): String =
+            "iot_device_detail/${URLEncoder.encode(deviceId, "UTF-8")}"
+    }
 }

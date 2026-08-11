@@ -106,6 +106,7 @@ fun DashboardScreen(
     onNavigateToAddPlant: () -> Unit,
     onNavigateToAddIoT: () -> Unit,
     onNavigateToPlantDetail: (plantId: String) -> Unit,
+    onNavigateToDeviceDetail: (deviceId: String) -> Unit = {},
     onNavigateToSeeAll: () -> Unit,
     onNavigateToSeeAllDevices: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
@@ -148,6 +149,7 @@ fun DashboardScreen(
         onNavigateToAddPlant= onNavigateToAddPlant,
         onNavigateToAddIoT  = onNavigateToAddIoT,
         onNavigateToPlantDetail = onNavigateToPlantDetail,
+        onNavigateToDeviceDetail = onNavigateToDeviceDetail,
         onNavigateToSeeAll  = onNavigateToSeeAll,
         onNavigateToSeeAllDevices = onNavigateToSeeAllDevices,
         onNavigateToProfile = onNavigateToProfile
@@ -171,6 +173,7 @@ fun DashboardContent(
     onNavigateToAddPlant: () -> Unit,
     onNavigateToAddIoT: () -> Unit,
     onNavigateToPlantDetail: (String) -> Unit,
+    onNavigateToDeviceDetail: (String) -> Unit = {},
     onNavigateToSeeAll: () -> Unit,
     onNavigateToSeeAllDevices: () -> Unit,
     onNavigateToProfile: () -> Unit
@@ -210,6 +213,7 @@ fun DashboardContent(
                         devices = devices,
                         deviceOnline = deviceOnline,
                         onAddDevice = onNavigateToAddIoT,
+                        onDeviceClick = onNavigateToDeviceDetail,
                         onSeeAllDevices = onNavigateToSeeAllDevices
                     )
                     PlantsSection(
@@ -333,6 +337,7 @@ fun IoTDevicesSection(
     devices: List<IoTDevice>,
     deviceOnline: Map<String, Boolean>,
     onAddDevice: () -> Unit,
+    onDeviceClick: (String) -> Unit = {},
     onSeeAllDevices: () -> Unit = {}
 ) {
     Column(modifier = Modifier.padding(top = 14.dp)) {
@@ -396,6 +401,7 @@ fun IoTDevicesSection(
                     IoTDeviceCard(
                         device = device,
                         isOnline = deviceOnline[device.deviceId] ?: device.isActive,
+                        onClick = { onDeviceClick(device.deviceId) },
                         modifier = Modifier.width(IotCardWidth)
                     )
                 }
@@ -413,11 +419,14 @@ fun IoTDevicesSection(
 fun IoTDeviceCard(
     device: IoTDevice,
     isOnline: Boolean,
+    onClick: () -> Unit = {},
     modeLabel: String = device.connectionMode.displayLabel(),
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.wrapContentHeight(),
+        modifier = modifier
+            .wrapContentHeight()
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = White),
         shape  = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, Border)
