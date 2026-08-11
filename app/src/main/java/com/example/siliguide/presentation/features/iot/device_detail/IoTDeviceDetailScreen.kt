@@ -34,6 +34,18 @@ import androidx.compose.ui.unit.sp
 import com.example.siliguide.core.ui.theme.*
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.window.Dialog
+import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 // ── UI models (presentation-only; map to domain ConnectionMode later) ───────
 
@@ -107,12 +119,15 @@ fun IoTDeviceDetailScreen(
     onLinkPlant: () -> Unit = {},
     onUnlinkPlant: () -> Unit = {},
     onReconnect: () -> Unit = {},
+    onRenameDevice: (String) -> Unit = {},
     onRemoveDevice: () -> Unit = {},
     onModeChangeConfirmed: (DetailConnectionMode) -> Unit = {}
 ) {
 
     var showModeSheet by remember { mutableStateOf(false) }
     var showRemoveDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     var selectedMode by remember(state.mode) { mutableStateOf(state.mode) }
 
     val sheetState = rememberModalBottomSheetState()
@@ -132,8 +147,18 @@ fun IoTDeviceDetailScreen(
 
             DetailTopBar(
                 title = state.deviceName,
+                showMenu = showMenu,
                 onBack = onBack,
-                onEdit = { showRemoveDialog = true }
+                onMenuToggle = { showMenu = !showMenu },
+                onMenuDismiss = { showMenu = false },
+                onRename = {
+                    showMenu = false
+                    showRenameDialog = true
+                },
+                onRemove = {
+                    showMenu = false
+                    showRemoveDialog = true
+                }
             )
 
             Column(
@@ -178,7 +203,18 @@ fun IoTDeviceDetailScreen(
             }
         }
 
-        // 12B — Remove device dialog (pencil button)
+        if (showRenameDialog) {
+
+            RenameDeviceDialog(
+                currentName = state.deviceName,
+                onCancel = { showRenameDialog = false },
+                onConfirm = { newName ->
+                    showRenameDialog = false
+                    onRenameDevice(newName)
+                }
+            )
+        }
+
         if (showRemoveDialog) {
 
             RemoveDeviceDialog(
@@ -232,8 +268,12 @@ fun IoTDeviceDetailScreen(
 @Composable
 private fun DetailTopBar(
     title: String,
+    showMenu: Boolean,
     onBack: () -> Unit,
-    onEdit: () -> Unit
+    onMenuToggle: () -> Unit,
+    onMenuDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onRemove: () -> Unit
 ) {
 
     Column(
@@ -282,14 +322,107 @@ private fun DetailTopBar(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            CircleIconButton(onClick = onEdit) {
+            // ⋮ menu — matches PlantDetailTopBar
+            Box {
 
-                Canvas(modifier = Modifier.size(13.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(if (showMenu) GreenBgLight else OffWhite)
+                        .border(
+                            width = if (showMenu) 1.5.dp else 1.dp,
+                            color = if (showMenu) GreenLight else Border,
+                            shape = CircleShape
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onMenuToggle
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
 
-                    drawPencil(
-                        color = GrayBody,
-                        strokeWidthPx = 1.4.dp.toPx()
-                    )
+                    Canvas(modifier = Modifier.size(14.dp)) {
+
+                        drawThreeDots(
+                            color = if (showMenu) GreenPrimary else GrayMedium
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = onMenuDismiss,
+                    offset = DpOffset(x = (-130).dp, y = 4.dp),
+                    modifier = Modifier
+                        .width(180.dp)
+                        .background(White)
+                ) {
+
+                    // --- Rename ---
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onRename() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(GreenBgLight, RoundedCornerShape(7.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(modifier = Modifier.size(13.dp)) {
+                                drawPencil(
+                                    color = GreenPrimary,
+                                    strokeWidthPx = 1.4.dp.toPx()
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Rename Device",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = DMSans,
+                            color = Black
+                        )
+                    }
+
+                    HorizontalDivider(color = Border, thickness = 1.dp)
+
+                    // --- Remove ---
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onRemove() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(DangerBg, RoundedCornerShape(7.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(modifier = Modifier.size(13.dp)) {
+                                drawTrashGlyph(
+                                    color = Danger,
+                                    strokeWidthPx = 1.4.dp.toPx()
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Remove Device",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = DMSans,
+                            color = Danger
+                        )
+                    }
                 }
             }
         }
@@ -1469,12 +1602,168 @@ private fun RemoveDeviceDialog(
     }
 }
 
+
+// ── Rename Dialog ──────────────────────────────────────────────────────────
+
+@Composable
+private fun RenameDeviceDialog(
+    currentName: String,
+    onCancel: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+
+    var name by remember(currentName) { mutableStateOf(currentName) }
+
+    val trimmed = name.trim()
+    val canSave = trimmed.isNotEmpty() && trimmed != currentName
+
+    Dialog(onDismissRequest = onCancel) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(White)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+
+            Text(
+                text = "Rename Device",
+                style = MaterialThemeHeadline,
+                color = Black
+            )
+
+            Text(
+                text = "Give this device a name you'll recognize on the dashboard.",
+                fontSize = 12.sp,
+                fontFamily = DMSans,
+                color = GrayBody,
+                lineHeight = 18.sp
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(White)
+                    .border(
+                        width = 1.5.dp,
+                        color = if (trimmed.isEmpty()) GreenLight else GreenPrimary,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+
+                Canvas(modifier = Modifier.size(13.dp)) {
+                    drawDeviceGlyph(
+                        color = GreenPrimary,
+                        strokeWidthPx = 1.3.dp.toPx()
+                    )
+                }
+
+                BasicTextField(
+                    value = name,
+                    onValueChange = { typed ->
+                        if (typed.length <= DEVICE_NAME_MAX_LENGTH) name = typed
+                    },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontFamily = DMSans,
+                        fontSize = 12.sp,
+                        color = Black
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    cursorBrush = SolidColor(GreenPrimary),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (name.isEmpty()) {
+                                Text(
+                                    text = "Device name",
+                                    fontSize = 12.sp,
+                                    fontFamily = DMSans,
+                                    color = GrayHint
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+
+                Text(
+                    text = "${name.length}/$DEVICE_NAME_MAX_LENGTH",
+                    fontSize = 10.sp,
+                    fontFamily = DMSans,
+                    color = GreenPrimary
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(OffWhite)
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                        .clickable(onClick = onCancel)
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = GrayBody
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (canSave) GreenPrimary else GreenLight)
+                        .then(
+                            if (canSave) {
+                                Modifier.clickable { onConfirm(trimmed) }
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Save",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = White
+                    )
+                }
+            }
+        }
+    }
+}
+
+
 // ── Small helpers ──────────────────────────────────────────────────────────
 
 /** 13sp medium button label (matches M3 titleMedium in this theme). */
-private val SheetButtonStyleFallback = androidx.compose.ui.text.TextStyle(
+private val SheetButtonStyleFallback = TextStyle(
     fontFamily = DMSans,
-    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+    fontWeight = FontWeight.Medium,
     fontSize = 13.sp
 )
 
@@ -1487,9 +1776,9 @@ private fun Modifier.graphicsLayerAlpha(value: Float): Modifier =
     }
 
 /** Page title style — 18sp Fraunces (M3 headlineSmall in this theme). */
-private val MaterialThemeHeadline = androidx.compose.ui.text.TextStyle(
+private val MaterialThemeHeadline = TextStyle(
     fontFamily = Fraunces,
-    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+    fontWeight = FontWeight.Bold,
     fontSize = 18.sp,
     letterSpacing = (-0.3).sp
 )
@@ -1768,6 +2057,21 @@ private fun DrawScope.drawTrashGlyph(color: Color, strokeWidthPx: Float) {
         color = color,
         style = stroke
     )
+}
+
+/** Vertical ⋮ — three dots, same weight as the plant screen's icon. */
+private fun DrawScope.drawThreeDots(color: Color) {
+
+    val radius = size.minDimension * 0.09f
+    val centerX = size.width / 2f
+
+    listOf(0.22f, 0.5f, 0.78f).forEach { fraction ->
+        drawCircle(
+            color = color,
+            radius = radius,
+            center = Offset(centerX, size.height * fraction)
+        )
+    }
 }
 
 // ── Previews ───────────────────────────────────────────────────────────────

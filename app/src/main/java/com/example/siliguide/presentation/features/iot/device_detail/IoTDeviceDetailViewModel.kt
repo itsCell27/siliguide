@@ -7,6 +7,7 @@ import com.example.siliguide.domain.model.LastDeviceSensorData
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.IoTRepository
 import com.example.siliguide.domain.usecase.FetchSensorsUseCase
+import com.example.siliguide.domain.usecase.UpdateDeviceNameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,11 +25,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import android.util.Log
+import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 @HiltViewModel
 class IoTDeviceDetailViewModel @Inject constructor(
     private val ioTRepository: IoTRepository,
-    private val fetchSensorsUseCase: FetchSensorsUseCase
+    private val fetchSensorsUseCase: FetchSensorsUseCase,
+    private val updateDeviceNameUseCase: UpdateDeviceNameUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -276,6 +280,44 @@ class IoTDeviceDetailViewModel @Inject constructor(
     override fun onCleared() {
         stop()
         super.onCleared()
+    }
+
+    /**
+     * Rename from the ⋮ menu.
+     *
+     * uiState.deviceName is plain state, not a reactive query, so it has to be
+     * updated by hand after the write. The dashboard picks the new name up on
+     * its own — getAllDevices() is a SQLDelight flow and re-emits on the
+     * iot_devices table change.
+     */
+    fun renameDevice(newName: String) {
+
+        val id = deviceId ?: return
+
+        val trimmed = newName.trim().take(DEVICE_NAME_MAX_LENGTH)
+
+        // The dialog already blocks empty and unchanged names, but this is a
+        // public entry point
+        if (trimmed.isEmpty() || trimmed == _uiState.value.deviceName) return
+
+        viewModelScope.launch {
+
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    updateDeviceNameUseCase(
+                        deviceName = trimmed,
+                        deviceId = id
+                    )
+                }
+            }
+
+            if (saved.isFailure) {
+                Log.e("IoTDeviceDetailVM", "Rename failed", saved.exceptionOrNull())
+                return@launch
+            }
+
+            _uiState.update { it.copy(deviceName = trimmed) }
+        }
     }
 
     private companion object {
