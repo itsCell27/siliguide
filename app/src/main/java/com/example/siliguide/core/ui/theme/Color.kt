@@ -133,3 +133,6 @@ val CropLoadingScrim = Color(0xA8000000)
 val CropStepDone = Color(0xFF97C459)
 val CropStepActive = Color(0xFFFFFFFF)
 val CropStepPending = Color(0x80FFFFFF)
+
+/** Scrim behind centered dialogs (~45% black). */
+val ModalScrim = Color(0x73000000)

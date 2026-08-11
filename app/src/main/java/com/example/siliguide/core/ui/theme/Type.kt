@@ -219,6 +219,55 @@ val CropLoadingStepStyle = TextStyle(
     fontSize = 11.sp
 )
 
+
+// ── IoT device detail styles (screen 12) ───────────────────────────────────
+
+/** Device name in the status hero — 16sp Fraunces */
+val DeviceNameStyle = TextStyle(
+    fontFamily = Fraunces,
+    fontWeight = FontWeight.Bold,
+    fontSize = 16.sp,
+    letterSpacing = (-0.2).sp
+)
+
+/** Centered dialog title — 16sp Fraunces */
+val DialogTitleStyle = TextStyle(
+    fontFamily = Fraunces,
+    fontWeight = FontWeight.Bold,
+    fontSize = 16.sp,
+    letterSpacing = (-0.2).sp
+)
+
+/** Mode badges, pills, last-seen meta — 10sp */
+val BadgeLabelStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 10.sp
+)
+
+/** Sensor cell name — 8.5sp uppercase */
+val SensorCellLabelStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 8.5.sp,
+    letterSpacing = 0.3.sp
+)
+
+/** Sensor cell value — 11.5sp */
+val SensorCellValueStyle = TextStyle(
+    fontFamily = DMSans,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.5.sp
+)
+
+/** Monospace info value — MAC, firmware */
+val InfoValueMonoStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Normal,
+    fontSize = 11.sp
+)
+
+
 val Typography = Typography(
 
     // Large headings - Fraunces serif
