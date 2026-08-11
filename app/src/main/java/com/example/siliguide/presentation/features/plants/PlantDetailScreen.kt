@@ -324,32 +324,32 @@ fun PlantDetailTopBar(
                         .background(White)
                 ) {
                     // --- Rename Option ---
-//                    Row(
-//                        modifier = Modifier
-//                            .fillMaxWidth()
-//                            .clickable { onRename() }
-//                            .padding(horizontal = 14.dp, vertical = 12.dp),
-//                        verticalAlignment = Alignment.CenterVertically,
-//                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-//                    ) {
-//                        Box(
-//                            modifier = Modifier
-//                                .size(26.dp)
-//                                .background(GreenBgLight, RoundedCornerShape(7.dp)),
-//                            contentAlignment = Alignment.Center
-//                        ) {
-//                            PencilIcon()
-//                        }
-//                        Text(
-//                            text = "Rename Plant",
-//                            fontSize = 13.sp,
-//                            fontWeight = FontWeight.Medium,
-//                            fontFamily = DMSans,
-//                            color = Black
-//                        )
-//                    }
-//
-//                    HorizontalDivider(color = Border, thickness = 1.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onRename() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(GreenBgLight, RoundedCornerShape(7.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            PencilIcon()
+                        }
+                        Text(
+                            text = "Rename Plant",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = DMSans,
+                            color = Black
+                        )
+                    }
+
+                    HorizontalDivider(color = Border, thickness = 1.dp)
 
                     // --- Delete Option ---
                     Row(
