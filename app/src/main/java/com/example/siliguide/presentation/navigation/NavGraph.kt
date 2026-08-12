@@ -68,6 +68,9 @@ import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDe
 import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavOptionsBuilder
+import com.example.siliguide.presentation.features.dashboard.components.SeeAllViewModel
+import com.example.siliguide.presentation.features.dashboard.components.SeeAllDevicesScreen
+import com.example.siliguide.presentation.features.dashboard.components.SeeAllPlantsScreen
 
 @Composable
 fun SiliGuideNavGraph(
@@ -131,7 +134,56 @@ fun SiliGuideNavGraph(
                         Screen.IoTDeviceDetail.createRoute(deviceId)
                     )
                 },
-                onNavigateToSeeAll = { /* Future: Navigate to history list */ }
+                onNavigateToSeeAllPlants = {
+                    navController.navigateSafely(backStackEntry, Screen.SeeAllPlants.route)
+                },
+                onNavigateToSeeAllDevices = {
+                    navController.navigateSafely(backStackEntry, Screen.SeeAllDevices.route)
+                }
+            )
+        }
+
+        // --- SEE ALL: IOT DEVICES ---
+        composable(route = Screen.SeeAllDevices.route) { backStackEntry ->
+
+            val viewModel: SeeAllViewModel = hiltViewModel()
+
+            val devices by viewModel.visibleDevices.collectAsState()
+            val query by viewModel.deviceQuery.collectAsState()
+
+            SeeAllDevicesScreen(
+                devices = devices,
+                query = query,
+                onQueryChange = { viewModel.onDeviceQueryChange(it) },
+                onBack = { navController.popSafely(backStackEntry) },
+                onDeviceClick = { deviceId ->
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.IoTDeviceDetail.createRoute(deviceId)
+                    )
+                }
+            )
+        }
+
+        // --- SEE ALL: MY PLANTS ---
+        composable(route = Screen.SeeAllPlants.route) { backStackEntry ->
+
+            val viewModel: SeeAllViewModel = hiltViewModel()
+
+            val plants by viewModel.visiblePlants.collectAsState()
+            val query by viewModel.plantQuery.collectAsState()
+
+            SeeAllPlantsScreen(
+                plants = plants,
+                query = query,
+                onQueryChange = { viewModel.onPlantQueryChange(it) },
+                onBack = { navController.popSafely(backStackEntry) },
+                onPlantClick = { plantId ->
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.PlantDetail.createRoute(plantId)
+                    )
+                }
             )
         }
 

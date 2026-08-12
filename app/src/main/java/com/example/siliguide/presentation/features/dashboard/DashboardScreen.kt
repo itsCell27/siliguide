@@ -107,7 +107,7 @@ fun DashboardScreen(
     onNavigateToAddIoT: () -> Unit,
     onNavigateToPlantDetail: (plantId: String) -> Unit,
     onNavigateToDeviceDetail: (deviceId: String) -> Unit = {},
-    onNavigateToSeeAll: () -> Unit,
+    onNavigateToSeeAllPlants: () -> Unit,
     onNavigateToSeeAllDevices: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
@@ -150,7 +150,7 @@ fun DashboardScreen(
         onNavigateToAddIoT  = onNavigateToAddIoT,
         onNavigateToPlantDetail = onNavigateToPlantDetail,
         onNavigateToDeviceDetail = onNavigateToDeviceDetail,
-        onNavigateToSeeAll  = onNavigateToSeeAll,
+        onNavigateToSeeAllPlants  = onNavigateToSeeAllPlants,
         onNavigateToSeeAllDevices = onNavigateToSeeAllDevices,
         onNavigateToProfile = onNavigateToProfile
     )
@@ -174,7 +174,7 @@ fun DashboardContent(
     onNavigateToAddIoT: () -> Unit,
     onNavigateToPlantDetail: (String) -> Unit,
     onNavigateToDeviceDetail: (String) -> Unit = {},
-    onNavigateToSeeAll: () -> Unit,
+    onNavigateToSeeAllPlants: () -> Unit,
     onNavigateToSeeAllDevices: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
@@ -218,7 +218,7 @@ fun DashboardContent(
                     )
                     PlantsSection(
                         plants = plants,
-                        onSeeAll = onNavigateToSeeAll,
+                        onSeeAll = onNavigateToSeeAllPlants,
                         onNavigateToPlantDetail = onNavigateToPlantDetail
                     )
                 }
@@ -1059,7 +1059,7 @@ private fun String.humanizeSymptom(): String =
 /**
  * Relative for anything from the last week, absolute date beyond that.
  */
-private fun formatLastAnalyzed(millis: Long): String {
+fun formatLastAnalyzed(millis: Long): String {
 
     val elapsed = System.currentTimeMillis() - millis
 
@@ -1170,7 +1170,7 @@ fun DashboardPreview() {
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
-            onNavigateToPlantDetail = {}, onNavigateToSeeAll = {},
+            onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
             onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
         )
     }
@@ -1197,7 +1197,7 @@ fun DashboardPlantsOnlyPreview() {
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
-            onNavigateToPlantDetail = {}, onNavigateToSeeAll = {},
+            onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
             onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
         )
     }
@@ -1214,7 +1214,7 @@ fun DashboardEmptyPreview() {
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
-            onNavigateToPlantDetail = {}, onNavigateToSeeAll = {},
+            onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
             onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
         )
     }
@@ -1240,7 +1240,7 @@ fun DashboardRefreshingPreview() {
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
-            onNavigateToPlantDetail = {}, onNavigateToSeeAll = {},
+            onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
             onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
         )
     }
