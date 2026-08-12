@@ -47,7 +47,8 @@ CREATE TABLE plants (
     date_created     INTEGER NOT NULL,
     last_analyzed_at INTEGER,           -- NULL until first analysis
     is_synced        INTEGER NOT NULL DEFAULT 0,
-    device_id        TEXT UNIQUE REFERENCES iot_devices(device_id) ON DELETE SET NULL ON UPDATE CASCADE
+    device_id        TEXT UNIQUE REFERENCES iot_devices(device_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    is_deleted       INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE analysis_sessions (
@@ -77,7 +78,8 @@ CREATE TABLE analysis_sessions (
     light_intensity        INTEGER,
     air_temp               REAL,
 
-    is_synced              INTEGER NOT NULL DEFAULT 0
+    is_synced              INTEGER NOT NULL DEFAULT 0,
+    is_deleted              INTEGER NOT NULL DEFAULT 0
 );
 
 -- ============================================================
@@ -121,8 +123,8 @@ UPDATE users SET email = ? WHERE user_id = ?;
 -- ============================================================
 
 insertDevice:
-INSERT INTO iot_devices (device_id, user_id, device_name, pairing_token, is_active, last_known_ip, connection_mode, is_synced, date_added)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO iot_devices (device_id, user_id, device_name, pairing_token, is_active, last_known_ip, connection_mode, date_added)
+VALUES ( ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(device_id) DO UPDATE SET
     user_id = excluded.user_id,
     device_name = excluded.device_name,
@@ -130,7 +132,6 @@ ON CONFLICT(device_id) DO UPDATE SET
     is_active = excluded.is_active,
     last_known_ip = excluded.last_known_ip,
     connection_mode = excluded.connection_mode,
-    is_synced = excluded.is_synced,
     date_added = excluded.date_added;
 
 getDevicesByUser:
@@ -159,16 +160,16 @@ FROM iot_devices WHERE device_id = ?;
 
 
 updateDeviceName:
-UPDATE iot_devices SET device_name = ? WHERE device_id = ?;
+UPDATE iot_devices SET device_name = ?, is_synced = 0 WHERE device_id = ?;
 
 updateDeviceIp:
-UPDATE iot_devices SET last_known_ip = ? WHERE device_id = ?;
+UPDATE iot_devices SET last_known_ip = ?, is_synced = 0 WHERE device_id = ?;
 
 updateDeviceConnectionMode:
-UPDATE iot_devices SET connection_mode = ? WHERE device_id = ?;
+UPDATE iot_devices SET connection_mode = ?, is_synced = 0 WHERE device_id = ?;
 
 updateDeviceActiveStatus:
-UPDATE iot_devices SET is_active = ? WHERE device_id = ?;
+UPDATE iot_devices SET is_active = ?, is_synced = 0 WHERE device_id = ?;
 
 updateDeviceSensorData:
 UPDATE iot_devices
@@ -200,45 +201,50 @@ DELETE FROM iot_devices WHERE device_id = ?;
 -- ============================================================
 
 insertPlant:
-INSERT INTO plants (plant_id, user_id, plant_name, date_created, last_analyzed_at, is_synced, device_id)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO plants (plant_id, user_id, plant_name, date_created, last_analyzed_at, device_id)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(plant_id) DO UPDATE SET
     user_id = excluded.user_id,
     plant_name = excluded.plant_name,
     date_created = excluded.date_created,
     last_analyzed_at = excluded.last_analyzed_at,
-    is_synced = excluded.is_synced,
     device_id = excluded.device_id;
 
 getPlantsByUser:
-SELECT * FROM plants WHERE user_id = ? ORDER BY date_created DESC;
+SELECT * FROM plants WHERE user_id = ? AND is_deleted = 0 ORDER BY date_created DESC;
 
 getPlantById:
-SELECT * FROM plants WHERE plant_id = ?;
+SELECT * FROM plants WHERE plant_id = ? AND is_deleted = 0;
 
 getPlantByDeviceId:
-SELECT * FROM plants WHERE device_id = ?;
+SELECT * FROM plants WHERE device_id = ? AND is_deleted = 0;
 
 getUnlinkedPlantsByUser:
-SELECT * FROM plants WHERE user_id = ? AND device_id IS NULL;
+SELECT * FROM plants WHERE user_id = ? AND device_id IS NULL AND is_deleted = 0;
 
 updatePlantName:
-UPDATE plants SET plant_name = ? WHERE plant_id = ?;
+UPDATE plants SET plant_name = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 updatePlantDevice:
-UPDATE plants SET device_id = ? WHERE plant_id = ?;
+UPDATE plants SET device_id = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 updateLastAnalyzedAt:
-UPDATE plants SET last_analyzed_at = ? WHERE plant_id = ?;
+UPDATE plants SET last_analyzed_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 unlinkPlantDevice:
-UPDATE plants SET device_id = NULL WHERE plant_id = ?;
+UPDATE plants SET device_id = NULL, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 markPlantSynced:
-UPDATE plants SET is_synced = 1 WHERE plant_id = ?;
+UPDATE plants SET is_synced = 1 WHERE plant_id = ? AND is_deleted = 0;
 
 getUnsyncedPlantsByUser:
 SELECT * FROM plants WHERE user_id = ? AND is_synced = 0;
+
+markPlantDeleted:
+UPDATE plants
+SET is_deleted = 1,
+    is_synced = 0
+WHERE plant_id = ?;
 
 deletePlant:
 DELETE FROM plants WHERE plant_id = ?;
@@ -254,9 +260,8 @@ INSERT INTO analysis_sessions (
     predicted_class, confidence, segmentation_result, plant_condition, plant_condition_description, possible_causes,
     characteristics, recommended_actions, is_partial,
     soil_moisture, soil_ph, soil_temp, electrical_conductivity,
-    nitrogen, phosphorus, potassium, light_intensity, air_temp,
-    is_synced
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    nitrogen, phosphorus, potassium, light_intensity, air_temp
+) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     plant_id = excluded.plant_id,
     device_id = excluded.device_id,
@@ -280,32 +285,37 @@ ON CONFLICT(session_id) DO UPDATE SET
     phosphorus = excluded.phosphorus,
     potassium = excluded.potassium,
     light_intensity = excluded.light_intensity,
-    air_temp = excluded.air_temp,
-    is_synced = excluded.is_synced;
+    air_temp = excluded.air_temp;
 
 getSessionsByPlant:
-SELECT * FROM analysis_sessions WHERE plant_id = ? ORDER BY session_timestamp DESC;
+SELECT * FROM analysis_sessions WHERE plant_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
 
 getSessionsByUser:
-SELECT * FROM analysis_sessions WHERE user_id = ? ORDER BY session_timestamp DESC;
+SELECT * FROM analysis_sessions WHERE user_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
 
 getSessionById:
-SELECT * FROM analysis_sessions WHERE session_id = ?;
+SELECT * FROM analysis_sessions WHERE session_id = ? AND is_deleted = 0;
 
 getSessionsByDeviceId:
-SELECT * FROM analysis_sessions WHERE device_id = ? ORDER BY session_timestamp DESC;
+SELECT * FROM analysis_sessions WHERE device_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
 
 getLatestSessionForPlant:
-SELECT * FROM analysis_sessions WHERE plant_id = ? ORDER BY session_timestamp DESC LIMIT 1;
+SELECT * FROM analysis_sessions WHERE plant_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC LIMIT 1;
 
 getPartialAnalysisSessionsByUser:
-SELECT * FROM analysis_sessions WHERE is_partial = 1 AND user_id = ? ORDER BY session_timestamp DESC;
+SELECT * FROM analysis_sessions WHERE is_partial = 1 AND user_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
 
 getCompleteAnalysisSessionsByUser:
-SELECT * FROM analysis_sessions WHERE is_partial = 0 AND user_id = ? ORDER BY session_timestamp DESC;
+SELECT * FROM analysis_sessions WHERE is_partial = 0 AND user_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
 
 markSessionSynced:
 UPDATE analysis_sessions SET is_synced = 1 WHERE session_id = ?;
+
+markAnalysisSessionDeleted:
+UPDATE analysis_sessions
+SET is_deleted = 1,
+    is_synced = 0
+WHERE session_id = ?;
 
 getUnsyncedSessionsByUser:
 SELECT * FROM analysis_sessions WHERE user_id = ? AND is_synced = 0;
