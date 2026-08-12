@@ -1172,8 +1172,7 @@ fun PlantLeafIcon(
 fun TransferDots(color: Color) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxHeight()
+        verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(3) {
             Box(
