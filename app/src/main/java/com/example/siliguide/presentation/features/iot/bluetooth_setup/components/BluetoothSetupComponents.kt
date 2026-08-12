@@ -75,6 +75,7 @@ import com.example.siliguide.core.ui.theme.OffWhite
 import com.example.siliguide.core.ui.theme.White
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.state.VerificationStage
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.state.VerificationStageStatus
+import com.example.siliguide.presentation.features.iot.lan_setup.components.PhoneOutlineIcon
 
 private const val DEVICE_NAME_MAX_LENGTH = 12
 private val CardCornerRadius = 14.dp
@@ -174,11 +175,7 @@ fun BluetoothIllustrationCard(modifier: Modifier = Modifier) {
             modifier = Modifier.size(NodeSize)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.PhoneAndroid,
-                    contentDescription = null,
-                    tint = Info
-                )
+                PhoneOutlineIcon(color = Info)
             }
         }
         Row(
