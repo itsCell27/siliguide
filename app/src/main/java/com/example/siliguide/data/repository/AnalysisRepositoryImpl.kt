@@ -45,8 +45,7 @@ class AnalysisRepositoryImpl @Inject constructor(
                 phosphorus = session.phosphorus?.toLong(),
                 potassium = session.potassium?.toLong(),
                 light_intensity = session.lightIntensity?.toLong(),
-                air_temp = session.airTemp,
-                is_synced = if (session.isSynced) 1L else 0L
+                air_temp = session.airTemp
             )
         }
     }

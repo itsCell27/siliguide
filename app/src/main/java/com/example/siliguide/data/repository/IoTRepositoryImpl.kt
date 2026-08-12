@@ -270,7 +270,6 @@ class IoTRepositoryImpl @Inject constructor(
             is_active = if (device.isActive) 1L else 0L,
             last_known_ip = device.lastKnownIp,
             connection_mode = device.connectionMode.name,
-            is_synced = if (device.isSynced) 1L else 0L, // Convert Boolean to Long
             date_added = device.dateAdded
         )
     }

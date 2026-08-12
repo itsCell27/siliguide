@@ -35,7 +35,6 @@ class PlantRepositoryImpl @Inject constructor(
             plant_name = plant.name,
             date_created = plant.dateCreated,
             last_analyzed_at = plant.lastAnalyzedAt,
-            is_synced = if (plant.isSynced) 1L else 0L, // Maps Kotlin Boolean to SQLite Integer
             device_id = plant.deviceId
         )
     }

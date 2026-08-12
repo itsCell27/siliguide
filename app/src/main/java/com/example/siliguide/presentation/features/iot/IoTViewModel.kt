@@ -406,7 +406,6 @@ class IoTViewModel @Inject constructor(
                 isActive = true,
                 lastKnownIp = ip,
                 connectionMode = connectionMode,
-                isSynced = false, // Initial state
                 dateAdded = System.currentTimeMillis()
             )
 
@@ -791,7 +790,6 @@ class IoTViewModel @Inject constructor(
                     isActive = true,
                     lastKnownIp = "",
                     connectionMode = ConnectionMode.BLUETOOTH,
-                    isSynced = false,
                     dateAdded = System.currentTimeMillis()
                 )
 
@@ -1596,7 +1594,6 @@ class IoTViewModel @Inject constructor(
                             lastKnownIp = "",
                             // Set to AP for now since device is not yet connected to LAN
                             connectionMode = ConnectionMode.AP,
-                            isSynced = false,
                             dateAdded = System.currentTimeMillis()
                         )
                     )
@@ -2349,7 +2346,6 @@ class IoTViewModel @Inject constructor(
                             // Filled in once the device reports its LAN address
                             lastKnownIp = "",
                             connectionMode = ConnectionMode.LAN,
-                            isSynced = false,
                             dateAdded = System.currentTimeMillis()
                         )
                     )
