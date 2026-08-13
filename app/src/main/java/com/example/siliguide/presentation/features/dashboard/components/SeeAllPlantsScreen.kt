@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,6 +54,14 @@ import com.example.siliguide.core.ui.theme.Warning
 import com.example.siliguide.core.ui.theme.WarningBg
 import com.example.siliguide.core.ui.theme.White
 import com.example.siliguide.presentation.features.dashboard.formatLastAnalyzed
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import com.example.siliguide.core.ui.theme.GreenPrimary
+import com.example.siliguide.core.ui.theme.GrayLight
 import java.io.File
 
 /** One row in the See All plant list. */
@@ -84,9 +93,12 @@ fun SeeAllPlantsScreen(
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
     onPlantClick: (String) -> Unit,
+    isSelectionMode: Boolean = false,
+    onLinkConfirm: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val attentionCount = plants.count { it.needsAttention }
+    var selectedPlantId by remember { mutableStateOf<String?>(null) }
 
     SeeAllScaffold(
         title = "My Plants",
@@ -97,65 +109,94 @@ fun SeeAllPlantsScreen(
         onBack = onBack,
         modifier = modifier
     ) {
-        if (plants.isEmpty()) {
 
-            if (query.isBlank()) {
-                SeeAllEmptyState(
-                    title = "No plants yet",
-                    message = "Add your first Siling Labuyo plant from the dashboard to " +
-                            "start tracking its condition."
-                )
-            } else {
-                SeeAllEmptyState(
-                    title = "No plants found",
-                    message = "No results for \"$query\". Try a different name or clear " +
-                            "the search.",
-                    onClearSearch = { onQueryChange("") }
-                )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (plants.isEmpty()) {
+                    if (query.isBlank()) {
+                        SeeAllEmptyState(
+                            title = "No plants yet",
+                            message = "Add your first Siling Labuyo plant from the dashboard to start tracking its condition."
+                        )
+                    } else {
+                        SeeAllEmptyState(
+                            title = "No plants found",
+                            message = "No results for \"$query\". Try a different name or clear the search.",
+                            onClearSearch = { onQueryChange("") }
+                        )
+                    }
+                } else {
+                    val summary = when {
+                        query.isNotBlank() -> resultSummaryText(
+                            query = query,
+                            count = plants.size,
+                            singular = "plant",
+                            plural = "plants"
+                        )
+                        attentionCount > 0 -> "$attentionCount ${if (attentionCount == 1) "plant" else "plants"} need attention"
+                        else -> null
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(
+                            start = 22.dp,
+                            end = 22.dp,
+                            top = if (summary == null) 12.dp else 8.dp,
+                            bottom = if (isSelectionMode) 120.dp else 16.dp // Extra padding for bottom CTA
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(
+                            items = plants,
+                            key = { it.plantId }
+                        ) { plant ->
+                            PlantListItem(
+                                plant = plant,
+                                isSelectionMode = isSelectionMode,
+                                isSelected = selectedPlantId == plant.plantId,
+                                onClick = {
+                                    if (isSelectionMode) {
+                                        selectedPlantId = plant.plantId
+                                    } else {
+                                        onPlantClick(plant.plantId)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
-        } else {
-
-            // Search wins over the attention count — the user asked a question
-            // and the summary should answer it
-            val summary = when {
-                query.isNotBlank() -> resultSummaryText(
-                    query = query,
-                    count = plants.size,
-                    singular = "plant",
-                    plural = "plants"
-                )
-
-                attentionCount > 0 ->
-                    "$attentionCount ${if (attentionCount == 1) "plant" else "plants"} " +
-                            "need attention"
-
-                else -> null
-            }
-
-//            if (summary != null) {
-//                ResultSummaryRow(text = summary)
-//            }
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(
-                    start = 22.dp,
-                    end = 22.dp,
-                    top = if (summary == null) 12.dp else 8.dp,
-                    bottom = 16.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(
-                    items = plants,
-                    key = { it.plantId }
-                ) { plant ->
-                    PlantListItem(
-                        plant = plant,
-                        onClick = { onPlantClick(plant.plantId) }
-                    )
+            // Fixed bottom CTA for selection mode
+            if (isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(White)
+                        .padding(horizontal = 22.dp, vertical = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selectedPlantId != null) GreenPrimary else GrayLight)
+                            .clickable(enabled = selectedPlantId != null) {
+                                selectedPlantId?.let { onLinkConfirm?.invoke(it) }
+                            }
+                            .padding(vertical = 14.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Link Device",
+                            color = White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = DMSans
+                        )
+                    }
                 }
             }
         }
@@ -166,18 +207,24 @@ fun SeeAllPlantsScreen(
 private fun PlantListItem(
     plant: SeeAllPlantItem,
     onClick: () -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    isSelectionMode: Boolean = false, // Added parameter
+    isSelected: Boolean = false,
 ) {
     val thumbSize = if (compact) 55.dp else 60.dp
     val thumbRadius = if (compact) 10.dp else 11.dp
 
+    val borderColor = if (isSelected) GreenPrimary else Border
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+    val bgColor = if (isSelected) GreenBgLight else White
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick },
-        colors = CardDefaults.cardColors(containerColor = White),
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = bgColor),
         shape  = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, Border)
+        border = BorderStroke(borderWidth, borderColor)
     ) {
         Row(
             modifier = Modifier
@@ -247,6 +294,17 @@ private fun PlantListItem(
                     )
                 }
             }
+
+            if (isSelectionMode) {
+                RadioButton(
+                    selected = isSelected,
+                    onClick = onClick,
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = GreenPrimary,
+                        unselectedColor = GrayLight
+                    )
+                )
+            }
         }
     }
 }
@@ -308,8 +366,35 @@ private val previewPlants = listOf(
         "3", "Pot #3", "warning", "Leaf Spots",
         System.currentTimeMillis() - 34L * 86_400_000
     ),
-    SeeAllPlantItem("4", "Window Sili", "none", "", null)
+    SeeAllPlantItem("4", "Window Sili", "none", "", null),
+    SeeAllPlantItem(
+        "5", "Pot #3", "warning", "Leaf Spots",
+        System.currentTimeMillis() - 34L * 86_400_000
+    ),
+    SeeAllPlantItem(
+        "6", "Pot #3", "warning", "Leaf Spots",
+        System.currentTimeMillis() - 34L * 86_400_000
+    ),
+    SeeAllPlantItem(
+        "7", "Pot #3", "warning", "Leaf Spots",
+        System.currentTimeMillis() - 34L * 86_400_000
+    ),
 )
+
+@Preview(name = "Default list", showSystemUi = true, widthDp = 360, heightDp = 740)
+@Composable
+private fun SeeAllPlantsSelectedPreview() {
+    SiliGuideTheme {
+        SeeAllPlantsScreen(
+            plants = previewPlants,
+            query = "",
+            onQueryChange = {},
+            onBack = {},
+            onPlantClick = {},
+            isSelectionMode = true,
+        )
+    }
+}
 
 @Preview(name = "Default list", showSystemUi = true, widthDp = 360, heightDp = 740)
 @Composable

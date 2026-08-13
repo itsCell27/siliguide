@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.window.Dialog
+import com.example.siliguide.core.ui.components.MessageDialog
 import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 // ── UI models (presentation-only; map to domain ConnectionMode later) ───────
@@ -60,7 +61,7 @@ enum class DetailConnectionMode(
     AP(
         shortLabel = "AP",
         badgeLabel = "📡 AP",
-        optionTitle = "📡 AP Mode — Direct hotspot",
+        optionTitle = "AP Mode",
         optionDesc = "Phone connects directly to the device's own WiFi. Best for on-the-go field use.",
         switchLabel = "Switch to AP Mode",
         switchWarning = "Switching to AP Mode will disconnect the device from your home WiFi. You'll need to reconnect your phone to the device's hotspot (SiliGuide_IoTSensors) to continue using it."
@@ -68,7 +69,7 @@ enum class DetailConnectionMode(
     LAN(
         shortLabel = "LAN",
         badgeLabel = "🏠 LAN",
-        optionTitle = "🏠 LAN Mode — Home network",
+        optionTitle = "LAN Mode",
         optionDesc = "Device stays on your home WiFi. Works offline if phone is on the same network.",
         switchLabel = "Switch to LAN Mode",
         switchWarning = "Switching to LAN Mode requires a short setup — you'll need to provide your home WiFi credentials so the device can join your router. The setup wizard will open automatically after confirming."
@@ -76,7 +77,7 @@ enum class DetailConnectionMode(
     BLUETOOTH(
         shortLabel = "BT",
         badgeLabel = "🔵 BT",
-        optionTitle = "🔵 BT Mode — Bluetooth",
+        optionTitle = "BT Mode",
         optionDesc = "Phone pairs directly over Bluetooth. Short range, no WiFi needed.",
         switchLabel = "Switch to BT Mode",
         switchWarning = "Switching to BT Mode pairs your phone directly with the device over Bluetooth. Keep the phone within a few meters of the device — no WiFi is used."
@@ -106,7 +107,9 @@ data class IoTDeviceDetailUiState(
     val linkedPlant: LinkedPlantUi? = null,
     val deviceIdentifier: String = "A4:CF:12:7E:9B:34",
     val firmware: String = "v2.1.4",
-    val dateRegistered: String = "Apr 10, 2026"
+    val dateRegistered: String = "Apr 10, 2026",
+
+    val isModeChangeSheetOpen: Boolean = false
 )
 
 // ── Screen ─────────────────────────────────────────────────────────────────
@@ -114,6 +117,7 @@ data class IoTDeviceDetailUiState(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IoTDeviceDetailScreen(
+    viewModel: IoTDeviceDetailViewModel,
     state: IoTDeviceDetailUiState,
     onBack: () -> Unit = {},
     onLinkPlant: () -> Unit = {},
@@ -124,13 +128,14 @@ fun IoTDeviceDetailScreen(
     onModeChangeConfirmed: (DetailConnectionMode) -> Unit = {}
 ) {
 
-    var showModeSheet by remember { mutableStateOf(false) }
+    val offlineWarning by viewModel.offlineWarningMessage.collectAsState()
     var showRemoveDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showUnlinkDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedMode by remember(state.mode) { mutableStateOf(state.mode) }
 
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
     Box(
@@ -183,7 +188,7 @@ fun IoTDeviceDetailScreen(
                     LinkedPlantCard(
                         plant = state.linkedPlant,
                         dimmed = state.status == DeviceConnectionStatus.RECONNECTING,
-                        onUnlink = onUnlinkPlant
+                        onUnlink = { showUnlinkDialog = true }
                     )
                 } else {
 
@@ -197,7 +202,7 @@ fun IoTDeviceDetailScreen(
                     dimmed = state.status == DeviceConnectionStatus.RECONNECTING,
                     onConnectionModeClick = {
                         selectedMode = state.mode
-                        showModeSheet = true
+                        viewModel.requestModeChange()
                     }
                 )
             }
@@ -227,13 +232,34 @@ fun IoTDeviceDetailScreen(
                 }
             )
         }
+
+        if (showUnlinkDialog && state.linkedPlant != null) {
+            UnlinkPlantDialog(
+                plantName = state.linkedPlant.name,
+                onCancel = { showUnlinkDialog = false },
+                onConfirm = {
+                    showUnlinkDialog = false
+                    onUnlinkPlant()
+                }
+            )
+        }
+    }
+
+    // --- OFFLINE WARNING DIALOG ---
+    offlineWarning?.let { message ->
+        MessageDialog(
+            title = "Device Offline",
+            message = message,
+            confirmText = "Got it",
+            onConfirm = { viewModel.dismissOfflineWarning() }
+        )
     }
 
     // 12C / 12D — Change Connection Mode sheet (drag down to close)
-    if (showModeSheet) {
+    if (state.isModeChangeSheetOpen) {
 
         ModalBottomSheet(
-            onDismissRequest = { showModeSheet = false },
+            onDismissRequest = { viewModel.dismissModeChangeSheet() },
             sheetState = sheetState,
             containerColor = White,
             scrimColor = ModalScrim,
@@ -248,14 +274,14 @@ fun IoTDeviceDetailScreen(
                 onConfirm = {
                     scope.launch {
                         sheetState.hide()
-                        showModeSheet = false
+                        viewModel.dismissModeChangeSheet()
                         onModeChangeConfirmed(selectedMode)
                     }
                 },
                 onCancel = {
                     scope.launch {
                         sheetState.hide()
-                        showModeSheet = false
+                        viewModel.dismissModeChangeSheet()
                     }
                 }
             )
@@ -918,15 +944,15 @@ private fun LinkedPlantCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(1.dp))
-
-            Text(
-                text = plant.meta,
-                style = WizardSubCaptionStyle,
-                color = GrayMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+//            Spacer(modifier = Modifier.height(1.dp))
+//
+//            Text(
+//                text = plant.meta,
+//                style = WizardSubCaptionStyle,
+//                color = GrayMedium,
+//                maxLines = 1,
+//                overflow = TextOverflow.Ellipsis
+//            )
         }
 
         Spacer(modifier = Modifier.width(10.dp))
@@ -1758,6 +1784,138 @@ private fun RenameDeviceDialog(
 }
 
 
+// ── Unlink plant dialog ──────────────────────────────────────────────────
+
+@Composable
+private fun UnlinkPlantDialog(
+    plantName: String,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val scrimInteraction = remember { MutableInteractionSource() }
+    val cardInteraction = remember { MutableInteractionSource() }
+    val cancelInteraction = remember { MutableInteractionSource() }
+    val unlinkInteraction = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ModalScrim)
+            .clickable(
+                interactionSource = scrimInteraction,
+                indication = null,
+                onClick = onCancel
+            )
+            .padding(18.dp),
+        contentAlignment = Alignment.Center
+    ) {
+
+        Column(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(White)
+                .clickable(
+                    interactionSource = cardInteraction,
+                    indication = null,
+                    onClick = { /* swallow taps */ }
+                )
+                .padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(DangerBg),
+                contentAlignment = Alignment.Center
+            ) {
+                // Swapped to the unlink glyph
+                Canvas(modifier = Modifier.size(24.dp)) {
+                    drawUnlinkGlyph(
+                        color = Danger,
+                        strokeWidthPx = 1.6.dp.toPx()
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Unlink $plantName?",
+                style = DialogTitleStyle,
+                color = Black,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "This device will no longer track data for this plant. Past sensor history will remain saved.",
+                style = WizardBodyStyle,
+                color = GrayBody,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(White)
+                        .border(
+                            width = 1.5.dp,
+                            color = Border,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable(
+                            interactionSource = cancelInteraction,
+                            indication = null,
+                            onClick = onCancel
+                        )
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Cancel",
+                        style = WizardBodyMediumStyle,
+                        color = GrayBody
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Danger)
+                        .clickable(
+                            interactionSource = unlinkInteraction,
+                            indication = null,
+                            onClick = onConfirm
+                        )
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Unlink",
+                        style = WizardBodyMediumStyle,
+                        color = White
+                    )
+                }
+            }
+        }
+    }
+}
+
+
 // ── Small helpers ──────────────────────────────────────────────────────────
 
 /** 13sp medium button label (matches M3 titleMedium in this theme). */
@@ -2105,37 +2263,37 @@ private val OfflineSample = ConnectedSample.copy(
     staleNote = "Showing last known readings · 14 min ago"
 )
 
-@Preview(name = "12A · 360x740", showSystemUi = true, widthDp = 360, heightDp = 740)
-@Composable
-private fun PreviewConnected() {
-
-    SiliGuideTheme {
-
-        IoTDeviceDetailScreen(state = ConnectedSample)
-    }
-}
-
-@Preview(name = "12E · 320x640", showSystemUi = true, widthDp = 320, heightDp = 640)
-@Composable
-private fun PreviewOffline() {
-
-    SiliGuideTheme {
-
-        IoTDeviceDetailScreen(state = OfflineSample)
-    }
-}
-
-@Preview(name = "12F · 412x915", showSystemUi = true, widthDp = 412, heightDp = 915)
-@Composable
-private fun PreviewReconnecting() {
-
-    SiliGuideTheme {
-
-        IoTDeviceDetailScreen(
-            state = ConnectedSample.copy(
-                status = DeviceConnectionStatus.RECONNECTING,
-                linkedPlant = null
-            )
-        )
-    }
-}
+//@Preview(name = "12A · 360x740", showSystemUi = true, widthDp = 360, heightDp = 740)
+//@Composable
+//private fun PreviewConnected() {
+//
+//    SiliGuideTheme {
+//
+//        IoTDeviceDetailScreen(state = ConnectedSample)
+//    }
+//}
+//
+//@Preview(name = "12E · 320x640", showSystemUi = true, widthDp = 320, heightDp = 640)
+//@Composable
+//private fun PreviewOffline() {
+//
+//    SiliGuideTheme {
+//
+//        IoTDeviceDetailScreen(state = OfflineSample)
+//    }
+//}
+//
+//@Preview(name = "12F · 412x915", showSystemUi = true, widthDp = 412, heightDp = 915)
+//@Composable
+//private fun PreviewReconnecting() {
+//
+//    SiliGuideTheme {
+//
+//        IoTDeviceDetailScreen(
+//            state = ConnectedSample.copy(
+//                status = DeviceConnectionStatus.RECONNECTING,
+//                linkedPlant = null
+//            )
+//        )
+//    }
+//}

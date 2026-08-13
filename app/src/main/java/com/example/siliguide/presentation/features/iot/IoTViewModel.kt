@@ -291,6 +291,26 @@ class IoTViewModel @Inject constructor(
                         return@withContext
                     }
 
+                    // --- NEW LOGIC: Check if we are Reconfiguring ---
+                    val reconfigId = apReconfigureDeviceId
+                    if (reconfigId != null) {
+                        if (info.deviceId != reconfigId) {
+                            showValidationDialog(
+                                title = "Wrong Device",
+                                message = "You connected to a different SiliGuide device. Please connect to the correct device's hotspot."
+                            )
+                            _apConnectionState.value = "FAILED"
+                            return@withContext
+                        }
+
+                        // Device matches! Bypass existing/claimed checks.
+                        connectedDeviceId = info.deviceId
+                        pairingToken = info.token
+                        error = null
+                        _apConnectionState.value = "CONNECTED"
+                        return@withContext
+                    }
+
                     // ----------------------------------------------------
                     // 2. Already exists in local database?
                     // ----------------------------------------------------
@@ -2532,4 +2552,46 @@ class IoTViewModel @Inject constructor(
         _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
         lanBluetoothDevice = null
     }
+
+
+
+    // --- AP RECONFIGURATION STATE ---
+    var apReconfigureDeviceId by mutableStateOf<String?>(null)
+        private set
+
+    fun startApReconfigure(deviceId: String) {
+        apReconfigureDeviceId = deviceId
+    }
+
+    fun clearApReconfigure() {
+        apReconfigureDeviceId = null
+    }
+
+    fun finalizeApModeSwitch() {
+        viewModelScope.launch {
+            val deviceId = apReconfigureDeviceId ?: return@launch
+
+            _iotUiState.update {
+                it.copy(isLoading = true, loadingMessage = "Switching mode...")
+            }
+
+            try {
+                // Update connection mode to AP
+                updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.AP)
+                // Ensure the IP points to the default AP IP
+                updateDeviceIpUseCase(deviceId, DEFAULT_AP_IP)
+
+                _setupComplete.emit(Unit)
+            } catch (e: Exception) {
+                Log.e("IoTViewModel", "Failed to switch to AP mode", e)
+                showValidationDialog(
+                    title = "Switch Failed",
+                    message = "Could not update connection mode. Please try again."
+                )
+            } finally {
+                _iotUiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
 }

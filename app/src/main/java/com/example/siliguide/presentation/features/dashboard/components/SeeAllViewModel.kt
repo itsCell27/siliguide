@@ -11,6 +11,7 @@ import com.example.siliguide.domain.usecase.CheckDeviceConnectionUseCase
 import com.example.siliguide.domain.usecase.GetIoTDevicesUseCase
 import com.example.siliguide.domain.usecase.GetLatestSessionByPlantId
 import com.example.siliguide.domain.usecase.GetPlantsUseCase
+import com.example.siliguide.domain.usecase.LinkIoTDeviceToPlantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
@@ -43,7 +45,8 @@ class SeeAllViewModel @Inject constructor(
     private val getPlantsUseCase: GetPlantsUseCase,
     private val getIoTDevicesUseCase: GetIoTDevicesUseCase,
     private val checkDeviceConnectionUseCase: CheckDeviceConnectionUseCase,
-    private val getLatestSessionByPlantId: GetLatestSessionByPlantId
+    private val getLatestSessionByPlantId: GetLatestSessionByPlantId,
+    private val linkIoTDeviceToPlantUseCase: LinkIoTDeviceToPlantUseCase
 ) : ViewModel() {
 
     private val _deviceQuery = MutableStateFlow("")
@@ -158,6 +161,27 @@ class SeeAllViewModel @Inject constructor(
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = emptyList()
             )
+
+
+    // Link a plant to an IoT device
+    fun linkPlantToDevice(deviceId: String, plantId: String) {
+        viewModelScope.launch {
+            runCatching {
+                // Invokes the injected use case
+                linkIoTDeviceToPlantUseCase(
+                    deviceId = deviceId,
+                    plantId = plantId
+                )
+            }.onSuccess {
+                // The device was successfully linked.
+                // The UI will update automatically if your database flows trigger a re-emission.
+            }.onFailure { exception ->
+                // Log or handle the error if the update fails
+                exception.printStackTrace()
+            }
+        }
+    }
+
 
     // ── Enrichment ────────────────────────────────────────────────────────
 

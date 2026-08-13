@@ -71,6 +71,7 @@ import androidx.navigation.NavOptionsBuilder
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllViewModel
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllDevicesScreen
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllPlantsScreen
+import com.example.siliguide.presentation.features.iot.device_detail.DetailConnectionMode
 
 @Composable
 fun SiliGuideNavGraph(
@@ -135,7 +136,7 @@ fun SiliGuideNavGraph(
                     )
                 },
                 onNavigateToSeeAllPlants = {
-                    navController.navigateSafely(backStackEntry, Screen.SeeAllPlants.route)
+                    navController.navigateSafely(backStackEntry, Screen.SeeAllPlants.createRoute())
                 },
                 onNavigateToSeeAllDevices = {
                     navController.navigateSafely(backStackEntry, Screen.SeeAllDevices.route)
@@ -166,7 +167,15 @@ fun SiliGuideNavGraph(
         }
 
         // --- SEE ALL: MY PLANTS ---
-        composable(route = Screen.SeeAllPlants.route) { backStackEntry ->
+        composable(
+            route = Screen.SeeAllPlants.route,
+            arguments = listOf(
+                navArgument("isSelectionMode") { type = NavType.BoolType; defaultValue = false },
+                navArgument("deviceId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
+            val isSelectionMode = backStackEntry.arguments?.getBoolean("isSelectionMode") ?: false
+            val deviceId = backStackEntry.arguments?.getString("deviceId")
 
             val viewModel: SeeAllViewModel = hiltViewModel()
 
@@ -183,6 +192,13 @@ fun SiliGuideNavGraph(
                         backStackEntry,
                         Screen.PlantDetail.createRoute(plantId)
                     )
+                },
+                isSelectionMode = isSelectionMode,
+                onLinkConfirm = { selectedPlantId ->
+                    if (deviceId != null) {
+                        viewModel.linkPlantToDevice(deviceId = deviceId, plantId = selectedPlantId)
+                    }
+                    navController.popSafely(backStackEntry)
                 }
             )
         }
@@ -202,20 +218,56 @@ fun SiliGuideNavGraph(
             val viewModel: IoTDeviceDetailViewModel = hiltViewModel()
             val state by viewModel.uiState.collectAsState()
 
+            // Triggers a database re-fetch whenever this screen becomes visible again
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        viewModel.refreshDeviceInfo()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+            // ----------------------
+
             DisposableEffect(deviceId) {
                 viewModel.start(deviceId)
                 onDispose { viewModel.stop() }
             }
 
             IoTDeviceDetailScreen(
+                viewModel = viewModel,
                 state = state,
                 onBack = { navController.popSafely(backStackEntry) },
                 onReconnect = { viewModel.retryNow() },
-                onLinkPlant = { /* TODO: plant linking */ },
-                onUnlinkPlant = { /* TODO: plant unlinking */ },
+                onLinkPlant = {
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.SeeAllPlants.createRoute(isSelectionMode = true, deviceId = deviceId)
+                    )
+                },
+                onUnlinkPlant = { viewModel.unlinkPlant() },
                 onRemoveDevice = { /* TODO: device removal */ },
                 onRenameDevice = { viewModel.renameDevice(it)},
-                onModeChangeConfirmed = { /* TODO: mode switching */ }
+                onModeChangeConfirmed = { mode ->
+                    when (mode) {
+                        DetailConnectionMode.AP -> {
+                            navController.navigateSafely(
+                                backStackEntry,
+                                Screen.IoTSetupAP.createRoute(deviceId = deviceId)
+                            )
+                        }
+                        DetailConnectionMode.LAN -> {
+                            // Similar approach for LAN Reconfiguration
+                        }
+                        DetailConnectionMode.BLUETOOTH -> {
+                            // Similar approach for BT Reconfiguration
+                        }
+                    }
+                }
             )
         }
 
@@ -270,7 +322,7 @@ fun SiliGuideNavGraph(
                 onNext = { selectedMode ->
                     when (selectedMode) {
                         ConnectionMode.AP ->
-                            navController.navigateSafely(backStackEntry, Screen.IoTSetupAP.route)
+                            navController.navigateSafely(backStackEntry, Screen.IoTSetupAP.createRoute())
 
                         ConnectionMode.BLUETOOTH ->
                             navController.navigateSafely(backStackEntry, Screen.BluetoothSetupGraph.route)
@@ -412,13 +464,30 @@ fun SiliGuideNavGraph(
         }
 
         // AP Setup
-        composable(Screen.IoTSetupAP.route) { backStackEntry ->
+        composable(
+            route = Screen.IoTSetupAP.route,
+            arguments = listOf(
+                navArgument("deviceId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId")
 
             IoTSetupAPModeScreen(
                 navController = navController,
+                deviceId = deviceId,
                 onNavigateBack = { navController.popSafely(backStackEntry) },
                 onSetupComplete = {
-                    navController.popBackStack(Screen.Dashboard.route, false)
+                    if (deviceId != null) {
+                        // If we were just switching modes, pop back to Device Details
+                        navController.popSafely(backStackEntry)
+                    } else {
+                        // If it was initial setup, go to Dashboard
+                        navController.popBackStack(Screen.Dashboard.route, false)
+                    }
                 }
             )
         }

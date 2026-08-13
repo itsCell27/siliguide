@@ -10,7 +10,14 @@ sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
 
     object SeeAllDevices : Screen("see_all_devices")
-    object SeeAllPlants : Screen("see_all_plants")
+    object SeeAllPlants : Screen("see_all_plants?isSelectionMode={isSelectionMode}&deviceId={deviceId}") {
+        fun createRoute(isSelectionMode: Boolean = false, deviceId: String? = null): String {
+            val params = mutableListOf<String>()
+            if (isSelectionMode) params.add("isSelectionMode=true")
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) "see_all_plants" else "see_all_plants?${params.joinToString("&")}"
+        }
+    }
 
     object PreAnalysis : Screen("pre_analysis/{plantId}") {
         fun createRoute(plantId: String) = "pre_analysis/$plantId"
@@ -71,7 +78,12 @@ sealed class Screen(val route: String) {
     object BluetoothDeviceDetailsScreen : Screen("bluetooth_device_details")
     object BluetoothSetupGraph : Screen("bluetooth_setup_graph")
 
-    object IoTSetupAP : Screen("iot_setup_ap")
+    // --- AP SETUP WIZARD ---
+    object IoTSetupAP : Screen("iot_setup_ap?deviceId={deviceId}") {
+        fun createRoute(deviceId: String? = null): String =
+            if (deviceId == null) "iot_setup_ap"
+            else "iot_setup_ap?deviceId=$deviceId"
+    }
     object QrScanner : Screen("qr_scanner")
 
 

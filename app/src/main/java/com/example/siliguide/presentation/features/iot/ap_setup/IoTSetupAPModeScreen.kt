@@ -49,12 +49,15 @@ import kotlinx.coroutines.launch
 @Composable
 fun IoTSetupAPModeScreen(
     navController: NavHostController,
+    deviceId: String? = null,
     onNavigateBack: () -> Unit,
     onSetupComplete: () -> Unit
 ) {
     val viewModel: IoTViewModel = hiltViewModel()
     val apConnectionState by viewModel.apConnectionState.collectAsState()
     val connectionState = apConnectionState
+
+    val isReconfiguring = deviceId != null
 
     val validationDialog = viewModel.validationDialog
 
@@ -130,6 +133,15 @@ fun IoTSetupAPModeScreen(
         val granted = result.values.all { it }
         if (granted) {
 
+        }
+    }
+
+    // Tell ViewModel we are reconfiguring if an ID was passed
+    LaunchedEffect(deviceId) {
+        if (deviceId != null) {
+            viewModel.startApReconfigure(deviceId)
+        } else {
+            viewModel.clearApReconfigure()
         }
     }
 
@@ -374,11 +386,16 @@ fun IoTSetupAPModeScreen(
                                 handleScanQrClick()
                             } else {
                                 // Step 2 - Save device
-                                viewModel.finalizeSetup(
-                                    customName = deviceName,
-                                    connectionMode = ConnectionMode.AP,
-                                    ip = "192.168.4.1"
-                                )
+                                // Route to correct finalize method
+                                if (isReconfiguring) {
+                                    viewModel.finalizeApModeSwitch()
+                                } else {
+                                    viewModel.finalizeSetup(
+                                        customName = deviceName,
+                                        connectionMode = ConnectionMode.AP,
+                                        ip = "192.168.4.1"
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier
@@ -391,14 +408,14 @@ fun IoTSetupAPModeScreen(
                         shape = RoundedCornerShape(12.dp),
                         enabled = !isChecking && when (currentStep) {
                             1 -> true // On step 1, it's enabled as long as we aren't checking
-                            2 -> deviceName.isNotBlank() // On step 2, name must not be blank
+                            2 -> isReconfiguring || deviceName.isNotBlank() // Skip name check if switching OR On step 2, name must not be blank
                             else -> false
                         }
                     ) {
                         Text(
                             text = when (currentStep) {
                                 1 -> "Scan QR Code"
-                                else -> "Save Device"
+                                else -> if (isReconfiguring) "Finish Switch" else "Save Device"
                             },
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
@@ -442,6 +459,7 @@ fun IoTSetupAPModeScreen(
                         2 -> APStep2Content(
                             viewModel = viewModel,
                             deviceName = deviceName,              // ← PASS DOWN
+                            isReconfiguring = isReconfiguring,
                             onDeviceNameChange = { newName ->     // ← CALLBACK UP
                                 deviceName = newName
                             },

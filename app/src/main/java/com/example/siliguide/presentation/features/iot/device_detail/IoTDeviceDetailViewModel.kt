@@ -26,13 +26,17 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 import android.util.Log
+import com.example.siliguide.domain.usecase.GetLinkedPlantByDeviceIdUseCase
+import com.example.siliguide.domain.usecase.UnlinkIoTDeviceToPlantUseCase
 import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 @HiltViewModel
 class IoTDeviceDetailViewModel @Inject constructor(
     private val ioTRepository: IoTRepository,
     private val fetchSensorsUseCase: FetchSensorsUseCase,
-    private val updateDeviceNameUseCase: UpdateDeviceNameUseCase
+    private val updateDeviceNameUseCase: UpdateDeviceNameUseCase,
+    private val getLinkedPlantByDeviceIdUseCase: GetLinkedPlantByDeviceIdUseCase,
+    private val unlinkIoTDeviceToPlantUseCase: UnlinkIoTDeviceToPlantUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -49,6 +53,15 @@ class IoTDeviceDetailViewModel @Inject constructor(
 
     private var pollJob: Job? = null
     private var deviceId: String? = null
+    private var currentLinkedPlantId: String? = null
+
+    // --- DIALOG STATE ---
+    private val _offlineWarningMessage = MutableStateFlow<String?>(null)
+    val offlineWarningMessage = _offlineWarningMessage.asStateFlow()
+
+    fun dismissOfflineWarning() {
+        _offlineWarningMessage.value = null
+    }
 
     /** Called once the screen enters composition. Starts the 3s poll loop. */
     fun start(deviceId: String) {
@@ -102,13 +115,29 @@ class IoTDeviceDetailViewModel @Inject constructor(
             runCatching { ioTRepository.getDeviceById(deviceId) }.getOrNull()
         } ?: return
 
+        val plant = device.deviceId?.let { deviceId ->
+            withContext(Dispatchers.IO) {
+                runCatching { getLinkedPlantByDeviceIdUseCase(deviceId) }.getOrNull()
+            }
+        }
+
+        currentLinkedPlantId = plant?.plantId
+
+        val linkedPlantUi = plant?.let {
+            LinkedPlantUi(
+                name = it.name,
+                meta = "Linked to device" // Format this based on your available plant data
+            )
+        }
+
         _uiState.update {
             it.copy(
                 deviceName = device.deviceName,
                 mode = device.connectionMode.toDetailMode(),
                 deviceIdentifier = device.deviceId,
                 firmware = "—",
-                dateRegistered = formatDate(device.dateAdded)
+                dateRegistered = formatDate(device.dateAdded),
+                linkedPlant = linkedPlantUi
             )
         }
     }
@@ -319,6 +348,54 @@ class IoTDeviceDetailViewModel @Inject constructor(
             _uiState.update { it.copy(deviceName = trimmed) }
         }
     }
+
+    fun refreshDeviceInfo() {
+        val id = deviceId ?: return
+        viewModelScope.launch {
+            loadDeviceInfo(id)
+        }
+    }
+
+    fun unlinkPlant() {
+        val plantIdToUnlink = currentLinkedPlantId ?: return
+
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    unlinkIoTDeviceToPlantUseCase(plantIdToUnlink)
+                }.onSuccess {
+                    // Clear the reference and refresh the UI to remove the card
+                    currentLinkedPlantId = null
+                    refreshDeviceInfo()
+                }.onFailure { e ->
+                    Log.e("IoTDeviceDetailVM", "Failed to unlink plant", e)
+                }
+            }
+        }
+    }
+
+
+    // --- MODE CHANGE SHEET LOGIC ---
+
+    fun requestModeChange() {
+        val currentStatus = _uiState.value.status
+
+        if (currentStatus == DeviceConnectionStatus.OFFLINE ||
+            currentStatus == DeviceConnectionStatus.RECONNECTING) {
+
+            _offlineWarningMessage.value =
+                "Cannot change connection mode right now. The device is currently offline or unreachable. Please ensure it is powered on and try again."
+            return
+        }
+
+        // Device is online! Safe to open the sheet.
+        _uiState.update { it.copy(isModeChangeSheetOpen = true) }
+    }
+
+    fun dismissModeChangeSheet() {
+        _uiState.update { it.copy(isModeChangeSheetOpen = false) }
+    }
+
 
     private companion object {
         const val POLL_INTERVAL_MS = 3_000L
