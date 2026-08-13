@@ -1243,7 +1243,8 @@ fun OutOfScopeContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // remove null after checking
-        LeafImageCard(bitmap = bitmap, segmentOverlay = segmentOverlay)
+        // remove segmentation overlay
+        LeafImageCard(bitmap = bitmap)
 
         // Rejection hero
         Column(
