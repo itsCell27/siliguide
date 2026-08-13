@@ -229,6 +229,9 @@ UPDATE plants SET plant_name = ?, is_synced = 0 WHERE plant_id = ? AND is_delete
 updatePlantDevice:
 UPDATE plants SET device_id = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
+getLinkedPlantByDeviceId:
+SELECT * FROM plants WHERE device_id = ? AND is_deleted = 0;
+
 updateLastAnalyzedAt:
 UPDATE plants SET last_analyzed_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
