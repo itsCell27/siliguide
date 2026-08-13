@@ -225,12 +225,14 @@ SELECT * FROM plants WHERE user_id = ? AND device_id IS NULL AND is_deleted = 0;
 updatePlantName:
 UPDATE plants SET plant_name = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
+-- Link an IoT Device to a plant
 updatePlantDevice:
 UPDATE plants SET device_id = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 updateLastAnalyzedAt:
 UPDATE plants SET last_analyzed_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
+-- Unlink a IoT Device to a plant
 unlinkPlantDevice:
 UPDATE plants SET device_id = NULL, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
