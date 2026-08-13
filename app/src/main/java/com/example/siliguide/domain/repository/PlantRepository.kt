@@ -11,9 +11,11 @@ interface PlantRepository {
     suspend fun deletePlant(plantId: String)
     suspend fun getPlantById(plantId: String): Plant?
 
-    // Updated signature to match the individual column queries we defined
     suspend fun updatePlantName(plantId: String, name: String)
+
     suspend fun linkDevice(plantId: String, deviceId: String)
+    suspend fun getLinkedPlantsByDeviceId(deviceId: String): Plant
     suspend fun unlinkDevice(plantId: String)
+
     suspend fun getPlantByDeviceId(deviceId: String): List<Plant>
 }

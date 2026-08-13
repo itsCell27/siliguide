@@ -58,6 +58,12 @@ class PlantRepositoryImpl @Inject constructor(
         queries.updatePlantDevice(device_id = deviceId, plant_id = plantId)
     }
 
+    override suspend fun getLinkedPlantsByDeviceId(deviceId: String): Plant {
+        return queries.getLinkedPlantByDeviceId(deviceId)
+            .executeAsOne()
+            .toDomainModel()
+    }
+
     override suspend fun unlinkDevice(plantId: String) {
         queries.unlinkPlantDevice(plantId)
     }
