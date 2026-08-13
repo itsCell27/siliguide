@@ -586,6 +586,27 @@ class IoTViewModel @Inject constructor(
                             return@withContext
                         }
 
+                        // --- Check if we are Reconfiguring ---
+                        val reconfigId = btReconfigureDeviceId
+                        if (reconfigId != null) {
+                            if (info.deviceId != reconfigId) {
+                                showValidationDialog(
+                                    title = "Wrong Device",
+                                    message = "You connected to a different SiliGuide device. Please connect to the correct device."
+                                )
+                                setBluetoothUnsupported("Device ID mismatch.")
+                                bluetoothManager.disconnect()
+                                return@withContext
+                            }
+
+                            // Device matches, Bypass existing/claimed checks.
+                            connectedDeviceId = info.deviceId
+                            pairingToken = info.token ?: ""
+                            error = null
+                            _bluetoothVerified.emit(Unit)
+                            return@withContext
+                        }
+
                         // ----------------------------------------------------
                         // 2. Already exists in local database?
                         // ----------------------------------------------------
@@ -2584,6 +2605,44 @@ class IoTViewModel @Inject constructor(
                 _setupComplete.emit(Unit)
             } catch (e: Exception) {
                 Log.e("IoTViewModel", "Failed to switch to AP mode", e)
+                showValidationDialog(
+                    title = "Switch Failed",
+                    message = "Could not update connection mode. Please try again."
+                )
+            } finally {
+                _iotUiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+
+    // --- BLUETOOTH RECONFIGURATION STATE ---
+    var btReconfigureDeviceId by mutableStateOf<String?>(null)
+        private set
+
+    fun startBtReconfigure(deviceId: String) {
+        btReconfigureDeviceId = deviceId
+    }
+
+    fun clearBtReconfigure() {
+        btReconfigureDeviceId = null
+    }
+
+    fun finalizeBtModeSwitch() {
+        viewModelScope.launch {
+            val deviceId = btReconfigureDeviceId ?: return@launch
+
+            _iotUiState.update {
+                it.copy(isLoading = true, loadingMessage = "Switching mode...")
+            }
+
+            try {
+                // Update connection mode to BLUETOOTH
+                updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.BLUETOOTH)
+
+                _setupComplete.emit(Unit)
+            } catch (e: Exception) {
+                Log.e("IoTViewModel", "Failed to switch to Bluetooth mode", e)
                 showValidationDialog(
                     title = "Switch Failed",
                     message = "Could not update connection mode. Please try again."

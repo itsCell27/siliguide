@@ -76,7 +76,11 @@ sealed class Screen(val route: String) {
     object BluetoothConnectionScreen : Screen("bluetooth_connection")
     object BluetoothSelectionScreen : Screen("bluetooth_selection")
     object BluetoothDeviceDetailsScreen : Screen("bluetooth_device_details")
-    object BluetoothSetupGraph : Screen("bluetooth_setup_graph")
+    object BluetoothSetupGraph : Screen("bluetooth_setup_graph?deviceId={deviceId}") {
+        fun createRoute(deviceId: String? = null): String =
+            if (deviceId == null) "bluetooth_setup_graph"
+            else "bluetooth_setup_graph?deviceId=$deviceId"
+    }
 
     // --- AP SETUP WIZARD ---
     object IoTSetupAP : Screen("iot_setup_ap?deviceId={deviceId}") {

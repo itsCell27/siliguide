@@ -264,7 +264,10 @@ fun SiliGuideNavGraph(
                             // Similar approach for LAN Reconfiguration
                         }
                         DetailConnectionMode.BLUETOOTH -> {
-                            // Similar approach for BT Reconfiguration
+                            navController.navigateSafely(
+                                backStackEntry,
+                                Screen.BluetoothSetupGraph.createRoute(deviceId = deviceId)
+                            )
                         }
                     }
                 }
@@ -337,6 +340,13 @@ fun SiliGuideNavGraph(
         // Bluetooth Setup
         navigation(
             route = Screen.BluetoothSetupGraph.route,
+            arguments = listOf(
+                navArgument("deviceId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            ),
             startDestination = Screen.IoTSetupBluetooth.route
         ) {
 
@@ -347,6 +357,16 @@ fun SiliGuideNavGraph(
                 }
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+
+                // --- Trigger reconfigure state ---
+                val deviceId = parentEntry.arguments?.getString("deviceId")
+                LaunchedEffect(deviceId) {
+                    if (deviceId != null) {
+                        viewModel.startBtReconfigure(deviceId)
+                    } else {
+                        viewModel.clearBtReconfigure()
+                    }
+                }
 
                 BluetoothIntroScreen(
                     onContinue = {
@@ -406,6 +426,32 @@ fun SiliGuideNavGraph(
                         navController.navigate(Screen.BluetoothDeviceDetailsScreen.route)
                     }
                 }
+
+
+                // --- Listen to verification & completion ---
+                LaunchedEffect(Unit) {
+                    viewModel.bluetoothVerified.collect {
+                        if (viewModel.btReconfigureDeviceId != null) {
+                            // Reconfiguring: Skip the details screen and immediately finalize
+                            viewModel.finalizeBtModeSwitch()
+                        } else {
+                            // Normal Setup: Proceed to details screen
+                            navController.navigate(Screen.BluetoothDeviceDetailsScreen.route)
+                        }
+                    }
+                }
+
+                // Listen for successful mode switch
+                LaunchedEffect(Unit) {
+                    viewModel.setupComplete.collect {
+                        if (viewModel.btReconfigureDeviceId != null) {
+                            viewModel.clearBtReconfigure()
+                            // Pop out of the entire Bluetooth setup graph back to the detail screen
+                            navController.popBackStack(Screen.BluetoothSetupGraph.route, inclusive = true)
+                        }
+                    }
+                }
+
 
                 BluetoothSelectionScreen(
                     viewModel = viewModel,
