@@ -299,33 +299,33 @@ private fun ColumnScope.NamingContent(
         }
 
         // ── Link to plant ───────────────────────────────────────────────
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            WizardFieldLabel(text = "Link to a plant", optional = true)
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(White)
-                    .border(1.dp, Border, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onPickPlant)
-                    .padding(horizontal = 13.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
-            ) {
-                PlantLeafIcon()
-
-                Text(
-                    text = state.linkedPlantName ?: "Select a plant",
-                    fontSize = 12.sp,
-                    color = GrayMedium,
-                    modifier = Modifier.weight(1f)
-                )
-
-                ChevronDownIcon()
-            }
-        }
+//        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+//            WizardFieldLabel(text = "Link to a plant", optional = true)
+//
+//            Row(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .height(44.dp)
+//                    .clip(RoundedCornerShape(12.dp))
+//                    .background(White)
+//                    .border(1.dp, Border, RoundedCornerShape(12.dp))
+//                    .clickable(onClick = onPickPlant)
+//                    .padding(horizontal = 13.dp),
+//                verticalAlignment = Alignment.CenterVertically,
+//                horizontalArrangement = Arrangement.spacedBy(9.dp)
+//            ) {
+//                PlantLeafIcon()
+//
+//                Text(
+//                    text = state.linkedPlantName ?: "Select a plant",
+//                    fontSize = 12.sp,
+//                    color = GrayMedium,
+//                    modifier = Modifier.weight(1f)
+//                )
+//
+//                ChevronDownIcon()
+//            }
+//        }
     }
 
 

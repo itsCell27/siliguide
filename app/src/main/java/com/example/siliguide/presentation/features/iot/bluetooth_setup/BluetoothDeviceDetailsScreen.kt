@@ -238,39 +238,39 @@ fun BluetoothDeviceDetailsScreen(
                     }
 
                     // Link to a plant
-                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Link to a plant ", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
-                            Text(
-                                "Optional",
-                                fontSize = 10.sp,
-                                color = GrayHint,
-                                modifier = Modifier
-                                    .background(OffWhite, RoundedCornerShape(4.dp))
-                                    .border(1.dp, Border, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            )
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .background(White, RoundedCornerShape(12.dp))
-                                .border(1.dp, Border, RoundedCornerShape(12.dp))
-                                .padding(horizontal = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.size(16.dp).background(GreenPrimary, CircleShape))
-                            Spacer(modifier = Modifier.width(9.dp))
-                            Text(
-                                text = selectedPlant ?: "Select a plant to link",
-                                fontSize = 14.sp,
-                                color = if (selectedPlant != null) Black else GrayMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = GrayHint)
-                        }
-                    }
+//                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+//                        Row(verticalAlignment = Alignment.CenterVertically) {
+//                            Text("Link to a plant ", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
+//                            Text(
+//                                "Optional",
+//                                fontSize = 10.sp,
+//                                color = GrayHint,
+//                                modifier = Modifier
+//                                    .background(OffWhite, RoundedCornerShape(4.dp))
+//                                    .border(1.dp, Border, RoundedCornerShape(4.dp))
+//                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+//                            )
+//                        }
+//                        Row(
+//                            modifier = Modifier
+//                                .fillMaxWidth()
+//                                .height(48.dp)
+//                                .background(White, RoundedCornerShape(12.dp))
+//                                .border(1.dp, Border, RoundedCornerShape(12.dp))
+//                                .padding(horizontal = 13.dp),
+//                            verticalAlignment = Alignment.CenterVertically
+//                        ) {
+//                            Box(modifier = Modifier.size(16.dp).background(GreenPrimary, CircleShape))
+//                            Spacer(modifier = Modifier.width(9.dp))
+//                            Text(
+//                                text = selectedPlant ?: "Select a plant to link",
+//                                fontSize = 14.sp,
+//                                color = if (selectedPlant != null) Black else GrayMedium,
+//                                modifier = Modifier.weight(1f)
+//                            )
+//                            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = GrayHint)
+//                        }
+//                    }
                 }
 
                 // Info Box
@@ -285,7 +285,7 @@ fun BluetoothDeviceDetailsScreen(
                     Icon(Icons.Rounded.Bluetooth, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Your phone communicates directly with this device using Bluetooth Classic. No Wi-Fi connection is required.",
+                        text = "Your phone communicates directly with this device using Bluetooth. No Wi-Fi connection is required.",
                         fontSize = 12.sp,
                         color = GrayBody,
                         lineHeight = 16.sp

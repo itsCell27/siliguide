@@ -121,34 +121,34 @@ fun APStep2Content(
                 }
 
                 // Link to a plant (Static for now as per your design)
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Link to a plant ", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
-                        Text(
-                            "Optional",
-                            fontSize = 10.sp,
-                            color = GrayHint,
-                            modifier = Modifier
-                                .background(OffWhite, RoundedCornerShape(4.dp))
-                                .border(1.dp, Border, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .background(White, RoundedCornerShape(12.dp))
-                            .border(1.dp, Border, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 13.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(modifier = Modifier.size(16.dp).background(GreenPrimary, CircleShape))
-                        Spacer(modifier = Modifier.width(9.dp))
-                        Text("Select a plant to link", fontSize = 14.sp, color = GrayMedium, modifier = Modifier.weight(1f))
-                        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = GrayHint)
-                    }
-                }
+//                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+//                    Row(verticalAlignment = Alignment.CenterVertically) {
+//                        Text("Link to a plant ", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GrayBody)
+//                        Text(
+//                            "Optional",
+//                            fontSize = 10.sp,
+//                            color = GrayHint,
+//                            modifier = Modifier
+//                                .background(OffWhite, RoundedCornerShape(4.dp))
+//                                .border(1.dp, Border, RoundedCornerShape(4.dp))
+//                                .padding(horizontal = 5.dp, vertical = 1.dp)
+//                        )
+//                    }
+//                    Row(
+//                        modifier = Modifier
+//                            .fillMaxWidth()
+//                            .height(48.dp)
+//                            .background(White, RoundedCornerShape(12.dp))
+//                            .border(1.dp, Border, RoundedCornerShape(12.dp))
+//                            .padding(horizontal = 13.dp),
+//                        verticalAlignment = Alignment.CenterVertically
+//                    ) {
+//                        Box(modifier = Modifier.size(16.dp).background(GreenPrimary, CircleShape))
+//                        Spacer(modifier = Modifier.width(9.dp))
+//                        Text("Select a plant to link", fontSize = 14.sp, color = GrayMedium, modifier = Modifier.weight(1f))
+//                        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = GrayHint)
+//                    }
+//                }
             }
         }
 

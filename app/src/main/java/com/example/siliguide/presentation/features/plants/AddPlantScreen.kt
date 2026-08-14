@@ -109,38 +109,38 @@ fun AddPlantScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // --- IOT DEVICE SECTION ---
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Link an IoT Device", style = MaterialTheme.typography.labelSmall, color = GrayBody)
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(White)
-                    .border(1.dp, Border, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
-                ) {
-                    Text("Optional", fontSize = 10.sp, color = GrayHint, fontWeight = FontWeight.Medium)
-                }
-            }
-            Text("Linking a device enables live sensor monitoring for this plant",
-                fontSize = 10.sp, color = GrayHint, modifier = Modifier.padding(top = 2.dp))
+//            Row(verticalAlignment = Alignment.CenterVertically) {
+//                Text("Link an IoT Device", style = MaterialTheme.typography.labelSmall, color = GrayBody)
+//                Spacer(modifier = Modifier.width(8.dp))
+//                Box(modifier = Modifier
+//                    .clip(RoundedCornerShape(4.dp))
+//                    .background(White)
+//                    .border(1.dp, Border, RoundedCornerShape(4.dp))
+//                    .padding(horizontal = 6.dp, vertical = 1.dp)
+//                ) {
+//                    Text("Optional", fontSize = 10.sp, color = GrayHint, fontWeight = FontWeight.Medium)
+//                }
+//            }
+//            Text("Linking a device enables live sensor monitoring for this plant",
+//                fontSize = 10.sp, color = GrayHint, modifier = Modifier.padding(top = 2.dp))
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Toggle between Selector and Selected state
-            if (selectedDeviceId == null) {
-                DashedNoDeviceCard(onClick = { /* Future: Open Device Picker */ })
-            } else {
-                SelectedDeviceCard(
-                    name = selectedDeviceName,
-                    onRemove = { selectedDeviceId = null }
-                )
-            }
-
-            // Mock Device Info Note from design
-            if (selectedDeviceId != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                DeviceNote(text = "$selectedDeviceName is currently connected. It will start monitoring this plant immediately after saving.")
-            }
+//            Spacer(modifier = Modifier.height(10.dp))
+//
+//            // Toggle between Selector and Selected state
+//            if (selectedDeviceId == null) {
+//                DashedNoDeviceCard(onClick = { /* Future: Open Device Picker */ })
+//            } else {
+//                SelectedDeviceCard(
+//                    name = selectedDeviceName,
+//                    onRemove = { selectedDeviceId = null }
+//                )
+//            }
+//
+//            // Mock Device Info Note from design
+//            if (selectedDeviceId != null) {
+//                Spacer(modifier = Modifier.height(10.dp))
+//                DeviceNote(text = "$selectedDeviceName is currently connected. It will start monitoring this plant immediately after saving.")
+//            }
         }
 
         // --- POST-SAVE BOTTOM SHEET ---
