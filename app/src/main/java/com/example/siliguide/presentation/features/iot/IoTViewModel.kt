@@ -291,10 +291,30 @@ class IoTViewModel @Inject constructor(
                         return@withContext
                     }
 
-                    // --- NEW LOGIC: Check if we are Reconfiguring ---
+                    // --- Check if we are Reconfiguring in AP Setup ---
                     val reconfigId = apReconfigureDeviceId
                     if (reconfigId != null) {
                         if (info.deviceId != reconfigId) {
+                            showValidationDialog(
+                                title = "Wrong Device",
+                                message = "You connected to a different SiliGuide device. Please connect to the correct device's hotspot."
+                            )
+                            _apConnectionState.value = "FAILED"
+                            return@withContext
+                        }
+
+                        // Device matches! Bypass existing/claimed checks.
+                        connectedDeviceId = info.deviceId
+                        pairingToken = info.token
+                        error = null
+                        _apConnectionState.value = "CONNECTED"
+                        return@withContext
+                    }
+
+                    // --- Check if we are Reconfiguring or Mode Switching in LAN setup via AP ---
+                    val targetId = apReconfigureDeviceId ?: lanModeSwitchDeviceId
+                    if (targetId != null) {
+                        if (info.deviceId != targetId) {
                             showValidationDialog(
                                 title = "Wrong Device",
                                 message = "You connected to a different SiliGuide device. Please connect to the correct device's hotspot."
@@ -1728,12 +1748,23 @@ class IoTViewModel @Inject constructor(
             }
 
             try {
+                val device = getIoTDeviceByIdUseCase(deviceId)
+                val safeToken = device?.pairingToken ?: pairingToken
+
+                if (safeToken.isNullOrBlank()) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Device Not Reachable",
+                        message = "Missing pairing token. Restart the setup wizard and reconnect."
+                    )
+                    return@launch
+                }
+
                 when (lanProvisioningMethod) {
 
                     LanProvisioningMethod.ACCESS_POINT ->
                         provisionSavedDevice(
                             deviceId = deviceId,
-                            token = token,
+                            token = safeToken,
                             ssid = selected.ssid,
                             password = ready.password
                         )
@@ -1741,7 +1772,7 @@ class IoTViewModel @Inject constructor(
                     LanProvisioningMethod.BLUETOOTH ->
                         provisionSavedDeviceViaBluetooth(
                             deviceId = deviceId,
-                            token = token,
+                            token = safeToken,
                             ssid = selected.ssid,
                             password = ready.password
                         )
@@ -1932,7 +1963,7 @@ class IoTViewModel @Inject constructor(
     }
 
     private companion object {
-        const val WIFI_STATUS_POLL_ATTEMPTS = 12
+        const val WIFI_STATUS_POLL_ATTEMPTS = 6
         const val WIFI_STATUS_POLL_DELAY_MS = 1_500L
 
         const val PHONE_SWITCH_POLL_ATTEMPTS = 3
@@ -2177,6 +2208,30 @@ class IoTViewModel @Inject constructor(
                 if (info.device != "SiliGuide") {
                     withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
                     continue
+                }
+
+                // --- Mode Switch Bypass LAN Setup via Bluetooth ---
+                val targetId = lanModeSwitchDeviceId
+                if (targetId != null) {
+                    if (info.deviceId != targetId) {
+                        withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
+                        continue
+                    }
+                    // Device matches, bypass existing/claimed checks.
+                    lanBluetoothDevice = device
+                    connectedDeviceId = info.deviceId
+                    pairingToken = info.token ?: ""
+
+                    Log.d("VerifyLanBluetoothDevice", "pairing token: $pairingToken")
+
+                    if (deviceName.isEmpty()) {
+                        deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                    }
+
+                    error = null
+                    _lanBluetoothState.value = LanBluetoothProvisioningUiState.SendingCredentials(deviceName = device.safeName())
+                    _lanBluetoothVerified.emit(Unit)
+                    return
                 }
 
                 if (getIoTDeviceByIdUseCase(info.deviceId) != null) {
@@ -2481,6 +2536,9 @@ class IoTViewModel @Inject constructor(
         runCatching { updateDeviceIpUseCase(deviceId, status.ip) }
             .onFailure { Log.e("IoTViewModel", "updateDeviceIp failed", it) }
 
+        runCatching { updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.LAN) }
+            .onFailure { Log.e("IoTViewModel", "updateConnectionMode failed", it) }
+
         // Bluetooth was only the delivery channel — LAN mode takes over now
         withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
 
@@ -2572,6 +2630,8 @@ class IoTViewModel @Inject constructor(
 
         _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
         lanBluetoothDevice = null
+
+        lanModeSwitchDeviceId = null
     }
 
 
@@ -2708,6 +2768,111 @@ class IoTViewModel @Inject constructor(
                 } finally {
                     _iotUiState.update { it.copy(isLoading = false) }
                 }
+            }
+        }
+    }
+
+
+
+    // --- LAN RECONFIGURATION (MODE SWITCH) STATE ---
+    var lanModeSwitchDeviceId by mutableStateOf<String?>(null)
+        private set
+
+    fun startLanModeSwitch(deviceId: String) {
+        lanModeSwitchDeviceId = deviceId
+    }
+
+    fun clearLanModeSwitch() {
+        lanModeSwitchDeviceId = null
+    }
+
+    /**
+     * Skips claiming and saving. Directly pushes Wi-Fi credentials over AP
+     * and validates the LAN connection.
+     */
+    fun finalizeLanModeSwitchAP() {
+        val deviceId = connectedDeviceId
+        val token = pairingToken
+        val ssid = lanSelectedSsid
+
+        if (deviceId == null || token.isNullOrBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Not Reachable",
+                message = "The device is no longer reachable. Go back and reconnect."
+            )
+            return
+        }
+
+        val password = lanSelectedPassword
+
+        viewModelScope.launch {
+            isFinalizingLan = true
+            _iotUiState.update { it.copy(isLoading = true, loadingMessage = "Switching mode...") }
+
+            try {
+
+                val device = getIoTDeviceByIdUseCase(deviceId)
+                // provisionSavedDevice already handles updateDeviceIpUseCase
+                // and updateDeviceConnectionModeUseCase(ConnectionMode.LAN).
+                provisionSavedDevice(
+                    deviceId = deviceId,
+                    token = device?.pairingToken ?: token,
+                    ssid = ssid ?: "",
+                    password = password
+                )
+            } finally {
+                _iotUiState.update { it.copy(isLoading = false, loadingMessage = "Loading...") }
+                isFinalizingLan = false
+            }
+        }
+    }
+
+    /**
+     * Skips claiming and saving. Directly pushes Wi-Fi credentials over SPP
+     * and validates the LAN connection.
+     */
+    fun finalizeLanModeSwitchBluetooth() {
+        val deviceId = connectedDeviceId
+        val token = pairingToken
+        val ssid = lanSelectedSsid
+
+        Log.d("finalizeLanModeSwitchBluetooth", "token: $token")
+
+        if (deviceId == null || token.isNullOrBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "Device Not Reachable",
+                message = "Lost the Bluetooth link to the device. Go back and reconnect."
+            )
+            return
+        }
+
+        val password = lanSelectedPassword
+
+        viewModelScope.launch {
+            isFinalizingLan = true
+            _iotUiState.update { it.copy(isLoading = true, loadingMessage = "Switching mode...") }
+
+            try {
+
+                val device = getIoTDeviceByIdUseCase(deviceId)
+
+                if (!ensureLanBluetoothConnected()) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Bluetooth Disconnected",
+                        message = "Lost the Bluetooth link. Make sure the device is powered on and nearby, then try again."
+                    )
+                    return@launch
+                }
+
+                provisionSavedDeviceViaBluetooth(
+                    deviceId = deviceId,
+                    token = device?.pairingToken ?: token,
+                    ssid = ssid ?: "",
+                    password = password
+                )
+            } finally {
+                _iotUiState.update { it.copy(isLoading = false, loadingMessage = "Loading...") }
+                isFinalizingLan = false
             }
         }
     }

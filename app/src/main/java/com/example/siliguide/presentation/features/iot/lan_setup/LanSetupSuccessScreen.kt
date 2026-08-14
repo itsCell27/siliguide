@@ -107,7 +107,9 @@ data class LanSetupSuccessUiState(
     /** Address the device reported on that network. */
     val deviceIp: String = "",
     /** A verification attempt already failed. */
-    val switchFailed: Boolean = false
+    val switchFailed: Boolean = false,
+
+    val isModeSwitch: Boolean = false
 )
 
 @Composable
@@ -121,12 +123,16 @@ fun LanSetupSuccessScreen(
     onCheckConnection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val canSave = state.deviceName.isNotBlank() && !state.isSaving
+    // Bypass name validation if it's a mode switch
+    val canSave = (state.deviceName.isNotBlank() || state.isModeSwitch) && !state.isSaving
 
     val hideBack = state.stage == LanSuccessStage.NAMING
 
+    val primaryButtonText = if (state.isModeSwitch) "Apply Network Switch" else "Save Device"
+    val loadingButtonText = if (state.isModeSwitch) "Applying…" else "Saving…"
+
     LanWizardScaffold(
-        flowLabel = "LAN Setup",
+        flowLabel = if (state.isModeSwitch) "Switch to LAN" else "LAN Setup",
         stepLabel = "Step 4 of 4",
         progress = 1f,
         onBack = onBack,
@@ -139,10 +145,12 @@ fun LanSetupSuccessScreen(
 
                 LanSuccessStage.NAMING -> {
                     if (canSave) {
-                        WizardPrimaryButton(text = "Save Device", onClick = onSaveDevice)
+                        WizardPrimaryButton(
+                            text = if (state.isModeSwitch) "Apply Network Switch" else "Save Device",
+                            onClick = onSaveDevice)
                     } else {
                         WizardWaitingButton(
-                            text = if (state.isSaving) "Saving…" else "Save Device"
+                            text = if (state.isSaving) loadingButtonText else primaryButtonText
                         )
                     }
                 }
@@ -202,14 +210,18 @@ private fun ColumnScope.NamingContent(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Device connected!",
+            text = if (state.isModeSwitch) "Mode Switch Ready!" else "Device connected!",
             style = WizardSuccessTitleStyle,
             color = Black,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(3.dp))
         WizardBody(
-            text = "Your Device is connected and is ready to be added to your account.",
+            text = if (state.isModeSwitch) {
+                "Your device's new network details are ready to be pushed."
+            } else {
+                "Your Device is connected and is ready to be added to your account."
+            },
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -221,97 +233,102 @@ private fun ColumnScope.NamingContent(
         modifier = Modifier.align(Alignment.CenterHorizontally)
     )
 
-    // ── Device name ─────────────────────────────────────────────────
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        WizardFieldLabel(text = "Device name")
+    // --- ONLY SHOW IF IT IS A NEW DEVICE ---
+    if (!state.isModeSwitch) {
+        // ── Device name ─────────────────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            WizardFieldLabel(text = "Device name")
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(White)
-                .border(
-                    width = 1.5.dp,
-                    color = if (state.deviceName.isBlank()) GreenLight else GreenPrimary,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .padding(horizontal = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp)
-        ) {
-            DeviceChipIcon()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(White)
+                    .border(
+                        width = 1.5.dp,
+                        color = if (state.deviceName.isBlank()) GreenLight else GreenPrimary,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                DeviceChipIcon()
 
-            BasicTextField(
-                value = state.deviceName,
-                onValueChange = { typed ->
-                    if (typed.length <= state.deviceNameMaxLength) {
-                        onDeviceNameChange(typed)
-                    }
-                },
-                singleLine = true,
-                enabled = !state.isSaving,
-                textStyle = TextStyle(
-                    fontFamily = DMSans,
-                    fontSize = 12.sp,
-                    color = Black
-                ),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words,
-                    imeAction = ImeAction.Done
-                ),
-                cursorBrush = SolidColor(GreenPrimary),
-                modifier = Modifier.weight(1f),
-                decorationBox = { innerTextField ->
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (state.deviceName.isEmpty()) {
-                            Text(
-                                text = "Name this device",
-                                fontSize = 12.sp,
-                                color = GrayHint
-                            )
+                BasicTextField(
+                    value = state.deviceName,
+                    onValueChange = { typed ->
+                        if (typed.length <= state.deviceNameMaxLength) {
+                            onDeviceNameChange(typed)
                         }
-                        innerTextField()
+                    },
+                    singleLine = true,
+                    enabled = !state.isSaving,
+                    textStyle = TextStyle(
+                        fontFamily = DMSans,
+                        fontSize = 12.sp,
+                        color = Black
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    cursorBrush = SolidColor(GreenPrimary),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (state.deviceName.isEmpty()) {
+                                Text(
+                                    text = "Name this device",
+                                    fontSize = 12.sp,
+                                    color = GrayHint
+                                )
+                            }
+                            innerTextField()
+                        }
                     }
-                }
-            )
+                )
 
-            Text(
-                text = "${state.deviceName.length}/${state.deviceNameMaxLength}",
-                style = WizardSubCaptionStyle,
-                color = GreenPrimary
-            )
+                Text(
+                    text = "${state.deviceName.length}/${state.deviceNameMaxLength}",
+                    style = WizardSubCaptionStyle,
+                    color = GreenPrimary
+                )
+            }
+        }
+
+        // ── Link to plant ───────────────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            WizardFieldLabel(text = "Link to a plant", optional = true)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(White)
+                    .border(1.dp, Border, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onPickPlant)
+                    .padding(horizontal = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                PlantLeafIcon()
+
+                Text(
+                    text = state.linkedPlantName ?: "Select a plant",
+                    fontSize = 12.sp,
+                    color = GrayMedium,
+                    modifier = Modifier.weight(1f)
+                )
+
+                ChevronDownIcon()
+            }
         }
     }
 
-    // ── Link to plant ───────────────────────────────────────────────
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        WizardFieldLabel(text = "Link to a plant", optional = true)
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(White)
-                .border(1.dp, Border, RoundedCornerShape(12.dp))
-                .clickable(onClick = onPickPlant)
-                .padding(horizontal = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp)
-        ) {
-            PlantLeafIcon()
-
-            Text(
-                text = state.linkedPlantName ?: "Select a plant",
-                fontSize = 12.sp,
-                color = GrayMedium,
-                modifier = Modifier.weight(1f)
-            )
-
-            ChevronDownIcon()
-        }
-    }
 }
 
 /* ── Stage 2: move the phone off the hotspot ───────────────────────────── */

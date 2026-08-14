@@ -261,7 +261,10 @@ fun SiliGuideNavGraph(
                             )
                         }
                         DetailConnectionMode.LAN -> {
-                            // Similar approach for LAN Reconfiguration
+                            navController.navigateSafely(
+                                backStackEntry,
+                                Screen.LanSetupGraph.createRoute(deviceId = deviceId)
+                            )
                         }
                         DetailConnectionMode.BLUETOOTH -> {
                             navController.navigateSafely(
@@ -565,6 +568,13 @@ fun SiliGuideNavGraph(
          */
         navigation(
             route = Screen.LanSetupGraph.route,
+            arguments = listOf(
+                navArgument("deviceId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            ),
             startDestination = Screen.LanSetupMethod.route
         ) {
 
@@ -578,6 +588,18 @@ fun SiliGuideNavGraph(
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
                 val methodState by viewModel.lanSetupMethodState.collectAsState()
+
+                // Trigger mode switch state
+                val rawId = parentEntry.arguments?.getString("deviceId")
+                val deviceId = rawId?.takeIf { it != "{deviceId}" }
+
+                LaunchedEffect(deviceId) {
+                    if (deviceId != null) {
+                        viewModel.startLanModeSwitch(deviceId)
+                    } else {
+                        viewModel.clearLanModeSwitch()
+                    }
+                }
 
                 // Step 1 → Step 2. Both transports need the same permissions,
                 // so the choice only decides which Step 4 runs later.
@@ -1206,7 +1228,9 @@ fun SiliGuideNavGraph(
                     isSaving = viewModel.isFinalizingLan,
                     targetSsid = viewModel.lanSelectedSsid.orEmpty(),
                     deviceIp = viewModel.lanDeviceIp,
-                    switchFailed = viewModel.lanSwitchFailed
+                    switchFailed = viewModel.lanSwitchFailed,
+
+                    isModeSwitch = viewModel.lanModeSwitchDeviceId != null
                 )
 
                 // Coming back from Wi-Fi settings is the cue to re-check
@@ -1288,12 +1312,16 @@ fun SiliGuideNavGraph(
                     },
 
                     onSaveDevice = {
-                        when (viewModel.lanProvisioningMethod) {
-                            LanProvisioningMethod.ACCESS_POINT ->
-                                viewModel.finalizeLanAPMode()
-
-                            LanProvisioningMethod.BLUETOOTH ->
-                                viewModel.finalizeLanBluetoothMode()
+                        if (viewModel.lanModeSwitchDeviceId != null) {
+                            when (viewModel.lanProvisioningMethod) {
+                                LanProvisioningMethod.ACCESS_POINT -> viewModel.finalizeLanModeSwitchAP()
+                                LanProvisioningMethod.BLUETOOTH -> viewModel.finalizeLanModeSwitchBluetooth()
+                            }
+                        } else {
+                            when (viewModel.lanProvisioningMethod) {
+                                LanProvisioningMethod.ACCESS_POINT -> viewModel.finalizeLanAPMode()
+                                LanProvisioningMethod.BLUETOOTH -> viewModel.finalizeLanBluetoothMode()
+                            }
                         }
                     },
 

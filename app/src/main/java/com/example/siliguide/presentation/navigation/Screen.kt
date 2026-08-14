@@ -93,7 +93,11 @@ sealed class Screen(val route: String) {
 
     // --- LAN SETUP WIZARD ---
     object IoTSetupLAN : Screen("iot_setup_lan")
-    object LanSetupGraph : Screen("lan_setup_graph")
+    object LanSetupGraph : Screen("lan_setup_graph?deviceId={deviceId}") {
+        fun createRoute(deviceId: String? = null): String =
+            if (deviceId == null) "lan_setup_graph"
+            else "lan_setup_graph?deviceId=$deviceId"
+    }
     object LanLocationPermission : Screen("lan_location_permission")
 
     // deviceId is set only when re-provisioning an already saved device
