@@ -358,8 +358,10 @@ fun SiliGuideNavGraph(
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
 
-                // --- Trigger reconfigure state ---
-                val deviceId = parentEntry.arguments?.getString("deviceId")
+                // Trigger reconfigure state
+                val rawId = parentEntry.arguments?.getString("deviceId")
+                val deviceId = rawId?.takeIf { it != "{deviceId}" }
+
                 LaunchedEffect(deviceId) {
                     if (deviceId != null) {
                         viewModel.startBtReconfigure(deviceId)
@@ -388,10 +390,29 @@ fun SiliGuideNavGraph(
                 }
 
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val uiState by viewModel.iotUiState.collectAsState()
 
+                // INTERCEPT NAVIGATION ONCE BLUETOOTH IS CONFIRMED ON
                 LaunchedEffect(Unit) {
                     viewModel.navigateToDeviceSelection.collect {
-                        navController.navigate(Screen.BluetoothSelectionScreen.route)
+                        if (viewModel.btReconfigureDeviceId != null) {
+                            // BT IS ON & RECONFIGURING: Skip Selection, Connect Directly!
+                            viewModel.reconfigureBluetoothDirectly()
+                        } else {
+                            // NORMAL SETUP: Proceed to Selection Screen
+                            navController.navigate(Screen.BluetoothSelectionScreen.route)
+                        }
+                    }
+                }
+
+                // Listen for successful background switch
+                LaunchedEffect(Unit) {
+                    viewModel.setupComplete.collect {
+                        if (viewModel.btReconfigureDeviceId != null) {
+                            viewModel.clearBtReconfigure()
+                            // Pop out of the entire setup graph, back to details
+                            navController.popBackStack(Screen.BluetoothSetupGraph.route, inclusive = true)
+                        }
                     }
                 }
 

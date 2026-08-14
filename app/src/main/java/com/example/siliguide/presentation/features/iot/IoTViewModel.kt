@@ -2653,4 +2653,63 @@ class IoTViewModel @Inject constructor(
         }
     }
 
+
+    // --- DIRECT CONNECTION LOGIC ---
+    fun reconfigureBluetoothDirectly() {
+        val deviceId = btReconfigureDeviceId ?: return
+
+        viewModelScope.launch {
+            // Show loading state while searching/connecting in the background
+            _iotUiState.update {
+                it.copy(
+                    isLoading = true,
+                    loadingMessage = "Connecting to device..."
+                )
+            }
+
+            // Call your new API function
+            val info = withContext(Dispatchers.IO) {
+                bluetoothApi.getSpecificDeviceInfo(deviceId)
+            }
+
+            withContext(Dispatchers.Main) {
+                if (info == null) {
+                    _iotUiState.update { it.copy(isLoading = false) }
+                    showValidationDialog(
+                        title = "Connection Failed",
+                        message = "Could not reach the device. Please make sure your SiliGuide sensor is powered on, in range, and already paired in your Android Bluetooth settings."
+                    )
+                    return@withContext
+                }
+
+                // Security Check: Verify it is the exact device we want
+                if (info.device != "SiliGuide" || info.deviceId != deviceId) {
+                    _iotUiState.update { it.copy(isLoading = false) }
+                    showValidationDialog(
+                        title = "Wrong Device",
+                        message = "Connected to a different sensor. Expected ID: $deviceId"
+                    )
+                    return@withContext
+                }
+
+                // Success! Switch the mode in the local SQLDelight database
+                try {
+                    _iotUiState.update { it.copy(loadingMessage = "Switching mode...") }
+                    updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.BLUETOOTH)
+
+                    // Trigger the UI to pop back
+                    _setupComplete.emit(Unit)
+                } catch (e: Exception) {
+                    Log.e("IoTViewModel", "Failed to update connection mode", e)
+                    showValidationDialog(
+                        title = "Database Error",
+                        message = "Could not save the new connection mode."
+                    )
+                } finally {
+                    _iotUiState.update { it.copy(isLoading = false) }
+                }
+            }
+        }
+    }
+
 }
