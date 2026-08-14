@@ -1,5 +1,6 @@
 package com.example.siliguide.presentation.features.dashboard.components
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.siliguide.domain.model.AnalysisSession
@@ -11,6 +12,7 @@ import com.example.siliguide.domain.usecase.CheckDeviceConnectionUseCase
 import com.example.siliguide.domain.usecase.GetIoTDevicesUseCase
 import com.example.siliguide.domain.usecase.GetLatestSessionByPlantId
 import com.example.siliguide.domain.usecase.GetPlantsUseCase
+import com.example.siliguide.domain.usecase.GetUnlinkedDevicesUseCase
 import com.example.siliguide.domain.usecase.LinkIoTDeviceToPlantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,7 +26,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,13 +42,19 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SeeAllViewModel @Inject constructor(
+    private val savedStateHandle: SavedStateHandle,
     private val authRepository: AuthRepository,
     private val getPlantsUseCase: GetPlantsUseCase,
     private val getIoTDevicesUseCase: GetIoTDevicesUseCase,
     private val checkDeviceConnectionUseCase: CheckDeviceConnectionUseCase,
     private val getLatestSessionByPlantId: GetLatestSessionByPlantId,
-    private val linkIoTDeviceToPlantUseCase: LinkIoTDeviceToPlantUseCase
+    private val linkIoTDeviceToPlantUseCase: LinkIoTDeviceToPlantUseCase,
+    private val getUnlinkedDevicesUseCase: GetUnlinkedDevicesUseCase
 ) : ViewModel() {
+
+    // Automatically check if we navigated here to link a device
+    val plantIdToLink: String? = savedStateHandle.get<String>("plantId")
+    val isLinkingMode: Boolean = plantIdToLink != null
 
     private val _deviceQuery = MutableStateFlow("")
     val deviceQuery: StateFlow<String> = _deviceQuery.asStateFlow()
@@ -73,7 +80,14 @@ class SeeAllViewModel @Inject constructor(
                 if (userId == null) {
                     flowOf(emptyList())
                 } else {
-                    getIoTDevicesUseCase(userId)
+                    // SWITCH: Use getUnlinkedDevicesUseCase if we are linking a plant
+                    val devicesFlow = if (isLinkingMode) {
+                        getUnlinkedDevicesUseCase(userId)
+                    } else {
+                        getIoTDevicesUseCase(userId)
+                    }
+
+                    devicesFlow
                         // mapLatest so a DB write during a ping round cancels it
                         // instead of queueing another
                         .mapLatest { devices ->
@@ -147,6 +161,25 @@ class SeeAllViewModel @Inject constructor(
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = emptyList()
             )
+
+    // ── Actions ────────────────────────────────────────────────────────────
+
+    // ADDED onSuccess callback so the UI knows exactly when to pop back to the plant detail screen
+    fun linkPlantToDevice(deviceId: String, plantId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching {
+                linkIoTDeviceToPlantUseCase(
+                    deviceId = deviceId,
+                    plantId = plantId
+                )
+            }.onSuccess {
+                onSuccess()
+            }.onFailure { exception ->
+                exception.printStackTrace()
+            }
+        }
+    }
+
 
     val visiblePlants: StateFlow<List<SeeAllPlantItem>> =
         combine(allPlants, _plantQuery) { plants, query ->

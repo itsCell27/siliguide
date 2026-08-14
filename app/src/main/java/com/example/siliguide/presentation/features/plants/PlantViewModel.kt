@@ -10,11 +10,18 @@ import com.example.siliguide.domain.usecase.DeletePlantByIdUseCase
 import com.example.siliguide.domain.usecase.GetPlantsUseCase
 import com.example.siliguide.domain.usecase.GetAnalysisSessionsByPlantUseCase
 import com.example.siliguide.domain.usecase.GetPlantByIdUseCase
+import com.example.siliguide.domain.usecase.LinkIoTDeviceToPlantUseCase
+import com.example.siliguide.domain.usecase.MarkPlantAsDeletedByIdUseCase
+import com.example.siliguide.domain.usecase.UnlinkIoTDeviceToPlantUseCase
+import com.example.siliguide.domain.usecase.UpdatePlantNameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+
+const val MAX_PLANT_NAME_LENGTH = 20
 
 
 @HiltViewModel
@@ -24,7 +31,11 @@ class PlantViewModel @Inject constructor(
     private val getPlantsUseCase: GetPlantsUseCase,
     private val getPlantByIdUseCase: GetPlantByIdUseCase,
     private val getAnalysisSessionsByPlantUseCase: GetAnalysisSessionsByPlantUseCase,
-    private val deletePlantByIdUseCase: DeletePlantByIdUseCase
+    private val deletePlantByIdUseCase: DeletePlantByIdUseCase,
+    private val linkIoTDeviceToPlantUseCase: LinkIoTDeviceToPlantUseCase,
+    private val unlinkIoTDeviceToPlantUseCase: UnlinkIoTDeviceToPlantUseCase,
+    private val updatePlantNameUseCase: UpdatePlantNameUseCase,
+    private val markPlantAsDeletedByIdUseCase: MarkPlantAsDeletedByIdUseCase
 ) : ViewModel() {
 
     // Add this state to store the ID of the newly created plant
@@ -90,17 +101,42 @@ class PlantViewModel @Inject constructor(
         }
     }
 
-    fun deletePlant(plantId: String, onComplete: () -> Unit = {}) {
+    fun markPlantAsDeleted(plantId: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                deletePlantByIdUseCase(plantId)
-                // If the deleted plant was the one currently loaded, clear the state
+                markPlantAsDeletedByIdUseCase(plantId)
+                // If the marked deleted plant was the one currently loaded, clear the state
                 if (_plantState.value?.plantId == plantId) {
                     _plantState.value = null
                 }
                 onComplete() // Callback to handle navigation (e.g., pop back to Dashboard)
             } catch (e: Exception) {
                 // Handle error if necessary
+                e.printStackTrace()
+            }
+        }
+    }
+
+
+    fun updatePlantName(plantId: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                updatePlantNameUseCase(plantId, newName)
+                // Reload the plant to reflect the new name in the UI
+                loadPlant(plantId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun unlinkDevice(plantId: String) {
+        viewModelScope.launch {
+            try {
+                unlinkIoTDeviceToPlantUseCase(plantId)
+                // Reload the plant to reflect the new state (no device linked)
+                loadPlant(plantId)
+            } catch (e: Exception) {
                 e.printStackTrace()
             }
         }

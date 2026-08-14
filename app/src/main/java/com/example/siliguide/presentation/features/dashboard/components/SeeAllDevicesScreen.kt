@@ -55,13 +55,14 @@ data class SeeAllDeviceItem(
 fun SeeAllDevicesScreen(
     devices: List<SeeAllDeviceItem>,
     query: String,
+    isLinkingMode: Boolean = false,
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
     onDeviceClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     SeeAllScaffold(
-        title = "IoT Devices",
+        title = if (isLinkingMode) "Link Device" else "IoT Devices",
         visibleCount = devices.size,
         query = query,
         searchPlaceholder = "Search devices...",
@@ -72,11 +73,17 @@ fun SeeAllDevicesScreen(
         if (devices.isEmpty()) {
 
             if (query.isBlank()) {
-                SeeAllEmptyState(
-                    title = "No devices yet",
-                    message = "Add an IoT device from the dashboard to start monitoring " +
-                            "your Siling Labuyo plants."
-                )
+                if (isLinkingMode) {
+                    SeeAllEmptyState(
+                        title = "No unlinked devices",
+                        message = "All your IoT devices are currently linked to other plants, or you haven't added any yet."
+                    )
+                } else {
+                    SeeAllEmptyState(
+                        title = "No devices yet",
+                        message = "Add an IoT device from the dashboard to start monitoring your Siling Labuyo plants."
+                    )
+                }
             } else {
                 SeeAllEmptyState(
                     title = "No devices found",
@@ -117,6 +124,7 @@ fun SeeAllDevicesScreen(
                 ) { device ->
                     DeviceListItem(
                         device = device,
+                        isLinkingMode = isLinkingMode,
                         onClick = { onDeviceClick(device.deviceId) }
                     )
                 }
@@ -128,6 +136,7 @@ fun SeeAllDevicesScreen(
 @Composable
 private fun DeviceListItem(
     device: SeeAllDeviceItem,
+    isLinkingMode: Boolean,
     onClick: () -> Unit
 ) {
     Row(
@@ -182,7 +191,18 @@ private fun DeviceListItem(
             }
         }
 
-        ConnectionStatusPill(isOnline = device.isOnline)
+        // SWAP UI: If linking mode, show "Link", else show standard green dot
+        if (isLinkingMode) {
+            Text(
+                text = "Link",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = GreenPrimary,
+                modifier = Modifier.padding(end = 4.dp)
+            )
+        } else {
+            ConnectionStatusPill(isOnline = device.isOnline)
+        }
     }
 }
 

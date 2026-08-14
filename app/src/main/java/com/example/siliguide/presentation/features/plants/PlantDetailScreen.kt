@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +38,14 @@ import com.example.siliguide.core.ui.theme.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.window.Dialog
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODELS
@@ -90,10 +97,14 @@ fun PlantDetailScreen(
     val plant            by viewModel.plantState.collectAsState()
     val analysisHistory  by viewModel.analysisHistoryState.collectAsState()
 
+    var showRenameDialog  by remember { mutableStateOf(false) }
+
     LaunchedEffect(plantId) { viewModel.loadPlant(plantId) }
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMenu          by remember { mutableStateOf(false) }
+
+    var showUnlinkConfirm by remember { mutableStateOf(false) }
 
     // ── Derive display values from domain ─────────────────────────────────
     val plantName        = plant?.name ?: "Loading..."
@@ -156,11 +167,19 @@ fun PlantDetailScreen(
             // Top bar
             PlantDetailTopBar(
                 plantName   = plantName,
+                isDeviceLinked = isDeviceLinked,
                 showMenu    = showMenu,
                 onBack      = onNavigateBack,
                 onMenuToggle = { showMenu = !showMenu },
                 onMenuDismiss = { showMenu = false },
-                onRename    = { showMenu = false /* TODO */ },
+                onRename    = {
+                    showRenameDialog = true
+                    showMenu = false
+                },
+                onUnlink       = {
+                    showUnlinkConfirm = true
+                    showMenu = false
+                },
                 onDelete    = { showDeleteConfirm = true; showMenu = false }
             )
 
@@ -232,7 +251,7 @@ fun PlantDetailScreen(
             DeletePlantModal(
                 plantName = plantName,
                 onConfirm = {
-                    viewModel.deletePlant(plantId) {
+                    viewModel.markPlantAsDeleted(plantId) {
                         // 1. Close the modal first
                         showDeleteConfirm = false
 
@@ -241,6 +260,30 @@ fun PlantDetailScreen(
                     }
                 },
                 onDismiss = { showDeleteConfirm = false }
+            )
+        }
+
+        // ── Unlink modal ──────────────────────────────────────────────────
+        if (showUnlinkConfirm) {
+            UnlinkDeviceModal(
+                deviceName = plant?.deviceId ?: "this device",
+                onConfirm = {
+                    viewModel.unlinkDevice(plantId)
+                    showUnlinkConfirm = false
+                },
+                onDismiss = { showUnlinkConfirm = false }
+            )
+        }
+
+        // ── Rename modal ──────────────────────────────────────────────────
+        if (showRenameDialog) {
+            RenamePlantDialog(
+                currentName = plantName,
+                onConfirm = { newName ->
+                    viewModel.updatePlantName(plantId, newName)
+                    showRenameDialog = false
+                },
+                onDismiss = { showRenameDialog = false }
             )
         }
     }
@@ -253,11 +296,13 @@ fun PlantDetailScreen(
 @Composable
 fun PlantDetailTopBar(
     plantName: String,
+    isDeviceLinked: Boolean,
     showMenu: Boolean,
     onBack: () -> Unit,
     onMenuToggle: () -> Unit,
     onMenuDismiss: () -> Unit,
     onRename: () -> Unit,
+    onUnlink: () -> Unit,
     onDelete: () -> Unit
 ) {
     Column {
@@ -347,6 +392,36 @@ fun PlantDetailTopBar(
                             fontFamily = DMSans,
                             color = Black
                         )
+                    }
+
+                    // --- Unlink Option (Only show if a device is actually linked) ---
+                    if (isDeviceLinked) {
+                        HorizontalDivider(color = Border, thickness = 1.dp)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onUnlink() }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .background(OffWhite, RoundedCornerShape(7.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                UnlinkIcon(tint = Black)
+                            }
+                            Text(
+                                text = "Unlink Device",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = DMSans,
+                                color = Black
+                            )
+                        }
                     }
 
                     HorizontalDivider(color = Border, thickness = 1.dp)
@@ -459,17 +534,17 @@ fun PlantInfoCard(
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text("Added $addedDate", fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
-                if (deviceName != null) {
-                    Box(modifier = Modifier
-                        .size(3.dp)
-                        .background(GrayLight, CircleShape))
-                    Text(deviceName, fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
-                } else {
-                    Box(modifier = Modifier
-                        .size(3.dp)
-                        .background(GrayLight, CircleShape))
-                    Text("No device linked", fontSize = 11.sp, fontFamily = DMSans, color = GrayHint)
-                }
+//                if (deviceName != null) {
+//                    Box(modifier = Modifier
+//                        .size(3.dp)
+//                        .background(GrayLight, CircleShape))
+//                    Text(deviceName, fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
+//                } else {
+//                    Box(modifier = Modifier
+//                        .size(3.dp)
+//                        .background(GrayLight, CircleShape))
+//                    Text("No device linked", fontSize = 11.sp, fontFamily = DMSans, color = GrayHint)
+//                }
             }
         }
     }
@@ -715,9 +790,9 @@ fun SensorCell3x3(sensor: SensorReading, isStale: Boolean, modifier: Modifier = 
 fun ThresholdChip(level: ThresholdLevel, isStale: Boolean = false) {
     val (bg, fg, label) = when {
         isStale                   -> Triple(OffWhite,    GrayHint,  "Stale")
-        level == ThresholdLevel.NORMAL -> Triple(GreenBgLight, GreenDark, "Norm")
-        level == ThresholdLevel.LOW    -> Triple(InfoBg,      Info,      "Low")
-        level == ThresholdLevel.HIGH   -> Triple(DangerBg,   Danger,    "High")
+        level == ThresholdLevel.NORMAL -> Triple(GreenBgLight, GreenDark, "NORMAL")
+        level == ThresholdLevel.LOW    -> Triple(InfoBg,      Info,      "LOW")
+        level == ThresholdLevel.HIGH   -> Triple(DangerBg,   Danger,    "HIGH")
         else                           -> Triple(OffWhite,    GrayHint,  "—")
     }
     Box(
@@ -730,7 +805,7 @@ fun ThresholdChip(level: ThresholdLevel, isStale: Boolean = false) {
                     RoundedCornerShape(4.dp)
                 ) else Modifier
             )
-            .padding(horizontal = 5.dp, vertical = 1.dp)
+            .padding(horizontal = 5.dp)
     ) {
         Text(
             text      = label,
@@ -917,9 +992,10 @@ fun FabSection(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         androidx.compose.foundation.Image(
-                            painter = painterResource(R.drawable.ic_leaf),
+                            painter = painterResource(R.drawable.ic_leaf_outlined),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
+                            colorFilter = ColorFilter.tint(Color.White)
                         )
                         Text("Analyze This Plant", fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = White)
                     }
@@ -1060,6 +1136,297 @@ fun DeletePlantModal(
     }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNLINK MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun UnlinkDeviceModal(
+    deviceName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.45f))
+            .zIndex(12f)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .padding(20.dp)
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { /* consume click */ },
+            shape  = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = White)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                // Unlink icon circle
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(OffWhite),
+                    contentAlignment = Alignment.Center
+                ) {
+                    UnlinkIcon(size = 26, tint = Black)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text   = "Unlink Device?",
+                    style  = MaterialTheme.typography.titleLarge,
+                    color  = Black,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text      = "This will disconnect $deviceName from this plant. You can link it to another plant later.",
+                    fontSize  = 12.sp,
+                    fontFamily = DMSans,
+                    color     = GrayBody,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 17.sp,
+                    modifier  = Modifier.padding(vertical = 4.dp, horizontal = 4.dp)
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(White)
+                            .border(1.5.dp, Border, RoundedCornerShape(11.dp))
+                            .clickable { onDismiss() }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Cancel", fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = GrayBody)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(Black)
+                            .clickable { onConfirm() }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Unlink", fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Add this alongside your other Icons (ThreeDotsIcon, TrashIcon, etc.)
+@Composable
+fun UnlinkIcon(size: Int = 14, tint: Color = Black) {
+    androidx.compose.foundation.Canvas(modifier = Modifier.size(size.dp)) {
+        val s = this.size
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
+            width = 1.4.dp.toPx(),
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+
+        // Left link half
+        drawArc(
+            color = tint,
+            startAngle = 90f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(s.width * 0.1f, s.height * 0.3f),
+            size = androidx.compose.ui.geometry.Size(s.width * 0.35f, s.height * 0.4f),
+            style = stroke
+        )
+        drawLine(tint, start = androidx.compose.ui.geometry.Offset(s.width * 0.27f, s.height * 0.3f), end = androidx.compose.ui.geometry.Offset(s.width * 0.45f, s.height * 0.3f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(tint, start = androidx.compose.ui.geometry.Offset(s.width * 0.27f, s.height * 0.7f), end = androidx.compose.ui.geometry.Offset(s.width * 0.45f, s.height * 0.7f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+
+        // Right link half
+        drawArc(
+            color = tint,
+            startAngle = -90f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(s.width * 0.55f, s.height * 0.3f),
+            size = androidx.compose.ui.geometry.Size(s.width * 0.35f, s.height * 0.4f),
+            style = stroke
+        )
+        drawLine(tint, start = androidx.compose.ui.geometry.Offset(s.width * 0.55f, s.height * 0.3f), end = androidx.compose.ui.geometry.Offset(s.width * 0.73f, s.height * 0.3f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(tint, start = androidx.compose.ui.geometry.Offset(s.width * 0.55f, s.height * 0.7f), end = androidx.compose.ui.geometry.Offset(s.width * 0.73f, s.height * 0.7f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+
+        // Slash across the middle indicating broken connection
+        drawLine(tint, start = androidx.compose.ui.geometry.Offset(s.width * 0.3f, s.height * 0.85f), end = androidx.compose.ui.geometry.Offset(s.width * 0.7f, s.height * 0.15f), strokeWidth = 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENAME MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun RenamePlantDialog(
+    currentName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember(currentName) { mutableStateOf(currentName) }
+    val trimmed = name.trim()
+    val canSave = trimmed.isNotEmpty() && trimmed != currentName
+
+    // Hardcoded or imported from PlantViewModel (MAX_PLANT_NAME_LENGTH)
+    val maxLength = 20
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(White)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Rename Plant",
+                style = MaterialTheme.typography.titleLarge,
+                color = Black
+            )
+
+            Text(
+                text = "Enter a new name for this plant.",
+                fontSize = 12.sp,
+                fontFamily = DMSans,
+                color = GrayBody,
+                lineHeight = 18.sp
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(White)
+                    .border(
+                        width = 1.5.dp,
+                        color = if (trimmed.isEmpty()) GreenLight else GreenPrimary,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                // Leaf icon instead of the device glyph
+                androidx.compose.foundation.Image(
+                    painter = painterResource(R.drawable.ic_leaf),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+
+                BasicTextField(
+                    value = name,
+                    onValueChange = { typed ->
+                        if (typed.length <= maxLength) name = typed
+                    },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontFamily = DMSans,
+                        fontSize = 12.sp,
+                        color = Black
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    cursorBrush = SolidColor(GreenPrimary),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (name.isEmpty()) {
+                                Text(
+                                    text = "Plant name",
+                                    fontSize = 12.sp,
+                                    fontFamily = DMSans,
+                                    color = GrayHint
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+
+                Text(
+                    text = "${name.length}/$maxLength",
+                    fontSize = 10.sp,
+                    fontFamily = DMSans,
+                    color = GreenPrimary
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(OffWhite)
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                        .clickable(onClick = onDismiss)
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = GrayBody
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (canSave) GreenPrimary else GreenLight)
+                        .then(
+                            if (canSave) Modifier.clickable { onConfirm(trimmed) } else Modifier
+                        )
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Save",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = DMSans,
+                        color = White
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ICON HELPERS  (canvas-drawn — no extra drawable dependency)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1181,7 +1548,7 @@ private fun PlantDetailPreviewContent(
         .fillMaxSize()
         .background(OffWhite)) {
         Column(Modifier.fillMaxSize()) {
-            PlantDetailTopBar(plantName, false, {}, {}, {}, {}, {})
+            PlantDetailTopBar(plantName, isDeviceLinked = monitoringState != MonitoringState.NO_DEVICE, false, {}, {}, {}, {}, {}, {})
             Column(
                 modifier = Modifier
                     .weight(1f)

@@ -139,13 +139,18 @@ fun SiliGuideNavGraph(
                     navController.navigateSafely(backStackEntry, Screen.SeeAllPlants.createRoute())
                 },
                 onNavigateToSeeAllDevices = {
-                    navController.navigateSafely(backStackEntry, Screen.SeeAllDevices.route)
+                    navController.navigateSafely(backStackEntry, Screen.SeeAllDevices.createRoute())
                 }
             )
         }
 
         // --- SEE ALL: IOT DEVICES ---
-        composable(route = Screen.SeeAllDevices.route) { backStackEntry ->
+        composable(
+            route = Screen.SeeAllDevices.route,
+            arguments = listOf(
+                navArgument("plantId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
 
             val viewModel: SeeAllViewModel = hiltViewModel()
 
@@ -158,10 +163,19 @@ fun SiliGuideNavGraph(
                 onQueryChange = { viewModel.onDeviceQueryChange(it) },
                 onBack = { navController.popSafely(backStackEntry) },
                 onDeviceClick = { deviceId ->
-                    navController.navigateSafely(
-                        backStackEntry,
-                        Screen.IoTDeviceDetail.createRoute(deviceId)
-                    )
+                    // SWITCH: Link device if in linking mode, otherwise go to detail screen
+                    if (viewModel.isLinkingMode) {
+                        viewModel.linkPlantToDevice(
+                            deviceId = deviceId,
+                            plantId = viewModel.plantIdToLink!!,
+                            onSuccess = { navController.popSafely(backStackEntry) }
+                        )
+                    } else {
+                        navController.navigateSafely(
+                            backStackEntry,
+                            Screen.IoTDeviceDetail.createRoute(deviceId)
+                        )
+                    }
                 }
             )
         }
@@ -313,6 +327,12 @@ fun SiliGuideNavGraph(
                     navController.navigateSafely(
                         backStackEntry,
                         Screen.AnalysisHistoryResult.createRoute(sessionId)
+                    )
+                },
+                onNavigateToLinkDevice = {
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.SeeAllDevices.createRoute(plantId = plantId)
                     )
                 }
             )
@@ -1664,6 +1684,28 @@ fun SiliGuideNavGraph(
                     }
                 },
 
+                onTryAnotherPhoto = {
+                    // 1. Protects the ViewModel from double-firing on rapid clicks
+                    if (!backStackEntry.lifecycleIsResumed()) return@AnalysisResultScreen
+
+                    viewModel.clearCurrentCache()
+
+                    // 2. Use navigateSafely, passing the backStackEntry and the builder logic!
+                    navController.navigateSafely(
+                        from = backStackEntry,
+                        route = Screen.Camera.createRoute(plantId, deviceId)
+                    ) {
+                        launchSingleTop = true
+
+                        // Pop the backstack cleanly so we don't stack 100 Camera/Analysis screens
+                        if (plantId != null) {
+                            popUpTo(Screen.PlantDetail.route) { inclusive = false }
+                        } else {
+                            popUpTo(Screen.Dashboard.route) { inclusive = false }
+                        }
+                    }
+                },
+
                 onSaveAsNote = {
                     if (!backStackEntry.lifecycleIsResumed()) return@AnalysisResultScreen
 
@@ -1714,7 +1756,8 @@ fun SiliGuideNavGraph(
 
                 onNavigateBack = { navController.popSafely(backStackEntry) },
                 onSaveAsNote = { },
-                isHistoryMode = true
+                isHistoryMode = true,
+                onTryAnotherPhoto = {}
             )
         }
         // --- END ANALYSIS PIPELINE ---

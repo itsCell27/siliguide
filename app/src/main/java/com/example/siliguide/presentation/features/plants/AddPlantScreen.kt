@@ -101,9 +101,9 @@ fun AddPlantScreen(
             Spacer(modifier = Modifier.height(6.dp))
             CustomInputField(
                 value = plantName,
-                onValueChange = { if (it.length <= 30) plantName = it },
+                onValueChange = { if (it.length <= MAX_PLANT_NAME_LENGTH) plantName = it },
                 placeholder = "e.g. My Labuyo #1",
-                charCount = "${plantName.length}/30"
+                charCount = "${plantName.length}/${MAX_PLANT_NAME_LENGTH}"
             )
 
             Spacer(modifier = Modifier.height(24.dp))

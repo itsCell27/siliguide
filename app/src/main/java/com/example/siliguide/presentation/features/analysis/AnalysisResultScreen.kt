@@ -74,6 +74,7 @@ fun AnalysisResultScreen(
     plantId: String? = null,
     viewModel: AnalysisViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
+    onTryAnotherPhoto: () -> Unit,
     onSaveAsNote: () -> Unit,
     isHistoryMode: Boolean = false
 ) {
@@ -119,7 +120,7 @@ fun AnalysisResultScreen(
                         if (isHistoryMode) {
                             onNavigateBack
                         } else if (isOutOfScope) {
-                            onNavigateBack
+                            onTryAnotherPhoto
                         } else {
                             onSaveAsNote
                         },

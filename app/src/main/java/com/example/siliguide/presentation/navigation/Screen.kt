@@ -9,7 +9,11 @@ sealed class Screen(val route: String) {
     object GuestInfo : Screen("guest_info")
     object Dashboard : Screen("dashboard")
 
-    object SeeAllDevices : Screen("see_all_devices")
+    object SeeAllDevices : Screen("see_all_devices?plantId={plantId}") {
+        fun createRoute(plantId: String? = null): String {
+            return if (plantId == null) "see_all_devices" else "see_all_devices?plantId=$plantId"
+        }
+    }
     object SeeAllPlants : Screen("see_all_plants?isSelectionMode={isSelectionMode}&deviceId={deviceId}") {
         fun createRoute(isSelectionMode: Boolean = false, deviceId: String? = null): String {
             val params = mutableListOf<String>()
