@@ -8,5 +8,6 @@ data class DeviceInfoDto(
     val deviceId: String,
     val claimed: Boolean,
     val token: String? = null,
-    val mode: String
+    val mode: String,
+    val firmware: String
 )

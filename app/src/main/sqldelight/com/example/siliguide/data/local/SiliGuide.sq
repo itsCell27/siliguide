@@ -24,6 +24,7 @@ CREATE TABLE iot_devices (
     is_active                   INTEGER NOT NULL DEFAULT 1,
     last_known_ip               TEXT,          -- NULL if never connected via LAN
     connection_mode             TEXT NOT NULL, -- AP | LAN | BLUETOOTH
+    firmware                    TEXT,
     is_synced                   INTEGER NOT NULL DEFAULT 0,
     date_added                  INTEGER NOT NULL,
     last_seen_at                INTEGER,
@@ -123,8 +124,8 @@ UPDATE users SET email = ? WHERE user_id = ?;
 -- ============================================================
 
 insertDevice:
-INSERT INTO iot_devices (device_id, user_id, device_name, pairing_token, is_active, last_known_ip, connection_mode, date_added)
-VALUES ( ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO iot_devices (device_id, user_id, device_name, pairing_token, is_active, last_known_ip, connection_mode, firmware, date_added)
+VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(device_id) DO UPDATE SET
     user_id = excluded.user_id,
     device_name = excluded.device_name,
@@ -132,6 +133,7 @@ ON CONFLICT(device_id) DO UPDATE SET
     is_active = excluded.is_active,
     last_known_ip = excluded.last_known_ip,
     connection_mode = excluded.connection_mode,
+    firmware = excluded.firmware,
     date_added = excluded.date_added;
 
 getDevicesByUser:
@@ -226,7 +228,7 @@ updatePlantName:
 UPDATE plants SET plant_name = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 -- Link an IoT Device to a plant
-updatePlantDevice:
+linkPlantDevice:
 UPDATE plants SET device_id = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 getLinkedPlantByDeviceId:

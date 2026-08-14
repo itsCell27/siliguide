@@ -270,6 +270,7 @@ class IoTRepositoryImpl @Inject constructor(
             is_active = if (device.isActive) 1L else 0L,
             last_known_ip = device.lastKnownIp,
             connection_mode = device.connectionMode.name,
+            firmware = device.firmware,
             date_added = device.dateAdded
         )
     }

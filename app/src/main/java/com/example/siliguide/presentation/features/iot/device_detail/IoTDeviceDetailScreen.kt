@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.core.ui.theme.*
@@ -106,7 +105,7 @@ data class IoTDeviceDetailUiState(
     val offlineNote: String = "Device not reachable. Make sure the device is powered on and your phone is on the same WiFi network.",
     val linkedPlant: LinkedPlantUi? = null,
     val deviceIdentifier: String = "A4:CF:12:7E:9B:34",
-    val firmware: String = "v2.1.4",
+    val firmware: String? = "v2.1.4",
     val dateRegistered: String = "Apr 10, 2026",
 
     val isModeChangeSheetOpen: Boolean = false
@@ -1173,7 +1172,7 @@ private fun DeviceInfoCard(
 @Composable
 private fun InfoRow(
     label: String,
-    value: String,
+    value: String?,
     isMono: Boolean
 ) {
 
@@ -1191,12 +1190,14 @@ private fun InfoRow(
             modifier = Modifier.weight(1f)
         )
 
-        Text(
-            text = value,
-            style = if (isMono) InfoValueMonoStyle else WizardCaptionStyle,
-            color = if (isMono) Black else GrayBody,
-            maxLines = 1
-        )
+        if (value != null) {
+            Text(
+                text = value,
+                style = if (isMono) InfoValueMonoStyle else WizardCaptionStyle,
+                color = if (isMono) Black else GrayBody,
+                maxLines = 1
+            )
+        }
     }
 }
 

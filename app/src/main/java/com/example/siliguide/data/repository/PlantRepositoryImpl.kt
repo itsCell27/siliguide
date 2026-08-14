@@ -55,7 +55,7 @@ class PlantRepositoryImpl @Inject constructor(
     }
 
     override suspend fun linkDevice(plantId: String, deviceId: String) {
-        queries.updatePlantDevice(device_id = deviceId, plant_id = plantId)
+        queries.linkPlantDevice(device_id = deviceId, plant_id = plantId)
     }
 
     override suspend fun getLinkedPlantsByDeviceId(deviceId: String): Plant {

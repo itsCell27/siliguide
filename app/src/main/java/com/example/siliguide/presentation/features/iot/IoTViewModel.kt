@@ -124,7 +124,10 @@ class IoTViewModel @Inject constructor(
     var connectedDeviceId by mutableStateOf<String?>(null)
         private set
 
-    // NEW: Variable to store the pairing token from firmware
+    var firmwareVersion by mutableStateOf<String?>(null)
+        private set
+
+    // Variable to store the pairing token from firmware
     var pairingToken by mutableStateOf<String?>(null)
         private set
 
@@ -306,6 +309,7 @@ class IoTViewModel @Inject constructor(
                         // Device matches! Bypass existing/claimed checks.
                         connectedDeviceId = info.deviceId
                         pairingToken = info.token
+                        firmwareVersion = info.firmware
                         error = null
                         _apConnectionState.value = "CONNECTED"
                         return@withContext
@@ -367,6 +371,7 @@ class IoTViewModel @Inject constructor(
                     // ----------------------------------------------------
                     connectedDeviceId = info.deviceId
                     pairingToken = info.token
+                    firmwareVersion = info.firmware
 
                     if (deviceName.isEmpty()) {
                         deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
@@ -446,6 +451,7 @@ class IoTViewModel @Inject constructor(
                 isActive = true,
                 lastKnownIp = ip,
                 connectionMode = connectionMode,
+                firmware = firmwareVersion,
                 dateAdded = System.currentTimeMillis()
             )
 
@@ -622,6 +628,7 @@ class IoTViewModel @Inject constructor(
                             // Device matches, Bypass existing/claimed checks.
                             connectedDeviceId = info.deviceId
                             pairingToken = info.token ?: ""
+                            firmwareVersion = info.firmware ?: ""
                             error = null
                             _bluetoothVerified.emit(Unit)
                             return@withContext
@@ -660,6 +667,7 @@ class IoTViewModel @Inject constructor(
                         // ----------------------------------------------------
                         connectedDeviceId = info.deviceId
                         pairingToken = info.token ?: ""
+                        firmwareVersion = info.firmware
 
                         if (deviceName.isEmpty()) {
                             deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
@@ -822,6 +830,7 @@ class IoTViewModel @Inject constructor(
         viewModelScope.launch {
             val id = connectedDeviceId ?: return@launch
             val token = pairingToken ?: ""
+            val firmware = firmwareVersion ?: ""
             val userId = authRepository.getUserId() ?: return@launch
 
             try {
@@ -851,6 +860,7 @@ class IoTViewModel @Inject constructor(
                     isActive = true,
                     lastKnownIp = "",
                     connectionMode = ConnectionMode.BLUETOOTH,
+                    firmware = firmware,
                     dateAdded = System.currentTimeMillis()
                 )
 
@@ -1655,6 +1665,7 @@ class IoTViewModel @Inject constructor(
                             lastKnownIp = "",
                             // Set to AP for now since device is not yet connected to LAN
                             connectionMode = ConnectionMode.AP,
+                            firmware = firmwareVersion,
                             dateAdded = System.currentTimeMillis()
                         )
                     )
@@ -2220,6 +2231,7 @@ class IoTViewModel @Inject constructor(
                     // Device matches, bypass existing/claimed checks.
                     lanBluetoothDevice = device
                     connectedDeviceId = info.deviceId
+                    firmwareVersion = info.firmware
                     pairingToken = info.token ?: ""
 
                     Log.d("VerifyLanBluetoothDevice", "pairing token: $pairingToken")
@@ -2262,6 +2274,7 @@ class IoTViewModel @Inject constructor(
                 // Passed everything — socket stays open for finalize
                 lanBluetoothDevice = device
                 connectedDeviceId = info.deviceId
+                firmwareVersion = info.firmware
                 pairingToken = info.token
 
                 if (deviceName.isEmpty()) {
@@ -2356,6 +2369,7 @@ class IoTViewModel @Inject constructor(
     fun finalizeLanBluetoothMode() {
 
         val deviceId = connectedDeviceId
+        val firmware = firmwareVersion
         val token = pairingToken
         val ssid = lanSelectedSsid
         val name = deviceName.trim()
@@ -2442,6 +2456,7 @@ class IoTViewModel @Inject constructor(
                             // Filled in once the device reports its LAN address
                             lastKnownIp = "",
                             connectionMode = ConnectionMode.LAN,
+                            firmware = firmware,
                             dateAdded = System.currentTimeMillis()
                         )
                     )

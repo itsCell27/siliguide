@@ -135,7 +135,7 @@ class IoTDeviceDetailViewModel @Inject constructor(
                 deviceName = device.deviceName,
                 mode = device.connectionMode.toDetailMode(),
                 deviceIdentifier = device.deviceId,
-                firmware = "—",
+                firmware = device.firmware,
                 dateRegistered = formatDate(device.dateAdded),
                 linkedPlant = linkedPlantUi
             )
