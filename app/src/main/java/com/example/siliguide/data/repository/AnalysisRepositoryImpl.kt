@@ -98,6 +98,12 @@ class AnalysisRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun markAnalysisSessionAsDeleted(sessionId: String) {
+        withContext(Dispatchers.IO) {
+            queries.markAnalysisSessionDeleted(sessionId)
+        }
+    }
+
     override suspend fun markSessionSynced(sessionId: String) {
         withContext(Dispatchers.IO) {
             queries.markSessionSynced(sessionId)

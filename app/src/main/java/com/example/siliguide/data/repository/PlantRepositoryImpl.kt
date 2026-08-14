@@ -39,6 +39,10 @@ class PlantRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun markPlantAsDeletedById(plantId: String) {
+        queries.markPlantDeleted(plantId)
+    }
+
     override suspend fun deletePlant(plantId: String) {
         queries.deletePlant(plantId)
     }

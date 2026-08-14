@@ -10,6 +10,8 @@ interface AnalysisRepository {
     suspend fun getLatestSessionByPlantId(plantId: String): AnalysisSession?
 
     suspend fun saveSession(session: AnalysisSession)
+
+    suspend fun markAnalysisSessionAsDeleted(sessionId: String)
     suspend fun markSessionSynced(sessionId: String)
     suspend fun deleteSession(sessionId: String)
 

@@ -139,6 +139,18 @@ ON CONFLICT(device_id) DO UPDATE SET
 getDevicesByUser:
 SELECT * FROM iot_devices WHERE user_id = ? ORDER BY device_name ASC;
 
+getUnlinkedDevicesByUser:
+SELECT d.*
+FROM iot_devices AS d
+WHERE d.user_id = ?
+  AND NOT EXISTS (
+      SELECT 1
+      FROM plants AS p
+      WHERE p.device_id = d.device_id
+        AND p.is_deleted = 0
+  )
+ORDER BY d.device_name ASC;
+
 getDeviceById:
 SELECT * FROM iot_devices WHERE device_id = ?;
 
@@ -250,6 +262,8 @@ SELECT * FROM plants WHERE user_id = ? AND is_synced = 0;
 markPlantDeleted:
 UPDATE plants
 SET is_deleted = 1,
+-- Set device_id to NULL to unlink linked device
+    device_id = NULL,
     is_synced = 0
 WHERE plant_id = ?;
 

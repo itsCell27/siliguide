@@ -261,6 +261,15 @@ class IoTRepositoryImpl @Inject constructor(
             }
     }
 
+    override fun getAllUnlinkedDevices(userId: String): Flow<List<IoTDevice>> {
+        return queries.getUnlinkedDevicesByUser(userId)
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { sqlEntities ->
+                sqlEntities.map { it.toIotDomain() }
+            }
+    }
+
     override suspend fun saveDevice(device: IoTDevice) {
         queries.insertDevice(
             device_id = device.deviceId,

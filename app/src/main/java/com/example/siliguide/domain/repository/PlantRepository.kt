@@ -9,6 +9,7 @@ interface PlantRepository {
 
     suspend fun insertPlant(plant: Plant)
     suspend fun deletePlant(plantId: String)
+    suspend fun markPlantAsDeletedById(plantId: String)
     suspend fun getPlantById(plantId: String): Plant?
 
     suspend fun updatePlantName(plantId: String, name: String)
