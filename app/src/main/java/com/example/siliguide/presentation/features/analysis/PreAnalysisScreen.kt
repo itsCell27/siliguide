@@ -265,16 +265,16 @@ private fun LinkedConnectedContent(state: PreAnalysisState.LinkedConnected) {
     StatusCard(variant = StatusCardVariant.Green) {
         DeviceStatusRow(deviceName = state.deviceName, deviceMeta = state.deviceMeta, isConnected = true)
     }
-    GroupLabel("Live sensor preview")
-    SensorGrid(sensors = state.sensors)
-
-    val updateText = buildAnnotatedString {
-        append("Receiving data · last update ")
-        withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = GreenDark)) {
-            append("${state.sensors.lastUpdateSec} sec ago")
-        }
-    }
-    Text(text = updateText, style = MaterialTheme.typography.bodySmall, color = GrayHint, lineHeight = 16.sp)
+//    GroupLabel("Live sensor preview")
+//    SensorGrid(sensors = state.sensors)
+//
+//    val updateText = buildAnnotatedString {
+//        append("Receiving data · last update ")
+//        withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = GreenDark)) {
+//            append("${state.sensors.lastUpdateSec} sec ago")
+//        }
+//    }
+//    Text(text = updateText, style = MaterialTheme.typography.bodySmall, color = GrayHint, lineHeight = 16.sp)
 }
 
 @Composable
