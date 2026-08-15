@@ -213,7 +213,7 @@ fun PlantDetailScreen(
                         },
                         lastSeenText = liveMonitoring.lastSeenText,
                         staleNote = liveMonitoring.staleNote,
-                        onReconnect = { linkedDevice?.let { viewModel.startLiveMonitoring(it) } },
+                        onReconnect = { viewModel.retryReconnect() },
                         connectionMode = iotDevice?.connectionMode ?: ConnectionMode.AP
                     )
                 }

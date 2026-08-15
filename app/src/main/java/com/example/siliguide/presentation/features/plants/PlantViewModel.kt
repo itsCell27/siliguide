@@ -224,6 +224,32 @@ class PlantViewModel @Inject constructor(
         monitoredDeviceId = null
     }
 
+    /**
+     * "Try to Reconnect" button. Unlike startLiveMonitoring (which is safe to
+     * call every recomposition and no-ops if a job is already running),
+     * this always cancels and restarts so the button reliably flips status
+     * to RECONNECTING and shows the loading animation, same as
+     * IoTDeviceDetailViewModel.retryNow().
+     */
+    fun retryReconnect() {
+
+        val id = monitoredDeviceId ?: return
+
+        monitorJob?.cancel()
+
+        _liveMonitoring.value = LiveMonitoringUiState(status = MonitoringStatus.RECONNECTING)
+
+        monitorJob = viewModelScope.launch {
+
+            while (currentCoroutineContext().isActive) {
+
+                pollDeviceOnce(id)
+
+                delay(MONITOR_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
     private suspend fun pollDeviceOnce(deviceId: String) {
 
         val response = withContext(Dispatchers.IO) {
