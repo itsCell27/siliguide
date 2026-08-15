@@ -50,6 +50,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.window.Dialog
+import com.example.siliguide.domain.model.ConnectionMode
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODELS
@@ -212,7 +213,8 @@ fun PlantDetailScreen(
                         },
                         lastSeenText = liveMonitoring.lastSeenText,
                         staleNote = liveMonitoring.staleNote,
-                        onReconnect = { linkedDevice?.let { viewModel.startLiveMonitoring(it) } }
+                        onReconnect = { linkedDevice?.let { viewModel.startLiveMonitoring(it) } },
+                        connectionMode = iotDevice?.connectionMode ?: ConnectionMode.AP
                     )
                 }
 
@@ -1386,7 +1388,8 @@ private fun PlantDetailPreviewContent(
                         },
                         lastSeenText = if (liveStatus == MonitoringStatus.OFFLINE) "14 min ago" else null,
                         staleNote = if (liveStatus == MonitoringStatus.OFFLINE) "Showing last known readings · 14 min ago" else null,
-                        onReconnect = {}
+                        onReconnect = {},
+                        connectionMode = ConnectionMode.AP
                     )
                 }
                 SectionHeader(title = "Analysis history · ${dummyHistory.size}", seeAll = if (dummyHistory.isNotEmpty()) "See All" else null)

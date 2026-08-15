@@ -47,6 +47,7 @@ import com.example.siliguide.core.ui.components.monitoring.MonitoringCard
 import com.example.siliguide.core.ui.components.monitoring.MonitoringReading
 import com.example.siliguide.core.ui.components.monitoring.MonitoringStatus
 import com.example.siliguide.domain.engine.ThresholdLevel
+import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 
@@ -101,6 +102,7 @@ data class LinkedPlantUi(
 
 data class IoTDeviceDetailUiState(
     val deviceName: String = "Garden Sensor",
+    val connectionMode: ConnectionMode,
     val status: DeviceConnectionStatus = DeviceConnectionStatus.CONNECTED,
     val mode: DetailConnectionMode = DetailConnectionMode.LAN,
     val sensors: List<SensorReadingUi> = emptyList(),
@@ -535,7 +537,8 @@ private fun StatusCard(
         lastSeenText = state.lastSeenText,
         staleNote = state.staleNote,
         offlineNote = state.offlineNote,
-        onReconnect = onReconnect
+        onReconnect = onReconnect,
+        connectionMode = state.connectionMode
     )
 }
 
@@ -1951,7 +1954,8 @@ private val ConnectedSample = IoTDeviceDetailUiState(
     linkedPlant = LinkedPlantUi(
         name = "Labuyo Plant #2",
         meta = "Linked Apr 10 · 4 analyses"
-    )
+    ),
+    connectionMode = ConnectionMode.LAN
 )
 
 private val OfflineSample = ConnectedSample.copy(

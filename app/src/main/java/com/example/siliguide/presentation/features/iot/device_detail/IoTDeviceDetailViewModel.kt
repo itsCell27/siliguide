@@ -48,7 +48,8 @@ class IoTDeviceDetailViewModel @Inject constructor(
             sensors = emptyList(),
             deviceIdentifier = "",
             firmware = "—",
-            dateRegistered = "—"
+            dateRegistered = "—",
+            connectionMode = ConnectionMode.AP
         )
     )
     val uiState: StateFlow<IoTDeviceDetailUiState> = _uiState.asStateFlow()
@@ -139,7 +140,8 @@ class IoTDeviceDetailViewModel @Inject constructor(
                 deviceIdentifier = device.deviceId,
                 firmware = device.firmware,
                 dateRegistered = formatDate(device.dateAdded),
-                linkedPlant = linkedPlantUi
+                linkedPlant = linkedPlantUi,
+                connectionMode = device.connectionMode
             )
         }
     }

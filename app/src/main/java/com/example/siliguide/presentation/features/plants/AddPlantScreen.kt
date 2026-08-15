@@ -35,7 +35,9 @@ fun AddPlantScreen(
     // new created plant id
     val createdPlantId by viewModel.createdPlantId.collectAsState()
 
-    var plantName by remember { mutableStateOf("") }
+    val plantNameRandom = "Labuyo Plant#${('A'..'Z').random()}${(1..99).random().toString().padStart(2, '0')}"
+
+    var plantName by remember { mutableStateOf(plantNameRandom) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     var selectedDeviceName by remember { mutableStateOf("") }
     var showNextSheet by remember { mutableStateOf(false) }

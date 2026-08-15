@@ -64,6 +64,7 @@ import com.example.siliguide.core.ui.theme.WarningBorder
 import com.example.siliguide.core.ui.theme.WizardCaptionStyle
 import com.example.siliguide.core.ui.theme.White
 import com.example.siliguide.domain.engine.ThresholdLevel
+import com.example.siliguide.domain.model.ConnectionMode
 
 /**
  * Pulled out of IoTDeviceDetailScreen's old StatusCard so any monitoring
@@ -92,7 +93,8 @@ fun MonitoringCard(
     lastSeenText: String? = null,
     staleNote: String? = null,
     offlineNote: String = "Device not reachable. Make sure it is powered on and your phone is on the same network.",
-    onReconnect: () -> Unit = {}
+    onReconnect: () -> Unit = {},
+    connectionMode: ConnectionMode
 ) {
 
     val isOffline = status == MonitoringStatus.OFFLINE
@@ -163,7 +165,7 @@ fun MonitoringCard(
             )
         }
 
-        if (isOffline) {
+        if (isOffline && connectionMode == ConnectionMode.LAN) {
 
             MonitoringWarningNote(
                 text = offlineNote,
