@@ -992,6 +992,14 @@ private fun ChangeConnectionModeSheet(
     val confirmInteraction = remember { MutableInteractionSource() }
     val cancelInteraction = remember { MutableInteractionSource() }
     val isChanged = selectedMode != currentMode
+    val isLanReconfigure = selectedMode == DetailConnectionMode.LAN && currentMode == DetailConnectionMode.LAN
+    val canConfirm = isChanged || isLanReconfigure
+    val confirmLabel = if (isLanReconfigure) "Update WiFi Network" else selectedMode.switchLabel
+    val confirmWarning = if (isLanReconfigure) {
+        "Device is already on LAN Mode. Continuing lets you connect it to a different home WiFi network. The setup wizard will open automatically after confirming."
+    } else {
+        selectedMode.switchWarning
+    }
 
     Column(
         modifier = Modifier
@@ -1028,9 +1036,9 @@ private fun ChangeConnectionModeSheet(
             Spacer(modifier = Modifier.height(9.dp))
         }
 
-        if (isChanged) {
+        if (canConfirm) {
 
-            WarningNote(text = selectedMode.switchWarning)
+            WarningNote(text = confirmWarning)
 
             Spacer(modifier = Modifier.height(14.dp))
         }
@@ -1038,11 +1046,11 @@ private fun ChangeConnectionModeSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .alphaIf(!isChanged)
+                .alphaIf(!canConfirm)
                 .clip(RoundedCornerShape(12.dp))
                 .background(GreenPrimary)
                 .clickable(
-                    enabled = isChanged,
+                    enabled = canConfirm,
                     interactionSource = confirmInteraction,
                     indication = null,
                     onClick = onConfirm
@@ -1052,7 +1060,7 @@ private fun ChangeConnectionModeSheet(
         ) {
 
             Text(
-                text = selectedMode.switchLabel,
+                text = confirmLabel,
                 style = SheetButtonStyleFallback,
                 color = White
             )
