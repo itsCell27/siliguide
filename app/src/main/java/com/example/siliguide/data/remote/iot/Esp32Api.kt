@@ -1,6 +1,7 @@
 package com.example.siliguide.data.remote.iot
 
 import com.example.siliguide.core.security.AesGcmCrypto
+import com.example.siliguide.core.security.PairingTokenCrypto
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
 import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
@@ -21,7 +22,8 @@ import io.ktor.http.contentType
 import io.ktor.client.plugins.timeout
 
 class Esp32Api @Inject constructor(
-    private val crypto: AesGcmCrypto
+    private val crypto: AesGcmCrypto,
+    private val pairingTokenCrypto: PairingTokenCrypto
 ) {
 
     // Same Json config the ContentNegotiation plugin uses, reused for manual
@@ -67,9 +69,12 @@ class Esp32Api @Inject constructor(
             return json.decodeFromString(rawResponse)
         }
 
+        // decrypt token from SQLDelight DB first
+        val plainToken = pairingTokenCrypto.decrypt(token)
+
         // 3. If a token IS provided, we assume the payload is Base64 AES-GCM encrypted.
         //    Attempt to decrypt it locally.
-        val decryptedJson = crypto.decrypt(rawResponse, token)
+        val decryptedJson = crypto.decrypt(rawResponse, plainToken)
 
         // 4. Fallback check: If decryption fails (e.g., wrong token, tampered data),
         //    throw an exception so the Repository can catch it and show an "Offline" state.
@@ -87,11 +92,14 @@ class Esp32Api @Inject constructor(
         ssid: String,
         password: String
     ) {
+        // decrypt token from SQLDelight DB first
+        val plainToken = pairingTokenCrypto.decrypt(token)
+
         // 1. Format credentials into the JSON string expected by ESP32 C++ parser
         val unencryptedPayload = """{"ssid":"$ssid","pass":"$password"}"""
 
         // 2. Encrypt the JSON into a Base64 string using the pairing token
-        val encryptedBase64Payload = crypto.encrypt(unencryptedPayload, token)
+        val encryptedBase64Payload = crypto.encrypt(unencryptedPayload, plainToken)
             ?: throw SecurityException("Failed to encrypt Wi-Fi payload.")
 
         // 3. POST the raw encrypted Base64 string to /configure

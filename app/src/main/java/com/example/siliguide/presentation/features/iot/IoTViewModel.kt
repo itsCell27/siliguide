@@ -50,6 +50,7 @@ import com.example.siliguide.core.permission.DeviceSettingsChecker
 import com.example.siliguide.core.permission.PermissionRequest
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.core.security.PairingTokenCrypto
 import com.example.siliguide.domain.usecase.CheckDeviceWiFiStatusUseCase
 import com.example.siliguide.domain.usecase.ConnectDeviceToWiFUseCase
 import com.example.siliguide.domain.usecase.ScanWifiNetworksUseCase
@@ -98,7 +99,9 @@ class IoTViewModel @Inject constructor(
     private val checkDeviceWiFiStatusUseCase: CheckDeviceWiFiStatusUseCase,
     private val updateDeviceIpUseCase: UpdateDeviceIpUseCase,
     private val updateDeviceConnectionModeUseCase: UpdateDeviceConnectionModeUseCase,
-    val permissionManager: PermissionManager
+    val permissionManager: PermissionManager,
+
+    private val pairingTokenCrypto: PairingTokenCrypto
 ) : ViewModel() {
 
     // Backing property for state updates
@@ -443,11 +446,14 @@ class IoTViewModel @Inject constructor(
 //            }
 //            Log.d("IoTViewModel", "existingDevice = $existingDevice")
 
+            // encrypt pairingToken first before saving to SQLDelight DB
+            val encryptedToken = pairingTokenCrypto.encrypt(token)
+
             val newDevice = IoTDevice(
                 deviceId = id,
                 userId = userId,
                 deviceName = customName.trim().take(DEVICE_NAME_MAX_LENGTH),
-                pairingToken = token,
+                pairingToken = encryptedToken,
                 isActive = true,
                 lastKnownIp = ip,
                 connectionMode = connectionMode,
@@ -851,12 +857,15 @@ class IoTViewModel @Inject constructor(
                     return@launch   // no save happen, device stay unsaved
                 }
 
+                // encrypt pairingToken first before saving to SQLDelight DB
+                val encryptedToken = pairingTokenCrypto.encrypt(token)
+
                 // Local Commit — only reach here if claim succeed.
                 val newDevice = IoTDevice(
                     deviceId = id,
                     userId = userId,
                     deviceName = customName.trim().take(DEVICE_NAME_MAX_LENGTH),
-                    pairingToken = token,
+                    pairingToken = encryptedToken,
                     isActive = true,
                     lastKnownIp = "",
                     connectionMode = ConnectionMode.BLUETOOTH,
@@ -1652,6 +1661,9 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
 
+                // encrypt pairingToken first before saving to SQLDelight DB
+                val encryptedToken = pairingTokenCrypto.encrypt(token)
+
                 // ---- 2. Save locally ------------------------------------
                 val saved = runCatching {
                     saveIoTDeviceUseCase(
@@ -1659,7 +1671,7 @@ class IoTViewModel @Inject constructor(
                             deviceId = deviceId,
                             userId = userId,
                             deviceName = name.take(DEVICE_NAME_MAX_LENGTH),
-                            pairingToken = token,
+                            pairingToken = encryptedToken,
                             isActive = true,
                             // Filled in once the device reports its LAN address
                             lastKnownIp = "",
@@ -2444,6 +2456,9 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
 
+                // encrypt pairingToken first before saving to SQLDelight DB
+                val encryptedToken = pairingTokenCrypto.encrypt(token)
+
                 // ---- 2. Save locally ------------------------------------
                 val saved = runCatching {
                     saveIoTDeviceUseCase(
@@ -2451,7 +2466,7 @@ class IoTViewModel @Inject constructor(
                             deviceId = deviceId,
                             userId = userId,
                             deviceName = name.take(DEVICE_NAME_MAX_LENGTH),
-                            pairingToken = token,
+                            pairingToken = encryptedToken,
                             isActive = true,
                             // Filled in once the device reports its LAN address
                             lastKnownIp = "",

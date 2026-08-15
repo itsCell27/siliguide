@@ -2,6 +2,7 @@ package com.example.siliguide.data.remote.iot
 
 import android.util.Log
 import com.example.siliguide.core.security.AesGcmCrypto
+import com.example.siliguide.core.security.PairingTokenCrypto
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.remote.iot.dto.SensorResponseDto
 import com.example.siliguide.data.remote.iot.dto.ClaimResponseDto // Make sure to create this simple DTO
@@ -13,7 +14,8 @@ import javax.inject.Inject
 class BluetoothApi @Inject constructor(
     private val bluetoothManager: BluetoothManager,
     private val bluetoothDiscoveryManager: BluetoothDiscoveryManager,
-    private val crypto: AesGcmCrypto
+    private val crypto: AesGcmCrypto,
+    private val pairingTokenCrypto: PairingTokenCrypto
 ) {
 
     init {
@@ -85,10 +87,13 @@ class BluetoothApi @Inject constructor(
             "Password cannot contain quotes or backslashes"
         }
 
+        // decrypt token from SQLDelight DB first
+        val plainToken = pairingTokenCrypto.decrypt(token)
+
         // Field names must stay "ssid" and "pass" — firmware looks for exactly these
         val plainPayload = """{"ssid":"$ssid","pass":"$password"}"""
 
-        val encryptedBase64 = crypto.encrypt(plainPayload, token)
+        val encryptedBase64 = crypto.encrypt(plainPayload, plainToken)
 
         // Base64 (NO_WRAP) contains no colon and no newline, so the single
         // split on the device and the readResponse() line terminator both hold
@@ -132,8 +137,11 @@ class BluetoothApi @Inject constructor(
             return json.decodeFromString(response.trim())
         }
 
+        // decrypt token from SQLDelight DB first
+        val plainToken = pairingTokenCrypto.decrypt(token)
+
         // 2. Secure Mode (Claimed): Decrypt the Base64 AES-GCM payload locally
-        val decryptedJson = crypto.decrypt(response.trim(), token)
+        val decryptedJson = crypto.decrypt(response.trim(), plainToken)
 
         // 3. Fail-Safe: Catch bit-flipping attacks or incorrect tokens
         if (decryptedJson == null) {
