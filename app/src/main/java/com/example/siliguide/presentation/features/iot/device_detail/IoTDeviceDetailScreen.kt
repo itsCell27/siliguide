@@ -10,9 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -45,7 +43,12 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.window.Dialog
 import com.example.siliguide.core.ui.components.MessageDialog
+import com.example.siliguide.core.ui.components.monitoring.MonitoringCard
+import com.example.siliguide.core.ui.components.monitoring.MonitoringReading
+import com.example.siliguide.core.ui.components.monitoring.MonitoringStatus
+import com.example.siliguide.domain.engine.ThresholdLevel
 import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
+
 
 // ── UI models (presentation-only; map to domain ConnectionMode later) ───────
 
@@ -87,7 +90,8 @@ enum class DeviceConnectionStatus { CONNECTED, OFFLINE, RECONNECTING }
 
 data class SensorReadingUi(
     val label: String,
-    val value: String
+    val value: String,
+    val level: ThresholdLevel = ThresholdLevel.UNKNOWN
 )
 
 data class LinkedPlantUi(
@@ -499,6 +503,11 @@ private fun SectionHeading(text: String) {
 
 // ── Status hero card (12A / 12E / 12F) ─────────────────────────────────────
 
+/**
+ * Thin wrapper: maps screen state onto the reusable MonitoringCard.
+ * Icon glyph and the mode chip badge are screen-owned (device-detail
+ * specific); the status shell + readings grid live in MonitoringCard now.
+ */
 @Composable
 private fun StatusCard(
     state: IoTDeviceDetailUiState,
@@ -507,132 +516,33 @@ private fun StatusCard(
 
     val isOffline = state.status == DeviceConnectionStatus.OFFLINE
 
-    val bg = if (isOffline) WarningBg else GreenBgLight
-    val bd = if (isOffline) WarningBorder else GreenLight
-    val tileStroke = if (isOffline) GrayMedium else GreenPrimary
+    MonitoringCard(
+        title = state.deviceName,
+        status = state.status.toMonitoringStatus(),
+        readings = state.sensors.map {
+            MonitoringReading(label = it.label, value = it.value, level = it.level)
+        },
+        icon = {
+            Canvas(modifier = Modifier.size(22.dp)) {
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(bg)
-            .border(width = 1.dp, color = bd, shape = RoundedCornerShape(14.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(White)
-                    .border(
-                        width = 1.dp,
-                        color = bd,
-                        shape = RoundedCornerShape(11.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-
-                Canvas(modifier = Modifier.size(22.dp)) {
-
-                    drawDeviceGlyph(
-                        color = tileStroke,
-                        strokeWidthPx = 1.4.dp.toPx()
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-
-                Text(
-                    text = state.deviceName,
-                    style = DeviceNameStyle,
-                    color = Black,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                drawDeviceGlyph(
+                    color = if (isOffline) GrayMedium else GreenPrimary,
+                    strokeWidthPx = 1.4.dp.toPx()
                 )
-
-                Spacer(modifier = Modifier.height(3.dp))
-
-                ModeChip(mode = state.mode)
             }
+        },
+        badge = { ModeChip(mode = state.mode) },
+        lastSeenText = state.lastSeenText,
+        staleNote = state.staleNote,
+        offlineNote = state.offlineNote,
+        onReconnect = onReconnect
+    )
+}
 
-            Spacer(modifier = Modifier.width(10.dp))
-
-            when (state.status) {
-
-                DeviceConnectionStatus.CONNECTED -> ConnectedPill()
-
-                DeviceConnectionStatus.OFFLINE -> OfflinePill()
-
-                DeviceConnectionStatus.RECONNECTING -> Unit
-            }
-        }
-
-        if (isOffline && state.lastSeenText != null) {
-
-            Text(
-                text = "⏱ ${state.lastSeenText}",
-                style = BadgeLabelStyle,
-                color = Warning,
-                textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        if (isOffline) {
-
-            WarningNote(
-                text = state.offlineNote,
-                background = White.copy(alpha = 0.6f)
-            )
-        }
-
-        if (state.sensors.isNotEmpty() && state.status != DeviceConnectionStatus.RECONNECTING) {
-
-            SensorGrid(
-                sensors = state.sensors,
-                isStale = isOffline
-            )
-        }
-
-        if (isOffline && state.staleNote != null) {
-
-            Text(
-                text = state.staleNote,
-                style = BadgeLabelStyle,
-                color = Warning,
-                textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        when (state.status) {
-
-            DeviceConnectionStatus.OFFLINE -> ReconnectButton(onClick = onReconnect)
-
-            DeviceConnectionStatus.RECONNECTING -> ReconnectingButton()
-
-            DeviceConnectionStatus.CONNECTED -> Unit
-        }
-
-        if (state.status == DeviceConnectionStatus.RECONNECTING) {
-
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = GreenPrimary,
-                trackColor = GreenLight
-            )
-        }
-    }
+private fun DeviceConnectionStatus.toMonitoringStatus(): MonitoringStatus = when (this) {
+    DeviceConnectionStatus.CONNECTED -> MonitoringStatus.CONNECTED
+    DeviceConnectionStatus.OFFLINE -> MonitoringStatus.OFFLINE
+    DeviceConnectionStatus.RECONNECTING -> MonitoringStatus.RECONNECTING
 }
 
 @Composable
@@ -654,116 +564,6 @@ private fun ModeChip(mode: DetailConnectionMode) {
             )
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
-}
-
-@Composable
-private fun ConnectedPill() {
-
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(GreenPrimary)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .clip(CircleShape)
-                .background(White)
-        )
-
-        Spacer(modifier = Modifier.width(5.dp))
-
-        Text(
-            text = "Connected",
-            style = BadgeLabelStyle,
-            color = White
-        )
-    }
-}
-
-@Composable
-private fun OfflinePill() {
-
-    Text(
-        text = "Offline",
-        style = BadgeLabelStyle,
-        color = GrayBody,
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(GrayLight)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
-    )
-}
-
-@Composable
-private fun SensorGrid(
-    sensors: List<SensorReadingUi>,
-    isStale: Boolean
-) {
-
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-
-        sensors.chunked(3).forEach { rowItems ->
-
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-
-                rowItems.forEach { sensor ->
-
-                    SensorCell(
-                        sensor = sensor,
-                        isStale = isStale,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                repeat(3 - rowItems.size) {
-
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SensorCell(
-    sensor: SensorReadingUi,
-    isStale: Boolean,
-    modifier: Modifier = Modifier
-) {
-
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(White)
-            .border(
-                width = 1.dp,
-                color = if (isStale) GrayLight else GreenLight,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 7.dp)
-    ) {
-
-        Text(
-            text = sensor.label.uppercase(),
-            style = SensorCellLabelStyle,
-            color = if (isStale) GrayHint else GrayMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Spacer(modifier = Modifier.height(3.dp))
-
-        Text(
-            text = sensor.value,
-            style = SensorCellValueStyle,
-            color = if (isStale) GrayHint else Black,
-            maxLines = 1
-        )
-    }
 }
 
 @Composable
@@ -804,84 +604,6 @@ private fun WarningNote(
             style = WizardCaptionStyle,
             color = Warning,
             modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun ReconnectButton(onClick: () -> Unit) {
-
-    val interaction = remember { MutableInteractionSource() }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(11.dp))
-            .background(White)
-            .border(
-                width = 1.5.dp,
-                color = GreenPrimary,
-                shape = RoundedCornerShape(11.dp)
-            )
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-
-        Canvas(modifier = Modifier.size(14.dp)) {
-
-            drawRefreshGlyph(
-                color = GreenPrimary,
-                strokeWidthPx = 1.4.dp.toPx()
-            )
-        }
-
-        Spacer(modifier = Modifier.width(7.dp))
-
-        Text(
-            text = "Try to Reconnect",
-            style = SheetButtonStyleFallback,
-            color = GreenPrimary
-        )
-    }
-}
-
-@Composable
-private fun ReconnectingButton() {
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(11.dp))
-            .background(GreenBgLight)
-            .border(
-                width = 1.5.dp,
-                color = GreenLight,
-                shape = RoundedCornerShape(11.dp)
-            )
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-
-        CircularProgressIndicator(
-            modifier = Modifier.size(14.dp),
-            color = GreenPrimary,
-            trackColor = GreenLight,
-            strokeWidth = 2.dp
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Text(
-            text = "Reconnecting…",
-            style = SheetButtonStyleFallback,
-            color = GreenDark
         )
     }
 }
@@ -2152,32 +1874,6 @@ private fun DrawScope.drawInfoGlyph(color: Color, strokeWidthPx: Float) {
     )
 }
 
-private fun DrawScope.drawRefreshGlyph(color: Color, strokeWidthPx: Float) {
-
-    val s = size.minDimension / 14f
-    val stroke = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
-
-    drawArc(
-        color = color,
-        startAngle = -40f,
-        sweepAngle = 290f,
-        useCenter = false,
-        topLeft = Offset(2f * s, 2f * s),
-        size = androidx.compose.ui.geometry.Size(10f * s, 10f * s),
-        style = stroke
-    )
-
-    drawPath(
-        path = Path().apply {
-            moveTo(2f * s, 4f * s)
-            lineTo(2f * s, 7f * s)
-            lineTo(5f * s, 7f * s)
-        },
-        color = color,
-        style = stroke
-    )
-}
-
 private fun DrawScope.drawTrashGlyph(color: Color, strokeWidthPx: Float) {
 
     val s = size.minDimension / 24f
@@ -2236,15 +1932,15 @@ private fun DrawScope.drawThreeDots(color: Color) {
 // ── Previews ───────────────────────────────────────────────────────────────
 
 private val SampleSensors = listOf(
-    SensorReadingUi("Soil Moisture", "52%"),
-    SensorReadingUi("Soil Temp", "26.8°C"),
-    SensorReadingUi("Soil pH", "6.6"),
-    SensorReadingUi("Soil N", "48 ppm"),
-    SensorReadingUi("Soil P", "26 ppm"),
-    SensorReadingUi("Soil K", "162 ppm"),
-    SensorReadingUi("Soil EC", "1.3"),
-    SensorReadingUi("Air Temp", "28.4°C"),
-    SensorReadingUi("Light", "9.1k lx")
+    SensorReadingUi("Soil Moisture", "52%", ThresholdLevel.NORMAL),
+    SensorReadingUi("Soil Temp", "26.8°C", ThresholdLevel.NORMAL),
+    SensorReadingUi("Soil pH", "6.6", ThresholdLevel.NORMAL),
+    SensorReadingUi("Soil N", "48 ppm", ThresholdLevel.HIGH),
+    SensorReadingUi("Soil P", "26 ppm", ThresholdLevel.NORMAL),
+    SensorReadingUi("Soil K", "162 ppm", ThresholdLevel.NORMAL),
+    SensorReadingUi("Soil EC", "1.3", ThresholdLevel.LOW),
+    SensorReadingUi("Air Temp", "28.4°C", ThresholdLevel.NORMAL),
+    SensorReadingUi("Light", "9.1k lx", ThresholdLevel.UNKNOWN)
 )
 
 private val ConnectedSample = IoTDeviceDetailUiState(

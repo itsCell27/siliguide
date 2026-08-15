@@ -35,6 +35,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.core.ui.components.monitoring.MonitoringCard
+import com.example.siliguide.core.ui.components.monitoring.MonitoringReading
+import com.example.siliguide.core.ui.components.monitoring.MonitoringStatus
+import com.example.siliguide.domain.engine.ThresholdLevel
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -63,15 +67,6 @@ data class AnalysisHistoryItem(
     val gradientEnd: Color
 )
 
-data class SensorReading(
-    val name: String,
-    val value: String,
-    val level: ThresholdLevel,
-    val isStale: Boolean = false
-)
-
-enum class ThresholdLevel { NORMAL, LOW, HIGH, UNKNOWN }
-
 /** Monitoring card variant driven by linked device state */
 enum class MonitoringState { NO_DEVICE, DISCONNECTED, CONNECTED }
 
@@ -96,6 +91,8 @@ fun PlantDetailScreen(
 ) {
     val plant            by viewModel.plantState.collectAsState()
     val analysisHistory  by viewModel.analysisHistoryState.collectAsState()
+    val liveMonitoring   by viewModel.liveMonitoring.collectAsState()
+    val iotDevice by viewModel.iotDeviceState.collectAsState()
 
     var showRenameDialog  by remember { mutableStateOf(false) }
 
@@ -110,36 +107,27 @@ fun PlantDetailScreen(
     val plantName        = plant?.name ?: "Loading..."
     val linkedDevice     = plant?.deviceId
     val isDeviceLinked   = linkedDevice != null
-    val isDeviceConnected = plant?.deviceId != null   // TODO: wire to real connectivity state
     val addedDate        = plant?.dateCreated?.let {
         SimpleDateFormat("MMM d", Locale.US).format(Date(it))
     } ?: "—"
-    val latestSession    = analysisHistory.firstOrNull()
 
-    val monitoringState  = when {
-        !isDeviceLinked      -> MonitoringState.NO_DEVICE
-        !isDeviceConnected   -> MonitoringState.DISCONNECTED
-        else                 -> MonitoringState.CONNECTED
+    // Poll the linked device the same way IoTDeviceDetailViewModel does —
+    // 3s interval, falls back to last known reading when unreachable.
+    DisposableEffect(linkedDevice) {
+        if (linkedDevice != null) {
+            viewModel.startLiveMonitoring(linkedDevice)
+        } else {
+            viewModel.stopLiveMonitoring()
+        }
+        onDispose { viewModel.stopLiveMonitoring() }
     }
 
-    val fabIsFullAnalysis = monitoringState == MonitoringState.CONNECTED
-    val fabNote = when (monitoringState) {
-        MonitoringState.NO_DEVICE     -> "No sensor linked — result will be image-only (partial)"
-        MonitoringState.DISCONNECTED  -> "Sensor disconnected — result will be image-only (partial)"
-        MonitoringState.CONNECTED     -> null
+    val fabIsFullAnalysis = isDeviceLinked && liveMonitoring.status == MonitoringStatus.CONNECTED
+    val fabNote = when {
+        !isDeviceLinked -> "No sensor linked — result will be image-only (partial)"
+        liveMonitoring.status != MonitoringStatus.CONNECTED -> "Sensor disconnected — result will be image-only (partial)"
+        else -> null
     }
-
-    val sensorData = listOf(
-        SensorReading("Moist",   "${latestSession?.soilMoisture?.toInt()}%",  ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("Soil pH", "${latestSession?.soilPh}",                   ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("Soil T",  "${latestSession?.soilTemp?.toInt()}°",       ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("EC",      "${latestSession?.electricalConductivity}",   ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("N",       "${latestSession?.nitrogen}",                 ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("P",       "${latestSession?.phosphorus}",               ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("K",       "${latestSession?.potassium}",                ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("Light",   "${latestSession?.lightIntensity}k",          ThresholdLevel.NORMAL, !isDeviceConnected),
-        SensorReading("Temp",    "${latestSession?.airTemp?.toInt()}°",        ThresholdLevel.NORMAL, !isDeviceConnected)
-    )
 
     val displayHistory = analysisHistory.take(3).map { session ->
         AnalysisHistoryItem(
@@ -197,20 +185,36 @@ fun PlantDetailScreen(
                 PlantInfoCard(
                     plantName   = plantName,
                     addedDate   = addedDate,
-                    deviceName  = if (isDeviceLinked) (plant?.deviceId ?: "") else null
+                    deviceName  = if (isDeviceLinked) (iotDevice?.deviceName ?: "") else null
                 )
 
                 // 2 — Monitoring section
                 SectionHeader(
-                    title   = if (monitoringState == MonitoringState.CONNECTED) "Live monitoring" else "Monitoring",
+                    title   = if (liveMonitoring.status == MonitoringStatus.CONNECTED) "Live monitoring" else "Monitoring",
                     seeAll  = null
                 )
-                MonitoringCard(
-                    state        = monitoringState,
-                    deviceName   = plant?.deviceId ?: "Garden Sensor",
-                    sensors      = if (isDeviceLinked) sensorData else emptyList(),
-                    onLinkDevice = onNavigateToLinkDevice
-                )
+                if (!isDeviceLinked) {
+
+                    NoDeviceCard(onLinkDevice = onNavigateToLinkDevice)
+                } else {
+
+                    MonitoringCard(
+                        title = iotDevice?.deviceName ?: "Garden Sensor",
+                        status = liveMonitoring.status,
+                        readings = liveMonitoring.readings,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_iot_device),
+                                contentDescription = null,
+                                tint = if (liveMonitoring.status == MonitoringStatus.CONNECTED) GreenPrimary else Warning,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        lastSeenText = liveMonitoring.lastSeenText,
+                        staleNote = liveMonitoring.staleNote,
+                        onReconnect = { linkedDevice?.let { viewModel.startLiveMonitoring(it) } }
+                    )
+                }
 
                 // 3 — Analysis history
                 SectionHeader(
@@ -266,7 +270,7 @@ fun PlantDetailScreen(
         // ── Unlink modal ──────────────────────────────────────────────────
         if (showUnlinkConfirm) {
             UnlinkDeviceModal(
-                deviceName = plant?.deviceId ?: "this device",
+                deviceName = iotDevice?.deviceName ?: "this device",
                 onConfirm = {
                     viewModel.unlinkDevice(plantId)
                     showUnlinkConfirm = false
@@ -555,64 +559,6 @@ fun PlantInfoCard(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun MonitoringCard(
-    state: MonitoringState,
-    deviceName: String,
-    sensors: List<SensorReading>,
-    onLinkDevice: () -> Unit
-) {
-    when (state) {
-        MonitoringState.NO_DEVICE -> NoDeviceCard(onLinkDevice = onLinkDevice)
-
-        MonitoringState.DISCONNECTED -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(WarningBg, RoundedCornerShape(14.dp))
-                    .border(1.dp, WarningBorder, RoundedCornerShape(14.dp))
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                DeviceStatusRow(
-                    deviceName    = deviceName,
-                    isConnected   = false
-                )
-                if (sensors.isNotEmpty()) {
-                    SensorGrid3x3(sensors = sensors, isStale = true)
-                    Text(
-                        text      = "Last update: stale",
-                        fontSize  = 10.sp,
-                        fontFamily = DMSans,
-                        color     = Warning,
-                        modifier  = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.End
-                    )
-                }
-            }
-        }
-
-        MonitoringState.CONNECTED -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(GreenBgLight, RoundedCornerShape(14.dp))
-                    .border(1.dp, GreenLight, RoundedCornerShape(14.dp))
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                DeviceStatusRow(
-                    deviceName  = deviceName,
-                    isConnected = true
-                )
-                if (sensors.isNotEmpty()) {
-                    SensorGrid3x3(sensors = sensors, isStale = false)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun NoDeviceCard(onLinkDevice: () -> Unit) {
     Column(
         modifier = Modifier
@@ -655,171 +601,7 @@ private fun NoDeviceCard(onLinkDevice: () -> Unit) {
     }
 }
 
-@Composable
-private fun DeviceStatusRow(deviceName: String, isConnected: Boolean) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .background(White, RoundedCornerShape(10.dp))
-                .border(
-                    1.dp,
-                    if (isConnected) GreenLight else WarningBorder,
-                    RoundedCornerShape(10.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_iot_device),
-                contentDescription = null,
-                tint = if (isConnected) GreenPrimary else Warning,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        Text(
-            text       = deviceName,
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = DMSans,
-            color      = Black,
-            modifier   = Modifier.weight(1f)
-        )
-        // Pill
-        Row(
-            modifier = Modifier
-                .background(
-                    if (isConnected) GreenPrimary else White,
-                    RoundedCornerShape(999.dp)
-                )
-                .then(
-                    if (!isConnected) Modifier.border(
-                        1.dp,
-                        WarningBorder,
-                        RoundedCornerShape(999.dp)
-                    )
-                    else Modifier
-                )
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(if (isConnected) White else Warning)
-            )
-            Text(
-                text       = if (isConnected) "Connected" else "Disconnected",
-                fontSize   = 10.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = DMSans,
-                color      = if (isConnected) White else Warning
-            )
-        }
-    }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3×3 SENSOR GRID
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-fun SensorGrid3x3(sensors: List<SensorReading>, isStale: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        sensors.chunked(3).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                rowItems.forEach { sensor ->
-                    SensorCell3x3(
-                        sensor  = sensor,
-                        isStale = isStale,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-fun SensorCell3x3(sensor: SensorReading, isStale: Boolean, modifier: Modifier = Modifier) {
-    val stale = isStale || sensor.isStale
-    Column(
-        modifier = modifier
-            .background(
-                if (stale) OffWhite else White,
-                RoundedCornerShape(10.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = if (stale) GrayLight else GreenLight,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(
-            text      = sensor.name.uppercase(),
-            fontSize  = 9.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = DMSans,
-            color     = GrayMedium,
-            letterSpacing = 0.3.sp,
-            maxLines  = 1
-        )
-        Text(
-            text      = sensor.value,
-            fontSize  = 13.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = DMSans,
-            color     = if (stale) GrayHint else Black
-        )
-        ThresholdChip(level = if (stale) ThresholdLevel.UNKNOWN else sensor.level, isStale = stale)
-    }
-}
-
-@Composable
-fun ThresholdChip(level: ThresholdLevel, isStale: Boolean = false) {
-    val (bg, fg, label) = when {
-        isStale                   -> Triple(OffWhite,    GrayHint,  "Stale")
-        level == ThresholdLevel.NORMAL -> Triple(GreenBgLight, GreenDark, "NORMAL")
-        level == ThresholdLevel.LOW    -> Triple(InfoBg,      Info,      "LOW")
-        level == ThresholdLevel.HIGH   -> Triple(DangerBg,   Danger,    "HIGH")
-        else                           -> Triple(OffWhite,    GrayHint,  "—")
-    }
-    Box(
-        modifier = Modifier
-            .background(bg, RoundedCornerShape(4.dp))
-            .then(
-                if (isStale) Modifier.border(
-                    1.dp,
-                    Border,
-                    RoundedCornerShape(4.dp)
-                ) else Modifier
-            )
-            .padding(horizontal = 5.dp)
-    ) {
-        Text(
-            text      = label,
-            fontSize  = 8.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = DMSans,
-            color     = fg,
-            letterSpacing = 0.3.sp
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ANALYSIS HISTORY ROW  (compact = main screen, !compact = AnalysisHistoryScreen)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -1525,17 +1307,22 @@ private fun PlantDetailPreviewContent(
             gradientEnd    = listOf(Color(0xFF3B6D11), Color(0xFF1F3909), Color(0xFF6A8030))[i % 3]
         )
     }
-    val dummySensors = listOf(
-        SensorReading("Moist",   "58%",   ThresholdLevel.NORMAL),
-        SensorReading("Soil pH", "6.6",   ThresholdLevel.NORMAL),
-        SensorReading("Soil T",  "26°",   ThresholdLevel.NORMAL),
-        SensorReading("EC",      "420",   ThresholdLevel.NORMAL),
-        SensorReading("N",       "36",    ThresholdLevel.NORMAL),
-        SensorReading("P",       "22",    ThresholdLevel.NORMAL),
-        SensorReading("K",       "185",   ThresholdLevel.NORMAL),
-        SensorReading("Light",   "22k",   ThresholdLevel.NORMAL),
-        SensorReading("Temp",    "28.4°", ThresholdLevel.NORMAL)
+    val dummyReadings = listOf(
+        MonitoringReading("Moist",   "58%",   ThresholdLevel.NORMAL),
+        MonitoringReading("Soil pH", "6.6",   ThresholdLevel.NORMAL),
+        MonitoringReading("Soil T",  "26°",   ThresholdLevel.NORMAL),
+        MonitoringReading("EC",      "420",   ThresholdLevel.NORMAL),
+        MonitoringReading("N",       "36",    ThresholdLevel.HIGH),
+        MonitoringReading("P",       "22",    ThresholdLevel.NORMAL),
+        MonitoringReading("K",       "185",   ThresholdLevel.NORMAL),
+        MonitoringReading("Light",   "22k",   ThresholdLevel.LOW),
+        MonitoringReading("Temp",    "28.4°", ThresholdLevel.NORMAL)
     )
+    val liveStatus = when (monitoringState) {
+        MonitoringState.NO_DEVICE -> MonitoringStatus.RECONNECTING // unused, NoDeviceCard shown instead
+        MonitoringState.DISCONNECTED -> MonitoringStatus.OFFLINE
+        MonitoringState.CONNECTED -> MonitoringStatus.CONNECTED
+    }
     val plantName = "Labuyo Plant #2"
     val fabIsFullAnalysis = monitoringState == MonitoringState.CONNECTED
     val fabNote = when (monitoringState) {
@@ -1560,7 +1347,26 @@ private fun PlantDetailPreviewContent(
             ) {
                 PlantInfoCard(plantName = plantName, addedDate = "Apr 10", deviceName = if (monitoringState != MonitoringState.NO_DEVICE) "Garden Sensor" else null)
                 SectionHeader(title = if (monitoringState == MonitoringState.CONNECTED) "Live monitoring" else "Monitoring", seeAll = null)
-                MonitoringCard(state = monitoringState, deviceName = "Garden Sensor", sensors = if (monitoringState != MonitoringState.NO_DEVICE) dummySensors else emptyList(), onLinkDevice = {})
+                if (monitoringState == MonitoringState.NO_DEVICE) {
+                    NoDeviceCard(onLinkDevice = {})
+                } else {
+                    MonitoringCard(
+                        title = "Garden Sensor",
+                        status = liveStatus,
+                        readings = dummyReadings,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_iot_device),
+                                contentDescription = null,
+                                tint = if (liveStatus == MonitoringStatus.CONNECTED) GreenPrimary else Warning,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        lastSeenText = if (liveStatus == MonitoringStatus.OFFLINE) "14 min ago" else null,
+                        staleNote = if (liveStatus == MonitoringStatus.OFFLINE) "Showing last known readings · 14 min ago" else null,
+                        onReconnect = {}
+                    )
+                }
                 SectionHeader(title = "Analysis history · ${dummyHistory.size}", seeAll = if (dummyHistory.isNotEmpty()) "See All" else null)
                 dummyHistory.forEach { AnalysisHistoryRow(it, compact = true) }
             }

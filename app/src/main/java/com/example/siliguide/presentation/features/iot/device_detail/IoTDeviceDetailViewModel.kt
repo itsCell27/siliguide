@@ -28,6 +28,8 @@ import javax.inject.Inject
 import android.util.Log
 import com.example.siliguide.domain.usecase.GetLinkedPlantByDeviceIdUseCase
 import com.example.siliguide.domain.usecase.UnlinkIoTDeviceToPlantUseCase
+import com.example.siliguide.domain.engine.SiliGuideThresholds
+import com.example.siliguide.domain.engine.ThresholdEngine
 import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 @HiltViewModel
@@ -253,15 +255,42 @@ class IoTDeviceDetailViewModel @Inject constructor(
         airTemp: Double?,
         light: Int?
     ): List<SensorReadingUi> = listOf(
-        SensorReadingUi("Soil Moisture", moisture.percent()),
-        SensorReadingUi("Soil Temp", soilTemp.celsius()),
-        SensorReadingUi("Soil pH", moisture?.let { ph.decimal(1) } ?: ph.decimal(1)),
-        SensorReadingUi("Soil N", nitrogen.ppm()),
-        SensorReadingUi("Soil P", phosphorus.ppm()),
-        SensorReadingUi("Soil K", potassium.ppm()),
-        SensorReadingUi("Soil EC", ec?.toString() ?: DASH),
-        SensorReadingUi("Air Temp", airTemp.celsius()),
-        SensorReadingUi("Light", light.lux())
+        SensorReadingUi(
+            "Soil Moisture", moisture.percent(),
+            ThresholdEngine.evaluate(moisture, SiliGuideThresholds.SOIL_MOISTURE)
+        ),
+        SensorReadingUi(
+            "Soil Temp", soilTemp.celsius(),
+            ThresholdEngine.evaluate(soilTemp, SiliGuideThresholds.SOIL_TEMP)
+        ),
+        SensorReadingUi(
+            "Soil pH", ph.decimal(1),
+            ThresholdEngine.evaluate(ph, SiliGuideThresholds.SOIL_PH)
+        ),
+        SensorReadingUi(
+            "Soil N", nitrogen.ppm(),
+            ThresholdEngine.evaluate(nitrogen?.toDouble(), SiliGuideThresholds.NITROGEN)
+        ),
+        SensorReadingUi(
+            "Soil P", phosphorus.ppm(),
+            ThresholdEngine.evaluate(phosphorus?.toDouble(), SiliGuideThresholds.PHOSPHORUS)
+        ),
+        SensorReadingUi(
+            "Soil K", potassium.ppm(),
+            ThresholdEngine.evaluate(potassium?.toDouble(), SiliGuideThresholds.POTASSIUM)
+        ),
+        SensorReadingUi(
+            "Soil EC", ec?.toString() ?: DASH,
+            ThresholdEngine.evaluate(ec?.toDouble(), SiliGuideThresholds.SOIL_EC)
+        ),
+        SensorReadingUi(
+            "Air Temp", airTemp.celsius(),
+            ThresholdEngine.evaluate(airTemp, SiliGuideThresholds.AIR_TEMP)
+        ),
+        SensorReadingUi(
+            "Light", light.lux(),
+            ThresholdEngine.evaluate(light?.toDouble(), SiliGuideThresholds.LIGHT_INTENSITY)
+        )
     )
 
     private fun Double?.percent(): String =
