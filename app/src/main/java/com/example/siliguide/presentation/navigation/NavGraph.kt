@@ -32,6 +32,7 @@ import com.example.siliguide.presentation.features.iot.components.QrScannerScree
 import com.example.siliguide.presentation.features.plants.AddPlantScreen
 import com.example.siliguide.presentation.features.plants.PlantDetailScreen
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import com.example.siliguide.presentation.features.analysis.AnalysisViewModel
 import com.example.siliguide.presentation.features.analysis.PreAnalysisScreen
 import com.example.siliguide.presentation.features.analysis.PreAnalysisState
@@ -41,6 +42,7 @@ import com.example.siliguide.presentation.features.iot.bluetooth_setup.Bluetooth
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothDeviceDetailsScreen
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothIntroScreen
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -1447,6 +1449,13 @@ fun SiliGuideNavGraph(
             val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
             val viewModel: PreAnalysisViewModel = hiltViewModel()
             val context = LocalContext.current
+
+            // Holds the "go to Camera" action that was interrupted by a
+            // permission prompt, so granting it (via the system dialog OR
+            // returning from app Settings) can resume the trip on its own —
+            // no second tap on Continue needed.
+            var pendingContinueAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
             val permissionLauncher =
                 rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
@@ -1464,6 +1473,16 @@ fun SiliGuideNavGraph(
 
             LaunchedEffect(Unit) {
                 viewModel.refreshCameraPermission(context)
+            }
+
+            // Fires the interrupted navigation the moment permission actually
+            // becomes Granted, whether that update came from the system
+            // dialog callback above or from resuming after app Settings.
+            LaunchedEffect(viewModel.permissionStatus) {
+                if (viewModel.permissionStatus == PermissionStatus.Granted) {
+                    pendingContinueAction?.invoke()
+                    pendingContinueAction = null
+                }
             }
 
             val lifecycleOwner = LocalLifecycleOwner.current
@@ -1499,6 +1518,8 @@ fun SiliGuideNavGraph(
                     }
 
                     PermissionStatus.RequestPermission -> {
+                        pendingContinueAction = navigate
+
                         viewModel.markCameraPermissionRequested()
 
                         permissionLauncher.launch(
@@ -1507,10 +1528,14 @@ fun SiliGuideNavGraph(
                     }
 
                     PermissionStatus.ShowRationale -> {
+                        pendingContinueAction = navigate
+
                         viewModel.showPermissionDialog()
                     }
 
                     PermissionStatus.PermanentlyDenied -> {
+                        pendingContinueAction = navigate
+
                         viewModel.showPermissionDialog()
                     }
                 }
@@ -1547,6 +1572,7 @@ fun SiliGuideNavGraph(
                 },
 
                 onPermissionDenied = {
+                    pendingContinueAction = null
                     viewModel.hidePermissionDialog()
                 },
 
