@@ -129,7 +129,7 @@ fun PlantDetailScreen(
         else -> null
     }
 
-    val displayHistory = analysisHistory.take(3).map { session ->
+    val displayHistory = analysisHistory.take(2).map { session ->
         AnalysisHistoryItem(
             sessionId      = session.sessionId,
             symptom        = session.predictedClass,
@@ -234,7 +234,7 @@ fun PlantDetailScreen(
                     displayHistory.forEach { item ->
                         AnalysisHistoryRow(
                             item    = item,
-                            compact = true,
+                            compact = false,
                             onClick = { onNavigateToAnalysisDetail(item.sessionId) }
                         )
                     }
@@ -538,17 +538,19 @@ fun PlantInfoCard(
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text("Added $addedDate", fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
-//                if (deviceName != null) {
-//                    Box(modifier = Modifier
-//                        .size(3.dp)
-//                        .background(GrayLight, CircleShape))
-//                    Text(deviceName, fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
-//                } else {
-//                    Box(modifier = Modifier
-//                        .size(3.dp)
-//                        .background(GrayLight, CircleShape))
-//                    Text("No device linked", fontSize = 11.sp, fontFamily = DMSans, color = GrayHint)
-//                }
+                Box(
+                    modifier = Modifier
+                        .size(3.dp)
+                        .background(GrayLight, CircleShape)
+                )
+                // Mockup keeps one muted color for the whole meta line, whether
+                // a device is linked or not — no separate "dim" state for empty.
+                Text(
+                    text = deviceName?.takeIf { it.isNotBlank() } ?: "No device linked",
+                    fontSize = 11.sp,
+                    fontFamily = DMSans,
+                    color = GrayMedium
+                )
             }
         }
     }
@@ -607,23 +609,28 @@ private fun NoDeviceCard(onLinkDevice: () -> Unit) {
 @Composable
 fun AnalysisHistoryRow(
     item: AnalysisHistoryItem,
+    // Mockup (screen 11 · .hcf) renders one size everywhere — this
+    // screen's history row and the See All list are the same card.
+    // Param kept so existing call sites don't need to change.
     compact: Boolean = true,
     onClick: () -> Unit = {}
 ) {
+    val isHealthy = item.condition.equals("No issues detected", ignoreCase = true)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(White, RoundedCornerShape(if (compact) 12.dp else 13.dp))
-            .border(1.dp, Border, RoundedCornerShape(if (compact) 12.dp else 13.dp))
+            .background(White, RoundedCornerShape(13.dp))
+            .border(1.dp, Border, RoundedCornerShape(13.dp))
             .clickable { onClick() }
-            .padding(if (compact) 10.dp else 12.dp),
-        verticalAlignment = if (compact) Alignment.CenterVertically else Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Gradient thumb
         val thumbSize = if (compact) 55.dp else 60.dp
         val thumbRadius = if (compact) 10.dp else 11.dp
 
+        // Thumbnail — actual leaf photo when we have one, gradient placeholder otherwise
         val image = item.imagePath
         if (!image.isNullOrEmpty() && File(image).exists()) {
             AsyncImage(
@@ -645,86 +652,101 @@ fun AnalysisHistoryRow(
             )
         }
 
-
-        Column(
-            modifier = Modifier.weight(1f),
-            // Reduce the gap between the different text elements
-            verticalArrangement = Arrangement.spacedBy(if (compact) 1.dp else 2.dp)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text      = formatPrediction(item.symptom),
-                fontSize  = if (compact) 11.sp else 13.sp,
-                // 1. Force a tighter line height
-                lineHeight = if (compact) 13.sp else 15.sp,
-                // 2. Remove extra top/bottom reserved space
-                style = LocalTextStyle.current.copy(
+                text       = formatPrediction(item.symptom),
+                fontSize   = 11.sp,
+                lineHeight = 13.sp,
+                style      = LocalTextStyle.current.copy(
                     platformStyle = PlatformTextStyle(includeFontPadding = false)
                 ),
                 fontWeight = FontWeight.Medium,
                 fontFamily = DMSans,
-                color     = Black
+                color      = Black
             )
+            // Diagnosed condition — bold green when something was found,
+            // plain body gray for "No issues detected" (matches mockup).
             Text(
-                text     = item.condition,
-                fontSize = if (compact) 10.sp else 11.sp,
-                lineHeight = if (compact) 12.sp else 13.sp,
-                style = LocalTextStyle.current.copy(
+                text       = item.condition,
+                fontSize   = 10.sp,
+                lineHeight = 13.sp,
+                style      = LocalTextStyle.current.copy(
                     platformStyle = PlatformTextStyle(includeFontPadding = false)
                 ),
+                fontWeight = if (isHealthy) FontWeight.Normal else FontWeight.Medium,
                 fontFamily = DMSans,
-                color    = GrayBody
+                color      = if (isHealthy) GrayBody else GreenDark,
+                modifier   = Modifier.padding(top = 1.dp)
             )
 
-            // ... (Full/Partial badge Row)
-
-            Text(
-                text     = item.timestamp,
-                fontSize = if (compact) 9.sp else 10.sp,
-                lineHeight = if (compact) 11.sp else 12.sp,
-                style = LocalTextStyle.current.copy(
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                fontFamily = DMSans,
-                color    = GrayHint
-            )
-        }
-
-        // Right: confidence badge + chevron
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+            // Full analysis (green pill) vs Partial · image only (gray outline pill)
             Box(
                 modifier = Modifier
+                    .padding(top = 4.dp)
                     .background(
-                        when {
-                            item.confidence >= 80 -> GreenBgLight
-                            item.confidence >= 60 -> WarningBg
-                            else -> DangerBg
-                        },
+                        if (item.isFullAnalysis) GreenBgLight else OffWhite,
                         RoundedCornerShape(5.dp)
                     )
-                    // 1. Reduced vertical padding from 3.dp to 1.5.dp
-                    .padding(horizontal = 6.dp, vertical = 1.5.dp)
+                    .then(
+                        if (item.isFullAnalysis) Modifier
+                        else Modifier.border(1.dp, Border, RoundedCornerShape(5.dp))
+                    )
+                    .padding(horizontal = 7.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text      = "${item.confidence}%",
-                    fontSize  = if (compact) 9.sp else 11.sp,
-                    // 2. Set tight line height
-                    lineHeight = if (compact) 9.sp else 11.sp,
-                    // 3. Remove extra reserved font space
-                    style = LocalTextStyle.current.copy(
+                    text       = if (item.isFullAnalysis) "Full analysis" else "Partial · image only",
+                    fontSize   = 9.sp,
+                    lineHeight = 11.sp,
+                    style      = LocalTextStyle.current.copy(
                         platformStyle = PlatformTextStyle(includeFontPadding = false)
                     ),
                     fontWeight = FontWeight.Medium,
                     fontFamily = DMSans,
-                    color     = when {
-                        item.confidence >= 80 -> GreenDark
-                        item.confidence >= 60 -> Warning
-                        else                  -> Danger
-                    }
+                    color      = if (item.isFullAnalysis) GreenDark else GrayMedium
                 )
             }
+
+            Text(
+                text       = item.timestamp,
+                fontSize   = 9.sp,
+                lineHeight = 11.sp,
+                style      = LocalTextStyle.current.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                fontFamily = DMSans,
+                color      = GrayHint,
+                modifier   = Modifier.padding(top = 2.dp)
+            )
+        }
+
+        // Confidence badge
+        Box(
+            modifier = Modifier
+                .background(
+                    when {
+                        item.confidence >= 80 -> GreenBgLight
+                        item.confidence >= 60 -> WarningBg
+                        else -> DangerBg
+                    },
+                    RoundedCornerShape(5.dp)
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text       = "${item.confidence}%",
+                fontSize   = 9.sp,
+                lineHeight = 11.sp,
+                style      = LocalTextStyle.current.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color      = when {
+                    item.confidence >= 80 -> GreenDark
+                    item.confidence >= 60 -> Warning
+                    else                  -> Danger
+                }
+            )
         }
     }
 }

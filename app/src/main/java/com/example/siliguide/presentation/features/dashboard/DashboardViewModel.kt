@@ -138,7 +138,7 @@ class DashboardViewModel @Inject constructor(
 
     private companion object {
         const val DEVICE_LIMIT = 2
-        const val PLANT_LIMIT = 3
+        const val PLANT_LIMIT = 5
 
         const val PING_TIMEOUT_MS = 2_000L
         const val PING_BATCH_TIMEOUT_MS = 4_000L

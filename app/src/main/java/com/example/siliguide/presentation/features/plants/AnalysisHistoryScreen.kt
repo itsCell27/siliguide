@@ -4,14 +4,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material3.*
@@ -21,19 +20,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.R
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DUMMY DATA
+// SAMPLE DATA — previews only. Real screen loads from PlantViewModel below.
 // ─────────────────────────────────────────────────────────────────────────────
 
-val dummyAnalysisHistory = listOf(
+private val dummyAnalysisHistory = listOf(
     AnalysisHistoryItem(
         sessionId      = "s1",
         symptom        = "Leaf Curling",
@@ -102,48 +105,79 @@ val dummyAnalysisHistory = listOf(
     )
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FILTER CHIP MODEL
-// ─────────────────────────────────────────────────────────────────────────────
-
-enum class HistoryFilter(val label: String) {
-    ALL("All"),
-    HEALTHY("Healthy"),
-    WARNING("Warning"),
-    FULL("Full"),
-    PARTIAL("Partial")
+/** Fallback thumbnail gradient by predicted symptom class, used when a session has no saved image. */
+private fun gradientForSymptom(symptom: String): Pair<Color, Color> = when (symptom.lowercase()) {
+    "healthy"   -> Color(0xFF3B6D11) to Color(0xFF1F3909)
+    "curling"   -> Color(0xFF7BA34C) to Color(0xFF3B6D11)
+    "spots"     -> Color(0xFFB04040) to Color(0xFF6A1818)
+    "yellowing" -> Color(0xFFA8B460) to Color(0xFF6A8030)
+    else        -> Color(0xFF5E8C2E) to Color(0xFF3E6418)
 }
 
-private fun List<AnalysisHistoryItem>.applyFilter(filter: HistoryFilter): List<AnalysisHistoryItem> =
-    when (filter) {
-        HistoryFilter.ALL     -> this
-        HistoryFilter.HEALTHY -> filter { it.symptom.lowercase() == "healthy" }
-        HistoryFilter.WARNING -> filter { it.symptom.lowercase() != "healthy" }
-        HistoryFilter.FULL    -> filter { it.isFullAnalysis }
-        HistoryFilter.PARTIAL -> filter { !it.isFullAnalysis }
-    }
-
 // ─────────────────────────────────────────────────────────────────────────────
-// SCREEN
+// SCREEN — wired to PlantViewModel (shares state with PlantDetailScreen)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AnalysisHistoryScreen(
     plantId: String,
-    plantName: String,
-    // TODO: replace with ViewModel + real data
-    items: List<AnalysisHistoryItem> = dummyAnalysisHistory,
     onBack: () -> Unit = {},
-    onNavigateToAnalysisDetail: (sessionId: String) -> Unit = {}
+    onNavigateToAnalysisDetail: (sessionId: String) -> Unit = {},
+    viewModel: PlantViewModel = hiltViewModel()
 ) {
-    var activeFilter by remember { mutableStateOf(HistoryFilter.ALL) }
+    LaunchedEffect(plantId) { viewModel.loadPlant(plantId) }
 
-    val filteredItems = remember(activeFilter, items) {
-        items.applyFilter(activeFilter)
+    val plant by viewModel.plantState.collectAsState()
+    val analysisHistory by viewModel.analysisHistoryState.collectAsState()
+
+    val plantName = plant?.name ?: "Plant"
+
+    val items = remember(analysisHistory) {
+        analysisHistory.map { session ->
+            val (gradStart, gradEnd) = gradientForSymptom(session.predictedClass)
+            AnalysisHistoryItem(
+                sessionId      = session.sessionId,
+                symptom        = session.predictedClass,
+                condition      = session.plantCondition ?: "No issues detected",
+                confidence     = (session.confidence * 100).toInt(),
+                isFullAnalysis = !session.isPartial,
+                timestamp      = formatTimestamp(session.sessionTimestamp),
+                imagePath      = session.imagePath,
+                gradientStart  = gradStart,
+                gradientEnd    = gradEnd
+            )
+        }
     }
 
-    // Badge color: amber when warning filter active, green otherwise
-    val badgeIsWarning = activeFilter == HistoryFilter.WARNING
+    AnalysisHistoryContent(
+        plantName                  = plantName,
+        items                       = items,
+        onBack                      = onBack,
+        onNavigateToAnalysisDetail  = onNavigateToAnalysisDetail
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTENT — screen 11F/11G: top bar + plant line + search + result list
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun AnalysisHistoryContent(
+    plantName: String,
+    items: List<AnalysisHistoryItem>,
+    onBack: () -> Unit,
+    onNavigateToAnalysisDetail: (sessionId: String) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val isSearching = searchQuery.isNotBlank()
+
+    val filteredItems = remember(searchQuery, items) {
+        if (!isSearching) items
+        else items.filter {
+            it.symptom.contains(searchQuery, ignoreCase = true) ||
+                    it.condition.contains(searchQuery, ignoreCase = true)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -151,47 +185,26 @@ fun AnalysisHistoryScreen(
             .background(OffWhite)
     ) {
         // ── Top bar ───────────────────────────────────────────────────────
-        AnalysisHistoryTopBar(
-            resultCount    = filteredItems.size,
-            badgeIsWarning = badgeIsWarning,
-            onBack         = onBack
-        )
+        AnalysisHistoryTopBar(resultCount = filteredItems.size, onBack = onBack)
 
         // ── Plant subtitle row ────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(White)
-                .border(
-                    width = 1.dp,
-                    color = Border,
-                    shape = RoundedCornerShape(0.dp)
-                )
-                .padding(horizontal = 18.dp, vertical = 7.dp)
-        ) {
-            Text("Plant: ", fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
-            Text(plantName, fontSize = 11.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = GreenDark)
-        }
-
-        // ── Filter chips ──────────────────────────────────────────────────
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(White)
-                .border(width = 1.dp, color = Border, shape = RoundedCornerShape(0.dp))
-                .padding(horizontal = 18.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            items(HistoryFilter.entries) { filter ->
-                FilterChip(
-                    filter   = filter,
-                    isActive = filter == activeFilter,
-                    onClick  = { activeFilter = filter }
-                )
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(White)
+                    .padding(start = 18.dp, top = 7.dp, end = 18.dp, bottom = 5.dp)
+            ) {
+                Text("Plant: ", fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium)
+                Text(plantName, fontSize = 11.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = GreenDark)
             }
+            HorizontalDivider(color = Border, thickness = 1.dp)
         }
 
-        // ── Results list ──────────────────────────────────────────────────
+        // ── Search bar ────────────────────────────────────────────────────
+        HistorySearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
+
+        // ── Results ───────────────────────────────────────────────────────
         if (filteredItems.isEmpty()) {
             Column(
                 modifier = Modifier
@@ -212,29 +225,40 @@ fun AnalysisHistoryScreen(
                         modifier = Modifier.size(32.dp)
                     )
                 }
-                Text("No results", style = MaterialTheme.typography.titleSmall, color = GrayBody)
                 Text(
-                    "No entries match the selected filter.",
+                    if (isSearching) "No results" else "No analysis history yet",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = GrayBody
+                )
+                Text(
+                    if (isSearching) "No entries match \"$searchQuery\"." else "Analyze this plant to start building its history.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = GrayHint
+                    color = GrayHint,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         } else {
-            // Result count label
-            Text(
-                text     = "${filteredItems.size} result${if (filteredItems.size != 1) "s" else ""}${if (activeFilter != HistoryFilter.ALL) " showing issues" else ""}",
-                fontSize = 10.sp,
-                fontFamily = DMSans,
-                color    = GrayMedium,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
-            )
+            if (isSearching) {
+                Text(
+                    text = "${filteredItems.size} result${if (filteredItems.size != 1) "s" else ""} for \"$searchQuery\"",
+                    fontSize = 10.sp,
+                    fontFamily = DMSans,
+                    color = GrayMedium,
+                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 2.dp)
+                )
+            }
 
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .navigationBarsPadding(),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(
+                    start = 18.dp,
+                    end = 18.dp,
+                    top = if (isSearching) 0.dp else 12.dp,
+                    bottom = 16.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 items(filteredItems, key = { it.sessionId }) { item ->
@@ -244,20 +268,18 @@ fun AnalysisHistoryScreen(
                         onClick = { onNavigateToAnalysisDetail(item.sessionId) }
                     )
                 }
-                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ANALYSIS HISTORY TOP BAR
+// TOP BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun AnalysisHistoryTopBar(
     resultCount: Int,
-    badgeIsWarning: Boolean,
     onBack: () -> Unit
 ) {
     Column {
@@ -294,26 +316,19 @@ private fun AnalysisHistoryTopBar(
                 modifier = Modifier.weight(1f)
             )
 
-            // Count badge
+            // Count badge — always green per mockup (screen 11F & 11G)
             Box(
                 modifier = Modifier
-                    .background(
-                        if (badgeIsWarning) WarningBg else GreenBgLight,
-                        RoundedCornerShape(20.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (badgeIsWarning) WarningBorder else GreenLight,
-                        RoundedCornerShape(20.dp)
-                    )
+                    .background(GreenBgLight, RoundedCornerShape(20.dp))
+                    .border(1.dp, GreenLight, RoundedCornerShape(20.dp))
                     .padding(horizontal = 10.dp, vertical = 3.dp)
             ) {
                 Text(
-                    text      = "$resultCount",
-                    fontSize  = 11.sp,
+                    text       = "$resultCount",
+                    fontSize   = 11.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = DMSans,
-                    color     = if (badgeIsWarning) Warning else GreenDark
+                    color      = GreenDark
                 )
             }
         }
@@ -322,53 +337,58 @@ private fun AnalysisHistoryTopBar(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FILTER CHIP
+// SEARCH BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun FilterChip(
-    filter: HistoryFilter,
-    isActive: Boolean,
-    onClick: () -> Unit
+private fun HistorySearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit
 ) {
-    // Active warning filter gets amber styling
-    val isActiveWarning = isActive && filter == HistoryFilter.WARNING
-
-    val bg      = when {
-        isActiveWarning -> WarningBg
-        isActive        -> GreenBgLight
-        else            -> OffWhite
-    }
-    val border  = when {
-        isActiveWarning -> WarningBorder
-        isActive        -> GreenPrimary
-        else            -> Border
-    }
-    val borderW = if (isActive) 1.5.dp else 1.dp
-    val textColor = when {
-        isActiveWarning -> Warning
-        isActive        -> GreenDark
-        else            -> GrayBody
-    }
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(bg)
-            .border(borderW, border, RoundedCornerShape(20.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onClick() }
-            .padding(horizontal = 11.dp, vertical = 5.dp)
-    ) {
-        Text(
-            text      = filter.label,
-            fontSize  = 11.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = DMSans,
-            color     = textColor
-        )
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(White)
+                .padding(horizontal = 18.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(OffWhite, RoundedCornerShape(10.dp))
+                    .border(1.dp, Border, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 11.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_search),
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    colorFilter = ColorFilter.tint(GrayMedium)
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            "Search analysis history",
+                            fontSize = 12.sp,
+                            fontFamily = DMSans,
+                            color = GrayMedium
+                        )
+                    }
+                    BasicTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 12.sp, fontFamily = DMSans, color = Black),
+                        cursorBrush = SolidColor(GreenPrimary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = Border, thickness = 1.dp)
     }
 }
 
@@ -380,32 +400,40 @@ private fun FilterChip(
 @Composable
 fun AnalysisHistory11FPreview() {
     SiliGuideTheme {
-        AnalysisHistoryScreen(
-            plantId   = "p1",
-            plantName = "Labuyo Plant #2"
+        AnalysisHistoryContent(
+            plantName = "Labuyo Plant #2",
+            items = dummyAnalysisHistory,
+            onBack = {},
+            onNavigateToAnalysisDetail = {}
         )
     }
 }
 
-@Preview(showBackground = true, name = "11G — Warning filter", showSystemUi = true)
+@Preview(showBackground = true, name = "11G — Search \"leaf\"", showSystemUi = true)
 @Composable
 fun AnalysisHistory11GPreview() {
     SiliGuideTheme {
-        AnalysisHistoryScreen(
-            plantId   = "p1",
-            plantName = "Labuyo Plant #2"
+        AnalysisHistoryContent(
+            plantName = "Labuyo Plant #2",
+            items = dummyAnalysisHistory.filter {
+                it.symptom.contains("leaf", ignoreCase = true) ||
+                        it.condition.contains("leaf", ignoreCase = true)
+            },
+            onBack = {},
+            onNavigateToAnalysisDetail = {}
         )
     }
 }
 
-@Preview(showBackground = true, name = "History — Empty list", showSystemUi = true)
+@Preview(showBackground = true, name = "History — Empty", showSystemUi = true)
 @Composable
 fun AnalysisHistoryEmptyPreview() {
     SiliGuideTheme {
-        AnalysisHistoryScreen(
-            plantId   = "p1",
+        AnalysisHistoryContent(
             plantName = "Labuyo Plant #2",
-            items     = emptyList()
+            items = emptyList(),
+            onBack = {},
+            onNavigateToAnalysisDetail = {}
         )
     }
 }

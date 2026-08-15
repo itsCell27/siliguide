@@ -72,6 +72,7 @@ import com.example.siliguide.presentation.features.dashboard.components.SeeAllVi
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllDevicesScreen
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllPlantsScreen
 import com.example.siliguide.presentation.features.iot.device_detail.DetailConnectionMode
+import com.example.siliguide.presentation.features.plants.AnalysisHistoryScreen
 
 @Composable
 fun SiliGuideNavGraph(
@@ -323,6 +324,12 @@ fun SiliGuideNavGraph(
                         Screen.PreAnalysis.createRoute(plantId)
                     )
                 },
+                onNavigateToSeeAllHistory = { seeAllPlantId ->
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.AnalysisHistory.createRoute(seeAllPlantId)
+                    )
+                },
                 onNavigateToAnalysisDetail = { sessionId ->
                     navController.navigateSafely(
                         backStackEntry,
@@ -337,6 +344,24 @@ fun SiliGuideNavGraph(
                 }
             )
         }
+
+        composable(
+            route = Screen.AnalysisHistory.route,
+            arguments = listOf(navArgument("plantId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val plantId = backStackEntry.arguments?.getString("plantId") ?: ""
+            AnalysisHistoryScreen(
+                plantId = plantId,
+                onBack = { navController.popSafely(backStackEntry) },
+                onNavigateToAnalysisDetail = { sessionId ->
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.AnalysisHistoryResult.createRoute(sessionId)
+                    )
+                }
+            )
+        }
+
         // --- PLANT MANAGEMENT ---
 
 

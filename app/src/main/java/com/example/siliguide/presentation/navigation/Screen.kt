@@ -74,6 +74,10 @@ sealed class Screen(val route: String) {
     object PlantDetail : Screen("plant/{plantId}") {
         fun createRoute(plantId: String) = "plant/$plantId"
     }
+    object AnalysisHistory : Screen("analysis_history/{plantId}") {
+        fun createRoute(plantId: String) = "analysis_history/$plantId"
+    }
+
     object IoTSetup : Screen("iot_setup")
 
     object IoTSetupBluetooth : Screen("iot_setup_bluetooth")
