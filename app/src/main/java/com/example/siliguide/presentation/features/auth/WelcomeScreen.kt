@@ -7,18 +7,28 @@ import androidx.compose.foundation.shape.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
+import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
 
+// NOTE (breaking change vs old mockup):
+// Old buttons: Login (filled) + Sign Up (outlined) + Continue as Guest (ghost)
+// New mockup:  Continue with Email (filled) + Continue with Google (outlined) + Continue as Guest (ghost)
+// Callback names changed below. Update NavGraph call site to match.
 @Composable
 fun WelcomeScreen(
-    onLoginClick: () -> Unit,
-    onSignUpClick: () -> Unit,
+    onContinueWithEmailClick: () -> Unit,
+    onContinueWithGoogleClick: () -> Unit,
     onGuestClick: () -> Unit
 ) {
     var visible by remember { mutableStateOf(false) }
@@ -52,7 +62,7 @@ fun WelcomeScreen(
 
             // ── Adaptive sizing ───────────────────────────────────────────────
             val logoSize      = (screenW * 0.22f).coerceIn(60.dp, 96.dp)
-            val iconSize      = (logoSize * 0.54f).coerceIn(32.dp, 52.dp)
+            val logoImgSize   = (logoSize * 0.72f).coerceIn(40.dp, 68.dp)
             val glowSize      = (screenW * 0.72f).coerceIn(180.dp, 300.dp)
             val titleFontSize = (screenW.value * 0.09f).coerceIn(26f, 36f).sp
             val spacerLg      = if (screenH < 680.dp) 10.dp else 18.dp
@@ -95,7 +105,6 @@ fun WelcomeScreen(
                                 translationY = logoSlide
                             }
                         ) {
-                            // Logo circle
                             Box(
                                 modifier = Modifier
                                     .size(logoSize)
@@ -103,7 +112,12 @@ fun WelcomeScreen(
                                     .border(1.5.dp, GreenLight, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                SiliLeafIcon(modifier = Modifier.size(iconSize))
+                                Image(
+                                    painter = painterResource(id = R.drawable.siliguide_logo1),
+                                    contentDescription = "SiliGuide logo",
+                                    modifier = Modifier.size(logoImgSize),
+                                    contentScale = ContentScale.Fit
+                                )
                             }
 
                             Spacer(Modifier.height(spacerLg))
@@ -139,7 +153,7 @@ fun WelcomeScreen(
                                     .padding(horizontal = 14.dp, vertical = 5.dp)
                             ) {
                                 Text(
-                                    "DECISION SUPPORT SYSTEM",
+                                    "Decision Support System",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = GreenDark
                                 )
@@ -177,9 +191,9 @@ fun WelcomeScreen(
                                 color = GrayMedium
                             )
 
-                            // Login — filled
+                            // Continue with Email — filled
                             Button(
-                                onClick = onLoginClick,
+                                onClick = onContinueWithEmailClick,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(btnHeight),
@@ -193,15 +207,17 @@ fun WelcomeScreen(
                                     pressedElevation = 0.dp
                                 )
                             ) {
+                                EnvelopeIcon(modifier = Modifier.size(15.dp), color = White)
+                                Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "Login",
+                                    "Continue with Email",
                                     style = MaterialTheme.typography.titleSmall
                                 )
                             }
 
-                            // Sign Up — outlined
+                            // Continue with Google — outlined
                             OutlinedButton(
-                                onClick = onSignUpClick,
+                                onClick = onContinueWithGoogleClick,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(btnHeight),
@@ -212,8 +228,10 @@ fun WelcomeScreen(
                                     contentColor = GreenPrimary
                                 )
                             ) {
+                                GoogleIcon(modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "Sign Up",
+                                    "Continue with Google",
                                     style = MaterialTheme.typography.titleSmall
                                 )
                             }
@@ -270,92 +288,111 @@ fun WelcomeScreen(
     }
 }
 
-// ── Leaf icon ─────────────────────────────────────────────────────────────────
+// ── Envelope icon (Canvas, no drawable XML per icon convention) ───────────────
 @Composable
-private fun SiliLeafIcon(modifier: Modifier = Modifier) {
+private fun EnvelopeIcon(modifier: Modifier = Modifier, color: Color) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val cx = w / 2f
+        val strokeW = w * 0.09f
 
-        // Leaf body
-        val leafPath = Path().apply {
-            moveTo(cx, h * 0.13f)
-            cubicTo(cx + w * 0.40f, h * 0.34f, cx + w * 0.38f, h * 0.68f, cx, h * 0.90f)
-            cubicTo(cx - w * 0.38f, h * 0.68f, cx - w * 0.40f, h * 0.34f, cx, h * 0.13f)
-            close()
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.06f, h * 0.2f),
+            size = Size(w * 0.88f, h * 0.66f),
+            cornerRadius = CornerRadius(w * 0.1f, w * 0.1f),
+            style = Stroke(width = strokeW)
+        )
+
+        val flapPath = Path().apply {
+            moveTo(w * 0.11f, h * 0.27f)
+            lineTo(w * 0.5f, h * 0.58f)
+            lineTo(w * 0.89f, h * 0.27f)
         }
-        drawPath(leafPath, GreenPrimary)
-
-        // Center vein
-        drawLine(
-            color = GreenBgLight,
-            start = Offset(cx, h * 0.88f),
-            end = Offset(cx, h * 0.38f),
-            strokeWidth = w * 0.044f,
-            cap = StrokeCap.Round
-        )
-
-        // Left vein
-        drawLine(
-            color = GreenMid,
-            start = Offset(cx, h * 0.62f),
-            end = Offset(cx - w * 0.28f, h * 0.44f),
-            strokeWidth = w * 0.030f,
-            cap = StrokeCap.Round
-        )
-
-        // Right vein
-        drawLine(
-            color = GreenMid,
-            start = Offset(cx, h * 0.52f),
-            end = Offset(cx + w * 0.28f, h * 0.34f),
-            strokeWidth = w * 0.030f,
-            cap = StrokeCap.Round
-        )
-
-        // Tip dot
-        drawCircle(
-            color = GreenLight,
-            radius = w * 0.054f,
-            center = Offset(cx, h * 0.13f)
+        drawPath(
+            path = flapPath,
+            color = color,
+            style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFFFFFFFF, widthDp = 360, heightDp = 740)
+// ── Google "G" icon (Canvas, brand colors, simplified) ─────────────────────────
+@Composable
+private fun GoogleIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val d = size.minDimension
+        val strokeW = d * 0.24f
+        val topLeft = Offset(strokeW / 2f, strokeW / 2f)
+        val arcSize = Size(d - strokeW, d - strokeW)
+
+        // Four quarter-arcs approximating the multicolor Google ring
+        drawArc(
+            color = Color(0xFF4285F4),
+            startAngle = -45f, sweepAngle = 90f, useCenter = false,
+            topLeft = topLeft, size = arcSize,
+            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
+        )
+        drawArc(
+            color = Color(0xFF34A853),
+            startAngle = 45f, sweepAngle = 90f, useCenter = false,
+            topLeft = topLeft, size = arcSize,
+            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
+        )
+        drawArc(
+            color = Color(0xFFFBBC05),
+            startAngle = 135f, sweepAngle = 90f, useCenter = false,
+            topLeft = topLeft, size = arcSize,
+            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
+        )
+        drawArc(
+            color = Color(0xFFEA4335),
+            startAngle = 225f, sweepAngle = 90f, useCenter = false,
+            topLeft = topLeft, size = arcSize,
+            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
+        )
+        // Horizontal bar (the "G" crossbar / opening)
+        drawRect(
+            color = Color(0xFF4285F4),
+            topLeft = Offset(d * 0.5f, d * 0.42f),
+            size = Size(d * 0.42f, d * 0.16f)
+        )
+    }
+}
+
+@Preview(showSystemUi = true, backgroundColor = 0xFFFFFFFF, widthDp = 360, heightDp = 740)
 @Composable
 fun WelcomeScreenPreview() {
     SiliGuideTheme {
         WelcomeScreen(
-            onLoginClick = {},
-            onSignUpClick = {},
+            onContinueWithEmailClick = {},
+            onContinueWithGoogleClick = {},
             onGuestClick = {}
         )
     }
 }
 
 // Small phone preview
-@Preview(showBackground = true, backgroundColor = 0xFFFFFFFF, widthDp = 320, heightDp = 640)
+@Preview(showSystemUi = true, backgroundColor = 0xFFFFFFFF, widthDp = 320, heightDp = 640)
 @Composable
 fun WelcomeScreenSmallPreview() {
     SiliGuideTheme {
         WelcomeScreen(
-            onLoginClick = {},
-            onSignUpClick = {},
+            onContinueWithEmailClick = {},
+            onContinueWithGoogleClick = {},
             onGuestClick = {}
         )
     }
 }
 
 // Large phone preview
-@Preview(showBackground = true, backgroundColor = 0xFFFFFFFF, widthDp = 412, heightDp = 915)
+@Preview(showSystemUi = true, backgroundColor = 0xFFFFFFFF, widthDp = 412, heightDp = 915)
 @Composable
 fun WelcomeScreenLargePreview() {
     SiliGuideTheme {
         WelcomeScreen(
-            onLoginClick = {},
-            onSignUpClick = {},
+            onContinueWithEmailClick = {},
+            onContinueWithGoogleClick = {},
             onGuestClick = {}
         )
     }

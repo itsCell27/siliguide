@@ -89,8 +89,8 @@ fun SiliGuideNavGraph(
         // --- AUTHENTICATION ---
         composable(route = Screen.Welcome.route) {
             WelcomeScreen(
-                onLoginClick = { /* TODO */ },
-                onSignUpClick = { /* TODO */ },
+                onContinueWithEmailClick = { /* TODO */ },
+                onContinueWithGoogleClick = { /* TODO */ },
                 onGuestClick = { navController.navigate(Screen.GuestInfo.route) }
             )
         }
