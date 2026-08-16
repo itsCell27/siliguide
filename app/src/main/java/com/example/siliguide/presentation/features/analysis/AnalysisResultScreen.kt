@@ -47,6 +47,7 @@ import com.example.siliguide.domain.engine.RuleResult
 import com.example.siliguide.domain.engine.ThresholdLevel
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.components.LoadingScreen
+import com.example.siliguide.presentation.features.dashboard.formatLastAnalyzed
 
 data class SensorRowData(
     val name: String,
@@ -86,6 +87,7 @@ fun AnalysisResultScreen(
     val bitmap = viewModel.analysisUiState.bitmap
     val sensorUiState = viewModel.analysisUiState.sensorUiState
     val predictionName = viewModel.analysisUiState.predictionName
+    val sessionTimestamp = viewModel.analysisUiState.sessionTimestamp
 
     LaunchedEffect(imageUri, isHistoryMode) {
 
@@ -109,6 +111,7 @@ fun AnalysisResultScreen(
             topBar = {
                 ResultTopBar(
                     isOutOfScope = isOutOfScope,
+                    sessionTimestamp = sessionTimestamp,
                     onBack = onNavigateBack
                 )
             },
@@ -169,8 +172,14 @@ fun AnalysisResultScreen(
 @Composable
 fun ResultTopBar(
     isOutOfScope: Boolean,
+    sessionTimestamp: Long?,
     onBack: () -> Unit
 ) {
+    // Falls back to "now" only for the sliver of time before a fresh
+    // capture's timestamp lands in state — after that it's always the
+    // session's real sessionTimestamp (live capture or reopened history).
+    val timeLabel = formatLastAnalyzed(sessionTimestamp ?: System.currentTimeMillis())
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -214,7 +223,7 @@ fun ResultTopBar(
                     lineHeight = 18.sp
                 )
                 Text(
-                    text = if (isOutOfScope) "Image rejected · just now" else "Labuyo plant · just now",
+                    text = if (isOutOfScope) "Image rejected" else "Labuyo plant · $timeLabel",
                     fontSize = 11.sp,
                     color = GrayMedium,
                     modifier = Modifier.padding(top = 1.dp)

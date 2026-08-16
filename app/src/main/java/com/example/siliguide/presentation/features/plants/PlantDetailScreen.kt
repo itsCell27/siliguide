@@ -335,7 +335,7 @@ fun PlantDetailTopBar(
                     Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                     contentDescription = "Back",
                     tint = GrayBody,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
 

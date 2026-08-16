@@ -109,6 +109,7 @@ fun LanWizardScaffold(
                         contentAlignment = Alignment.Center
                     ) {
                         BackChevronIcon(
+                            size = 16.dp,
                             color = if (enableBack) GrayBody else GrayHint
                         )
                     }

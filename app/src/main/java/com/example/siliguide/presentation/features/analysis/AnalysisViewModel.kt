@@ -159,7 +159,8 @@ class AnalysisViewModel @Inject constructor(
         // clear analysis data first
         currentDetections = emptyList()
         analysisUiState = AnalysisUiState(
-            isLoading = true
+            isLoading = true,
+            sessionTimestamp = System.currentTimeMillis()
         )
         analysisUiState = analysisUiState.copy(
             ruleResult = null,
@@ -225,7 +226,8 @@ class AnalysisViewModel @Inject constructor(
                                     isSoilSensorOk = false,
                                     isAirTempSensorOk = false,
                                     analysisError = errorMessage,
-                                    isLoading = false
+                                    isLoading = false,
+                                    sessionTimestamp = analysisUiState.sessionTimestamp
                                 ),
                                 sensorData = null
                             )
@@ -358,7 +360,8 @@ class AnalysisViewModel @Inject constructor(
                             sensorUiState = newSensorUiState,
                             isSoilSensorOk = sensorData?.system?.sensorOK ?: false,
                             isAirTempSensorOk = sensorData?.system?.dhtOK ?: false,
-                            analysisError = null
+                            analysisError = null,
+                            sessionTimestamp = analysisUiState.sessionTimestamp
                         ),
                         sensorData = sensorData
                     )
@@ -641,7 +644,8 @@ class AnalysisViewModel @Inject constructor(
             isSoilSensorOk = !session.isPartial,
             isAirTempSensorOk = !session.isPartial,
 
-            analysisError = null
+            analysisError = null,
+            sessionTimestamp = session.sessionTimestamp
         )
 
     }

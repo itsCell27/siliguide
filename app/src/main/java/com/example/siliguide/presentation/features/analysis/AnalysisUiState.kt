@@ -9,6 +9,9 @@ data class AnalysisUiState(
 
     val imagePath: String? = null,
 
+    /** When this session was captured/analyzed — null only until a fresh capture finishes. */
+    val sessionTimestamp: Long? = null,
+
     val predictionLabel: String? = null,
 
     val predictionName: String? = null,

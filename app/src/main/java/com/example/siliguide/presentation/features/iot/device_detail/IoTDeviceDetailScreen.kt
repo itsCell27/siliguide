@@ -35,6 +35,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -321,23 +324,22 @@ private fun DetailTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            CircleIconButton(onClick = onBack) {
-
-                Canvas(modifier = Modifier.size(14.dp)) {
-
-                    drawPath(
-                        path = Path().apply {
-                            moveTo(size.width * 0.64f, size.height * 0.79f)
-                            lineTo(size.width * 0.36f, size.height * 0.5f)
-                            lineTo(size.width * 0.64f, size.height * 0.21f)
-                        },
-                        color = GrayBody,
-                        style = Stroke(
-                            width = 1.5.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    )
-                }
+            // Back button
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(OffWhite)
+                    .border(1.dp, Border, CircleShape)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
+                    contentDescription = "Back",
+                    tint = GrayBody,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
