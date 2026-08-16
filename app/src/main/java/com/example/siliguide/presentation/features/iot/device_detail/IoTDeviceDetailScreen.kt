@@ -830,30 +830,6 @@ private fun DeviceInfoCard(
             .padding(horizontal = 14.dp)
     ) {
 
-        InfoRow(
-            label = "Device identifier",
-            value = state.deviceIdentifier,
-            isMono = true
-        )
-
-        RowDivider()
-
-        InfoRow(
-            label = "Firmware",
-            value = state.firmware,
-            isMono = true
-        )
-
-        RowDivider()
-
-        InfoRow(
-            label = "Date registered",
-            value = state.dateRegistered,
-            isMono = false
-        )
-
-        RowDivider()
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -893,6 +869,22 @@ private fun DeviceInfoCard(
                 )
             }
         }
+
+        RowDivider()
+
+        InfoRow(
+            label = "Date registered",
+            value = state.dateRegistered,
+            isMono = false
+        )
+
+        RowDivider()
+
+        InfoRow(
+            label = "Firmware",
+            value = state.firmware,
+            isMono = true
+        )
     }
 }
 
