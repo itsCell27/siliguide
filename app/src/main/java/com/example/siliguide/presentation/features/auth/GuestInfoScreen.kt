@@ -198,7 +198,7 @@ fun GuestInfoScreen(
                                 )
                             ) {
                                 Text(
-                                    "Create a Free Account",
+                                    "Create an Account",
                                     style = MaterialTheme.typography.titleSmall
                                 )
                             }

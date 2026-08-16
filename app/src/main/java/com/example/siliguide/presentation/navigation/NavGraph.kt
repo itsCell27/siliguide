@@ -70,6 +70,7 @@ import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDe
 import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavOptionsBuilder
+import com.example.siliguide.presentation.features.auth.EmailAuthScreen
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllViewModel
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllDevicesScreen
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllPlantsScreen
@@ -87,15 +88,32 @@ fun SiliGuideNavGraph(
     ) {
 
         // --- AUTHENTICATION ---
-        composable(route = Screen.Welcome.route) {
+        composable(route = Screen.Welcome.route) { backStackEntry ->
             WelcomeScreen(
-                onContinueWithEmailClick = { /* TODO */ },
+                onContinueWithEmailClick = {
+                    navController.navigateSafely(backStackEntry, Screen.EmailAuth.route)
+                },
                 onContinueWithGoogleClick = { /* TODO */ },
                 onGuestClick = { navController.navigate(Screen.GuestInfo.route) }
             )
         }
 
-        composable(route = Screen.GuestInfo.route) {
+        composable(route = Screen.EmailAuth.route) { backStackEntry ->
+            EmailAuthScreen(
+                onBackClick = { navController.popSafely(backStackEntry) },
+                onContinueClick = { email ->
+                    /* TODO: AuthViewModel — send magic link / request OTP for `email` */
+                },
+                onVerifyOtpClick = { email, otp ->
+                    /* TODO: AuthViewModel — verify `otp` for `email`, then navigate to Dashboard */
+                },
+                onResendCodeClick = { email ->
+                    /* TODO: AuthViewModel — resend OTP for `email` */
+                }
+            )
+        }
+
+        composable(route = Screen.GuestInfo.route) { backStackEntry ->
             val authViewModel: AuthViewModel = hiltViewModel()
 
             GuestInfoScreen(
@@ -109,9 +127,13 @@ fun SiliGuideNavGraph(
                         }
                     )
                 },
-                onCreateAccount = { /* TODO: Route to SignUp */ }
+                onCreateAccount = { navController.popSafely(backStackEntry) }
             )
         }
+
+        // Profile no longer has its own route — DashboardScreen embeds it as a
+        // tab (DashboardTab.PROFILE) so Home<->Profile is a state flip, not a
+        // NavGraph round trip. See DashboardScreen.kt.
 
         // --- DASHBOARD (HOME) ---
         composable(route = Screen.Dashboard.route) { backStackEntry ->
@@ -143,7 +165,19 @@ fun SiliGuideNavGraph(
                 },
                 onNavigateToSeeAllDevices = {
                     navController.navigateSafely(backStackEntry, Screen.SeeAllDevices.createRoute())
-                }
+                },
+                onSignedOut = {
+                    // Covers Log Out, Guest Log Out, and Delete Account — all three
+                    // leave the Dashboard shell and land on Welcome with the
+                    // stack cleared underneath them.
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    }
+                },
+                onCreateAccountWithEmail = {
+                    navController.navigateSafely(backStackEntry, Screen.EmailAuth.route)
+                },
+                onCreateAccountWithGoogle = { /* TODO */ }
             )
         }
 

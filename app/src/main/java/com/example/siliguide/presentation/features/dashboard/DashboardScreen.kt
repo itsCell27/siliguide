@@ -54,6 +54,8 @@ import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.model.AnalysisSession
 import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
+import com.example.siliguide.presentation.features.auth.ProfileAuthProvider
+import com.example.siliguide.presentation.features.auth.ProfileContent
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.roundToInt
@@ -97,6 +99,14 @@ data class PlantItem(
     val condition: PlantCondition
 )
 
+/**
+ * Which body the shared shell (top bar + scroll area) currently shows.
+ * Home <-> Profile is a pure state flip now — no NavGraph round trip, no
+ * back-stack growth, and the Add-button bottom sheet is shared by both
+ * since it lives in this same Box regardless of tab.
+ */
+enum class DashboardTab { HOME, PROFILE }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DASHBOARD SCREEN  (entry point — Hilt lives here only)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,12 +119,26 @@ fun DashboardScreen(
     onNavigateToDeviceDetail: (deviceId: String) -> Unit = {},
     onNavigateToSeeAllPlants: () -> Unit,
     onNavigateToSeeAllDevices: () -> Unit = {},
-    onNavigateToProfile: () -> Unit = {},
+    /** Log Out, Guest Log Out, and Delete Account all resolve to the same
+     *  place from the nav graph's point of view: leave the app shell,
+     *  land on Welcome with the stack cleared. The three confirm actions
+     *  below stay separate so their (currently TODO) business logic can
+     *  diverge later without touching the caller again. */
+    onSignedOut: () -> Unit = {},
+    onCreateAccountWithEmail: () -> Unit = {},
+    onCreateAccountWithGoogle: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     var isAddMenuOpen by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(DashboardTab.HOME) }
+
+    // TODO: swap these placeholder fields for AuthViewModel's real
+    // session/profile state (display name, email, provider) once exposed
+    val profileDisplayName = "Juan Dela Cruz"
+    val profileEmail: String? = "juan.delacruz@email.com"
+    val profileAuthProvider = ProfileAuthProvider.EMAIL
 
     val displayPlants = uiState.plants.map { domainPlant ->
 
@@ -145,6 +169,8 @@ fun DashboardScreen(
         onRefresh           = { viewModel.refresh() },
         isAddMenuOpen       = isAddMenuOpen,
         onAddMenuToggle     = { isAddMenuOpen = it },
+        selectedTab         = selectedTab,
+        onTabChange         = { selectedTab = it },
         onNavigateToCamera  = onNavigateToCamera,
         onNavigateToAddPlant= onNavigateToAddPlant,
         onNavigateToAddIoT  = onNavigateToAddIoT,
@@ -152,7 +178,26 @@ fun DashboardScreen(
         onNavigateToDeviceDetail = onNavigateToDeviceDetail,
         onNavigateToSeeAllPlants  = onNavigateToSeeAllPlants,
         onNavigateToSeeAllDevices = onNavigateToSeeAllDevices,
-        onNavigateToProfile = onNavigateToProfile
+        profileDisplayName  = profileDisplayName,
+        profileEmail        = profileEmail,
+        profileAuthProvider = profileAuthProvider,
+        onSaveDisplayName = {
+            /* TODO: AuthViewModel — persist new display name */
+        },
+        onConfirmLogOut = {
+            /* TODO: AuthViewModel — sign out */
+            onSignedOut()
+        },
+        onConfirmGuestLogOut = {
+            /* TODO: AuthViewModel — wipe guest data, sign out */
+            onSignedOut()
+        },
+        onConfirmDeleteAccount = {
+            /* TODO: AuthViewModel — delete account */
+            onSignedOut()
+        },
+        onCreateAccountWithEmail = onCreateAccountWithEmail,
+        onCreateAccountWithGoogle = onCreateAccountWithGoogle
     )
 }
 
@@ -169,6 +214,8 @@ fun DashboardContent(
     onRefresh: () -> Unit,
     isAddMenuOpen: Boolean,
     onAddMenuToggle: (Boolean) -> Unit,
+    selectedTab: DashboardTab,
+    onTabChange: (DashboardTab) -> Unit,
     onNavigateToCamera: () -> Unit,
     onNavigateToAddPlant: () -> Unit,
     onNavigateToAddIoT: () -> Unit,
@@ -176,7 +223,16 @@ fun DashboardContent(
     onNavigateToDeviceDetail: (String) -> Unit = {},
     onNavigateToSeeAllPlants: () -> Unit,
     onNavigateToSeeAllDevices: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    profileDisplayName: String = "",
+    profileEmail: String? = null,
+    profileAuthProvider: ProfileAuthProvider = ProfileAuthProvider.EMAIL,
+    profileAppVersion: String = "v1.0.0",
+    onSaveDisplayName: (String) -> Unit = {},
+    onConfirmLogOut: () -> Unit = {},
+    onConfirmGuestLogOut: () -> Unit = {},
+    onConfirmDeleteAccount: () -> Unit = {},
+    onCreateAccountWithEmail: () -> Unit = {},
+    onCreateAccountWithGoogle: () -> Unit = {}
 ) {
     // Dynamically compute how much bottom padding the scrollable body needs:
     // system nav bar inset + our custom bottom nav bar height.
@@ -189,37 +245,57 @@ fun DashboardContent(
         modifier = Modifier
             .fillMaxSize()
             .background(OffWhite)
+            .safeDrawingPadding()
     ) {
-        // ── Scrollable body ───────────────────────────────────────────────
+        // ── Scrollable body — swaps per tab, shell (scrim/sheet/nav) stays put ──
         Column(modifier = Modifier.fillMaxSize()) {
-            TopBarSection(onAvatarClick = onNavigateToProfile)
+            when (selectedTab) {
+                DashboardTab.HOME -> {
+                    TopBarSection(onAvatarClick = { onTabChange(DashboardTab.PROFILE) })
 
-            // Wraps only the scrolling area, so the top bar stays put while
-            // the indicator pulls down over the content
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = onRefresh,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = scrollBodyBottomPadding)
-                ) {
-                    IoTDevicesSection(
-                        devices = devices,
-                        deviceOnline = deviceOnline,
-                        onAddDevice = onNavigateToAddIoT,
-                        onDeviceClick = onNavigateToDeviceDetail,
-                        onSeeAllDevices = onNavigateToSeeAllDevices
-                    )
-                    PlantsSection(
-                        plants = plants,
-                        onSeeAll = onNavigateToSeeAllPlants,
-                        onNavigateToPlantDetail = onNavigateToPlantDetail
+                    // Wraps only the scrolling area, so the top bar stays put while
+                    // the indicator pulls down over the content
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = onRefresh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(bottom = scrollBodyBottomPadding)
+                        ) {
+                            IoTDevicesSection(
+                                devices = devices,
+                                deviceOnline = deviceOnline,
+                                onAddDevice = onNavigateToAddIoT,
+                                onDeviceClick = onNavigateToDeviceDetail,
+                                onSeeAllDevices = onNavigateToSeeAllDevices
+                            )
+                            PlantsSection(
+                                plants = plants,
+                                onSeeAll = onNavigateToSeeAllPlants,
+                                onNavigateToPlantDetail = onNavigateToPlantDetail
+                            )
+                        }
+                    }
+                }
+
+                DashboardTab.PROFILE -> {
+                    ProfileContent(
+                        displayName = profileDisplayName,
+                        email = profileEmail,
+                        authProvider = profileAuthProvider,
+                        appVersion = profileAppVersion,
+                        onSaveDisplayName = onSaveDisplayName,
+                        onConfirmLogOut = onConfirmLogOut,
+                        onConfirmGuestLogOut = onConfirmGuestLogOut,
+                        onConfirmDeleteAccount = onConfirmDeleteAccount,
+                        onCreateAccountWithEmail = onCreateAccountWithEmail,
+                        onCreateAccountWithGoogle = onCreateAccountWithGoogle
                     )
                 }
             }
@@ -243,7 +319,7 @@ fun DashboardContent(
             )
         }
 
-        // ── Bottom sheet ──────────────────────────────────────────────────
+        // ── Bottom sheet — same plant-vs-device chooser regardless of tab ──
         AnimatedVisibility(
             visible  = isAddMenuOpen,
             enter    = slideInVertically(initialOffsetY = { it }, animationSpec = tween(250)),
@@ -260,13 +336,14 @@ fun DashboardContent(
             )
         }
 
-        // ── Bottom navigation ─────────────────────────────────────────────
+        // ── Bottom navigation — Home/Profile are a state flip, not a route ──
         BottomNavSection(
             modifier       = Modifier.align(Alignment.BottomCenter),
             isAddMenuOpen  = isAddMenuOpen,
+            activeTab      = selectedTab,
             onAddClick     = { onAddMenuToggle(!isAddMenuOpen) },
-            onHomeClick    = { /* already on Home */ },
-            onProfileClick = onNavigateToProfile
+            onHomeClick    = { onTabChange(DashboardTab.HOME) },
+            onProfileClick = { onTabChange(DashboardTab.PROFILE) }
         )
     }
 }
@@ -810,6 +887,7 @@ fun ConditionBadge(status: String, label: String = "") {
 fun BottomNavSection(
     modifier: Modifier = Modifier,
     isAddMenuOpen: Boolean,
+    activeTab: DashboardTab,
     onAddClick: () -> Unit,
     onHomeClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
@@ -830,6 +908,9 @@ fun BottomNavSection(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val isHomeActive = activeTab == DashboardTab.HOME
+            val isProfileActive = activeTab == DashboardTab.PROFILE
+
             Column(
                 modifier = Modifier
                     .clickable(
@@ -844,10 +925,14 @@ fun BottomNavSection(
                 Icon(
                     painter = painterResource(R.drawable.ic_home),
                     contentDescription = "Home",
-                    tint = GreenPrimary,
+                    tint = if (isHomeActive) GreenPrimary else GrayLight,
                     modifier = Modifier.size(20.dp)
                 )
-                Text(text = "Home", style = NavLabelActiveStyle, color = GreenPrimary)
+                Text(
+                    text = "Home",
+                    style = if (isHomeActive) NavLabelActiveStyle else NavLabelStyle,
+                    color = if (isHomeActive) GreenPrimary else GrayHint
+                )
             }
 
             Box(
@@ -891,10 +976,14 @@ fun BottomNavSection(
                 Icon(
                     painter = painterResource(R.drawable.ic_profile),
                     contentDescription = "Profile",
-                    tint = GrayLight,
+                    tint = if (isProfileActive) GreenPrimary else GrayLight,
                     modifier = Modifier.size(20.dp)
                 )
-                Text(text = "Profile", style = NavLabelStyle, color = GrayHint)
+                Text(
+                    text = "Profile",
+                    style = if (isProfileActive) NavLabelActiveStyle else NavLabelStyle,
+                    color = if (isProfileActive) GreenPrimary else GrayHint
+                )
             }
         }
     }
@@ -1169,9 +1258,10 @@ fun DashboardPreview() {
             isRefreshing = false,
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
+            selectedTab = DashboardTab.HOME, onTabChange = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
             onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
-            onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
+            onNavigateToSeeAllDevices = {}
         )
     }
 }
@@ -1196,9 +1286,10 @@ fun DashboardPlantsOnlyPreview() {
             isRefreshing = false,
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
+            selectedTab = DashboardTab.HOME, onTabChange = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
             onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
-            onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
+            onNavigateToSeeAllDevices = {}
         )
     }
 }
@@ -1213,9 +1304,10 @@ fun DashboardEmptyPreview() {
             isRefreshing = false,
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
+            selectedTab = DashboardTab.HOME, onTabChange = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
             onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
-            onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
+            onNavigateToSeeAllDevices = {}
         )
     }
 }
@@ -1239,9 +1331,10 @@ fun DashboardRefreshingPreview() {
             isRefreshing = true,
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
+            selectedTab = DashboardTab.HOME, onTabChange = {},
             onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
             onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
-            onNavigateToSeeAllDevices = {}, onNavigateToProfile = {}
+            onNavigateToSeeAllDevices = {}
         )
     }
 }

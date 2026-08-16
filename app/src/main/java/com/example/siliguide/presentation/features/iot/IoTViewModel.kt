@@ -1697,7 +1697,7 @@ class IoTViewModel @Inject constructor(
                 // ---- 3, 4, 5. Provision --------------------------------
                 provisionSavedDevice(
                     deviceId = deviceId,
-                    token = token,
+                    token = encryptedToken,
                     ssid = ssid,
                     password = password
                 )
@@ -2490,7 +2490,7 @@ class IoTViewModel @Inject constructor(
                 // ---- 3, 4, 5. Provision --------------------------------
                 provisionSavedDeviceViaBluetooth(
                     deviceId = deviceId,
-                    token = token,
+                    token = encryptedToken,
                     ssid = ssid,
                     password = password
                 )
