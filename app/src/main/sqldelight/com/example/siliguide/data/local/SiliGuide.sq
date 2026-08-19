@@ -49,6 +49,7 @@ CREATE TABLE plants (
     user_id          TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
     plant_name       TEXT NOT NULL,
     date_created     INTEGER NOT NULL,
+    updated_at       INTEGER NOT NULL,
     last_analyzed_at INTEGER,           -- NULL until first analysis
     is_synced        INTEGER NOT NULL DEFAULT 0,
     device_id        TEXT UNIQUE REFERENCES iot_devices(device_id) ON DELETE SET NULL ON UPDATE CASCADE,
@@ -223,8 +224,8 @@ DELETE FROM iot_devices WHERE device_id = ?;
 -- ============================================================
 
 insertPlant:
-INSERT INTO plants (plant_id, user_id, plant_name, date_created, last_analyzed_at, device_id)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO plants (plant_id, user_id, plant_name, date_created, updated_at, last_analyzed_at, device_id)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(plant_id) DO UPDATE SET
     user_id = excluded.user_id,
     plant_name = excluded.plant_name,
@@ -245,11 +246,11 @@ getUnlinkedPlantsByUser:
 SELECT * FROM plants WHERE user_id = ? AND device_id IS NULL AND is_deleted = 0;
 
 updatePlantName:
-UPDATE plants SET plant_name = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+UPDATE plants SET plant_name = ?, updated_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 -- Link an IoT Device to a plant
 linkPlantDevice:
-UPDATE plants SET device_id = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+UPDATE plants SET device_id = ?, updated_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 getLinkedPlantByDeviceId:
 SELECT * FROM plants WHERE device_id = ? AND is_deleted = 0;
@@ -259,7 +260,7 @@ UPDATE plants SET last_analyzed_at = ?, is_synced = 0 WHERE plant_id = ? AND is_
 
 -- Unlink a IoT Device to a plant
 unlinkPlantDevice:
-UPDATE plants SET device_id = NULL, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+UPDATE plants SET device_id = NULL, updated_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
 
 markPlantSynced:
 UPDATE plants SET is_synced = 1 WHERE plant_id = ? AND is_deleted = 0;
@@ -272,7 +273,8 @@ UPDATE plants
 SET is_deleted = 1,
 -- Set device_id to NULL to unlink linked device
     device_id = NULL,
-    is_synced = 0
+    is_synced = 0,
+    updated_at = ?
 WHERE plant_id = ?;
 
 deletePlant:

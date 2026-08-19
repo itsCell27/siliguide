@@ -34,13 +34,14 @@ class PlantRepositoryImpl @Inject constructor(
             user_id = plant.userId,
             plant_name = plant.name,
             date_created = plant.dateCreated,
+            updated_at = plant.updatedAt,
             last_analyzed_at = plant.lastAnalyzedAt,
             device_id = plant.deviceId
         )
     }
 
-    override suspend fun markPlantAsDeletedById(plantId: String) {
-        queries.markPlantDeleted(plantId)
+    override suspend fun markPlantAsDeletedById(updatedAt: Long, plantId: String) {
+        queries.markPlantDeleted(updatedAt, plantId)
     }
 
     override suspend fun deletePlant(plantId: String) {
@@ -53,13 +54,13 @@ class PlantRepositoryImpl @Inject constructor(
             ?.toDomainModel()
     }
 
-    override suspend fun updatePlantName(plantId: String, name: String) {
+    override suspend fun updatePlantName(plantId: String, updatedAt: Long, name: String) {
         // Invokes our new targeted update syntax cleanly
-        queries.updatePlantName(plant_name = name, plant_id = plantId)
+        queries.updatePlantName(plant_name = name, updated_at = updatedAt, plant_id = plantId)
     }
 
-    override suspend fun linkDevice(plantId: String, deviceId: String) {
-        queries.linkPlantDevice(device_id = deviceId, plant_id = plantId)
+    override suspend fun linkDevice(deviceId: String, updatedAt: Long, plantId: String) {
+        queries.linkPlantDevice(device_id = deviceId, updated_at = updatedAt, plant_id = plantId)
     }
 
     override suspend fun getLinkedPlantsByDeviceId(deviceId: String): Plant {
@@ -68,8 +69,8 @@ class PlantRepositoryImpl @Inject constructor(
             .toDomainModel()
     }
 
-    override suspend fun unlinkDevice(plantId: String) {
-        queries.unlinkPlantDevice(plantId)
+    override suspend fun unlinkDevice(updatedAt: Long, plantId: String) {
+        queries.unlinkPlantDevice(updatedAt, plantId)
     }
 
     override suspend fun getPlantByDeviceId(deviceId: String): List<Plant> {

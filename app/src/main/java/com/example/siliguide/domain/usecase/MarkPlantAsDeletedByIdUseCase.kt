@@ -7,6 +7,7 @@ class MarkPlantAsDeletedByIdUseCase @Inject constructor(
     private val plantRepository: PlantRepository
 ) {
     suspend operator fun invoke(plantId: String) {
-        plantRepository.markPlantAsDeletedById(plantId)
+        val currentTimestamp = System.currentTimeMillis()
+        plantRepository.markPlantAsDeletedById(currentTimestamp, plantId)
     }
 }

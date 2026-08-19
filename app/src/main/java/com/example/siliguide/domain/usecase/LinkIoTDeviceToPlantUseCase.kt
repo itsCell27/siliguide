@@ -7,6 +7,7 @@ class LinkIoTDeviceToPlantUseCase @Inject constructor(
     private val plantRepository: PlantRepository
 ) {
     suspend operator fun invoke(plantId: String, deviceId: String) {
-        plantRepository.linkDevice(plantId, deviceId)
+        val currentTimestamp = System.currentTimeMillis()
+        plantRepository.linkDevice(plantId, currentTimestamp, deviceId)
     }
 }

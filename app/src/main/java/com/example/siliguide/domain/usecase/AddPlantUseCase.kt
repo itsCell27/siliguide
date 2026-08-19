@@ -18,6 +18,7 @@ class AddPlantUseCase @Inject constructor(
             userId = userId, // Relates this plant to the active local account profile
             name = name,
             dateCreated = currentTimestamp,
+            updatedAt = currentTimestamp,
             lastAnalyzedAt = null,
             isSynced = false, // Instantiated as un-synced until WorkManager fires online
             deviceId = deviceId

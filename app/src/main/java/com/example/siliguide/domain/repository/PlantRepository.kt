@@ -9,14 +9,14 @@ interface PlantRepository {
 
     suspend fun insertPlant(plant: Plant)
     suspend fun deletePlant(plantId: String)
-    suspend fun markPlantAsDeletedById(plantId: String)
+    suspend fun markPlantAsDeletedById(updatedAt: Long, plantId: String)
     suspend fun getPlantById(plantId: String): Plant?
 
-    suspend fun updatePlantName(plantId: String, name: String)
+    suspend fun updatePlantName(plantId: String, updatedAt: Long, name: String)
 
-    suspend fun linkDevice(plantId: String, deviceId: String)
+    suspend fun linkDevice(deviceId: String, updatedAt: Long, plantId: String)
     suspend fun getLinkedPlantsByDeviceId(deviceId: String): Plant
-    suspend fun unlinkDevice(plantId: String)
+    suspend fun unlinkDevice(updatedAt: Long, plantId: String)
 
     suspend fun getPlantByDeviceId(deviceId: String): List<Plant>
 }

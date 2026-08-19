@@ -7,6 +7,8 @@ class UpdatePlantNameUseCase @Inject constructor(
     private val plantRepository: PlantRepository
 ) {
     suspend operator fun invoke(plantId: String, newName: String) {
-        plantRepository.updatePlantName(plantId, newName)
+        val currentTimestamp = System.currentTimeMillis()
+
+        plantRepository.updatePlantName(plantId, currentTimestamp, newName)
     }
 }
