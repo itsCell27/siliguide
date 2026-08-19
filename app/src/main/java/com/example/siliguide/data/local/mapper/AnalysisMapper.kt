@@ -32,6 +32,7 @@ fun Analysis_sessions.toDomainModel(): AnalysisSession {
         potassium = potassium?.toInt(),
         lightIntensity = light_intensity?.toInt(),
         airTemp = air_temp,
-        isSynced = is_synced == 1L // Map new field
+        isSynced = is_synced == 1L, // Map new field
+        updatedAt = updated_at
     )
 }

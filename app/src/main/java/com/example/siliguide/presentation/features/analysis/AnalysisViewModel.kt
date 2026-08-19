@@ -461,7 +461,8 @@ class AnalysisViewModel @Inject constructor(
                 airTemp = lastSensorData?.environment?.airTemperature,
 
                 isPartial = (lastSensorData == null),
-                isSynced = false
+                isSynced = false,
+                updatedAt = System.currentTimeMillis()
             )
 
             try {

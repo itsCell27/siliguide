@@ -45,7 +45,8 @@ class AnalysisRepositoryImpl @Inject constructor(
                 phosphorus = session.phosphorus?.toLong(),
                 potassium = session.potassium?.toLong(),
                 light_intensity = session.lightIntensity?.toLong(),
-                air_temp = session.airTemp
+                air_temp = session.airTemp,
+                updated_at = session.updatedAt
             )
         }
     }
@@ -98,9 +99,9 @@ class AnalysisRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun markAnalysisSessionAsDeleted(sessionId: String) {
+    override suspend fun markAnalysisSessionAsDeleted(updatedAt: Long, sessionId: String) {
         withContext(Dispatchers.IO) {
-            queries.markAnalysisSessionDeleted(sessionId)
+            queries.markAnalysisSessionDeleted(updatedAt, sessionId)
         }
     }
 

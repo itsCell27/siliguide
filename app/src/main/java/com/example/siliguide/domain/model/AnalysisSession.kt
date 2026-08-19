@@ -31,5 +31,6 @@ data class AnalysisSession(
     val lightIntensity: Int?,
     val airTemp: Double?,
 
-    val isSynced: Boolean = false // REQUIRED: Sync status
+    val isSynced: Boolean = false, // REQUIRED: Sync status
+    val updatedAt: Long
 )

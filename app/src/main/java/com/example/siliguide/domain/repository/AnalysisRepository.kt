@@ -11,7 +11,7 @@ interface AnalysisRepository {
 
     suspend fun saveSession(session: AnalysisSession)
 
-    suspend fun markAnalysisSessionAsDeleted(sessionId: String)
+    suspend fun markAnalysisSessionAsDeleted(updatedAt: Long, sessionId: String)
     suspend fun markSessionSynced(sessionId: String)
     suspend fun deleteSession(sessionId: String)
 
