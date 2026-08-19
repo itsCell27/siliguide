@@ -11,9 +11,9 @@ CREATE TABLE users (
     user_id       TEXT NOT NULL PRIMARY KEY,
     display_name  TEXT NOT NULL,
     email         TEXT,
-    auth_provider TEXT NOT NULL, -- EMAIL | GOOGLE | GUEST
     is_guest      INTEGER NOT NULL DEFAULT 0,
-    created_at    INTEGER NOT NULL
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL
 );
 
 CREATE TABLE iot_devices (
@@ -92,14 +92,14 @@ CREATE TABLE analysis_sessions (
 -- ============================================================
 
 insertUser:
-INSERT INTO users (user_id, display_name, email, auth_provider, is_guest, created_at)
+INSERT INTO users (user_id, display_name, email, is_guest, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET
     display_name = excluded.display_name,
     email = excluded.email,
-    auth_provider = excluded.auth_provider,
     is_guest = excluded.is_guest,
-    created_at = excluded.created_at;
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at;
 
 getUserById:
 SELECT * FROM users WHERE user_id = ?;
@@ -109,15 +109,15 @@ UPDATE users
 SET user_id = :newUserId,
     display_name = :newDisplayName,
     email = :newEmail,
-    auth_provider = :newProvider,
-    is_guest = 0
+    is_guest = 0,
+    updated_at = ?
 WHERE user_id = :oldGuestId;
 
 deleteUser:
 DELETE FROM users WHERE user_id = ?;
 
 updateDisplayName:
-UPDATE users SET display_name = ? WHERE user_id = ?;
+UPDATE users SET display_name = ?, updated_at = ? WHERE user_id = ?;
 
 updateEmail:
 UPDATE users SET email = ? WHERE user_id = ?;

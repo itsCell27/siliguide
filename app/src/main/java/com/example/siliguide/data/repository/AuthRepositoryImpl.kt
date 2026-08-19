@@ -24,9 +24,9 @@ class AuthRepositoryImpl @Inject constructor(
             user_id = guestId,
             display_name = guestName,
             email = null,
-            auth_provider = "GUEST",
             is_guest = 1L,
-            created_at = System.currentTimeMillis()
+            created_at = System.currentTimeMillis(),
+            updated_at = System.currentTimeMillis()
         )
 
         // 2. Session (Uses the model!)
