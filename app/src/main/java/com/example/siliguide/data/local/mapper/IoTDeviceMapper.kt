@@ -8,7 +8,8 @@ import com.example.siliguide.domain.model.ConnectionMode
 fun Iot_devices.toIotDomain(): IoTDevice {
     return IoTDevice(
         deviceId = device_id,
-        userId = user_id, // Add this
+        userId = user_id,
+        hardwareMac = hardware_mac,
         deviceName = device_name,
         pairingToken = pairing_token,
         isActive = is_active == 1L,
@@ -16,6 +17,7 @@ fun Iot_devices.toIotDomain(): IoTDevice {
         connectionMode = ConnectionMode.valueOf(connection_mode),
         firmware = firmware,
         isSynced = is_synced == 1L, // Add this: Converts SQLite Long to Boolean
-        dateAdded = date_added
+        dateAdded = date_added,
+        updatedAt = updated_at
     )
 }

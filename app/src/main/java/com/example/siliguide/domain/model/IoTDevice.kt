@@ -3,6 +3,7 @@ package com.example.siliguide.domain.model
 data class IoTDevice(
     val deviceId: String,
     val userId: String,
+    val hardwareMac: String,
     val deviceName: String,
     val pairingToken: String,
     val isActive: Boolean,
@@ -10,5 +11,6 @@ data class IoTDevice(
     val connectionMode: ConnectionMode,
     val firmware: String? = null,
     val isSynced: Boolean = false,
-    val dateAdded: Long
+    val dateAdded: Long,
+    val updatedAt: Long,
 )

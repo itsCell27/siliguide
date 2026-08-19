@@ -155,12 +155,12 @@ class BluetoothApi @Inject constructor(
      * Specific function for getting device info in IoTRepositoryImpl to check
      * if the device is online via Bluetooth.
      */
-    suspend fun getSpecificDeviceInfo(deviceId: String): DeviceInfoDto? {
+    suspend fun getSpecificDeviceInfo(hardwareMac: String): DeviceInfoDto? {
         // check if bluetooth is on
         if (!bluetoothManager.isBluetoothOn()) return null
 
         // find the bluetooth device
-        val device = bluetoothDiscoveryManager.getSpecificPairedDevice(deviceId) ?: return null
+        val device = bluetoothDiscoveryManager.getSpecificPairedDevice(hardwareMac) ?: return null
 
         // connect to the device
         try {
@@ -175,12 +175,12 @@ class BluetoothApi @Inject constructor(
         return info
     }
 
-    suspend fun getSpecificDeviceSensorData(deviceId: String, token: String): SensorResponseDto? {
+    suspend fun getSpecificDeviceSensorData(hardwareMac: String, token: String): SensorResponseDto? {
         // check if bluetooth is on
         if (!bluetoothManager.isBluetoothOn()) return null
 
         // find the bluetooth device
-        val device = bluetoothDiscoveryManager.getSpecificPairedDevice(deviceId) ?: return null
+        val device = bluetoothDiscoveryManager.getSpecificPairedDevice(hardwareMac) ?: return null
 
         // connect to the device
         try {

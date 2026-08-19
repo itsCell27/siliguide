@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class DeviceInfoDto(
     val device: String,
-    val deviceId: String,
+    val hardwareMac: String,
     val claimed: Boolean,
     val token: String? = null,
     val mode: String,

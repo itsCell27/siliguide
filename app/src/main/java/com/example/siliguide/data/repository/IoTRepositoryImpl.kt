@@ -66,6 +66,11 @@ class IoTRepositoryImpl @Inject constructor(
         // with an ESP32 in its default Access Point (AP) mode.
         val device = deviceId?.let { getDeviceById(it) }
 
+        Log.d("IoTRepositoryImpl", "Fetching sensors...")
+        Log.d("IoTRepositoryImpl", "deviceId: ${device?.deviceId}")
+        Log.d("IoTRepositoryImpl", "Mode: ${device?.connectionMode}")
+        Log.d("IoTRepositoryImpl", "lastKnowIp: ${device?.lastKnownIp}")
+
         // Select the communication transport based on how this IoT device
         // was originally registered.
         return when (device?.connectionMode) {
@@ -77,7 +82,7 @@ class IoTRepositoryImpl @Inject constructor(
             // so no IP address is required.
             ConnectionMode.BLUETOOTH -> {
                 val responseDto = bluetoothApi.getSpecificDeviceSensorData(
-                    deviceId = device.deviceId,
+                    hardwareMac = device.hardwareMac,
                     token = device.pairingToken
                 ) ?: throw IllegalStateException("Failed to fetch sensor data via Bluetooth")
 
@@ -130,11 +135,11 @@ class IoTRepositoryImpl @Inject constructor(
                     api.getDeviceInfo(savedDevice.lastKnownIp)
 
                 ConnectionMode.BLUETOOTH ->
-                    bluetoothApi.getSpecificDeviceInfo(savedDevice.deviceId)
+                    bluetoothApi.getSpecificDeviceInfo(savedDevice.hardwareMac)
             }
-            Log.d("IoTRepositoryImpl", "Checking if device is online... ${info?.deviceId}")
+            Log.d("IoTRepositoryImpl", "Checking if device is online... ${info?.hardwareMac}")
 
-            info?.deviceId == savedDevice.deviceId
+            info?.hardwareMac == savedDevice.hardwareMac
 
         } catch (_: Exception) {
 
@@ -211,6 +216,12 @@ class IoTRepositoryImpl @Inject constructor(
             ?.toIotDomain()
     }
 
+    override suspend fun getDeviceByHardwareMac(hardwareMac: String): IoTDevice? {
+        return queries.getDeviceByHardwareMac(hardwareMac)
+            .executeAsOneOrNull()
+            ?.toIotDomain()
+    }
+
     override suspend fun updateDeviceName(deviceName: String, deviceId: String) {
         queries.updateDeviceName(deviceName, deviceId)
     }
@@ -274,13 +285,15 @@ class IoTRepositoryImpl @Inject constructor(
         queries.insertDevice(
             device_id = device.deviceId,
             user_id = device.userId,
+            hardware_mac = device.hardwareMac,
             device_name = device.deviceName,
             pairing_token = device.pairingToken,
             is_active = if (device.isActive) 1L else 0L,
             last_known_ip = device.lastKnownIp,
             connection_mode = device.connectionMode.name,
             firmware = device.firmware,
-            date_added = device.dateAdded
+            date_added = device.dateAdded,
+            updated_at = device.updatedAt
         )
     }
 

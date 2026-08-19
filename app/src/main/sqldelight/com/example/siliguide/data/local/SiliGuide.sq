@@ -19,6 +19,7 @@ CREATE TABLE users (
 CREATE TABLE iot_devices (
     device_id                   TEXT NOT NULL PRIMARY KEY, -- MAC address or hardware ID
     user_id                     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    hardware_mac                TEXT NOT NULL,
     device_name                 TEXT NOT NULL,
     pairing_token               TEXT NOT NULL,
     is_active                   INTEGER NOT NULL DEFAULT 1,
@@ -26,7 +27,9 @@ CREATE TABLE iot_devices (
     connection_mode             TEXT NOT NULL, -- AP | LAN | BLUETOOTH
     firmware                    TEXT,
     is_synced                   INTEGER NOT NULL DEFAULT 0,
+    is_deleted                  INTEGER NOT NULL DEFAULT 0,
     date_added                  INTEGER NOT NULL,
+    updated_at                  INTEGER NOT NULL,
     last_seen_at                INTEGER,
 
     -- Latest known sensor values; NULL means no reading has been received yet
@@ -124,17 +127,19 @@ UPDATE users SET email = ? WHERE user_id = ?;
 -- ============================================================
 
 insertDevice:
-INSERT INTO iot_devices (device_id, user_id, device_name, pairing_token, is_active, last_known_ip, connection_mode, firmware, date_added)
-VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO iot_devices (device_id, user_id, hardware_mac, device_name, pairing_token, is_active, last_known_ip, connection_mode, firmware, date_added, updated_at)
+VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(device_id) DO UPDATE SET
     user_id = excluded.user_id,
+    hardware_mac = excluded.hardware_mac,
     device_name = excluded.device_name,
     pairing_token = excluded.pairing_token,
     is_active = excluded.is_active,
     last_known_ip = excluded.last_known_ip,
     connection_mode = excluded.connection_mode,
     firmware = excluded.firmware,
-    date_added = excluded.date_added;
+    date_added = excluded.date_added,
+    updated_at = excluded.updated_at;
 
 getDevicesByUser:
 SELECT * FROM iot_devices WHERE user_id = ? ORDER BY device_name ASC;
@@ -153,6 +158,9 @@ ORDER BY d.device_name ASC;
 
 getDeviceById:
 SELECT * FROM iot_devices WHERE device_id = ?;
+
+getDeviceByHardwareMac:
+SELECT * FROM iot_devices WHERE hardware_mac = ?;
 
 getActiveDevicesByUser:
 SELECT * FROM iot_devices WHERE user_id = ? AND is_active = 1;

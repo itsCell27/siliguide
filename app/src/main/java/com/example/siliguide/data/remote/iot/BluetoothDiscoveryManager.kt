@@ -23,11 +23,11 @@ class BluetoothDiscoveryManager @Inject constructor(
     }
 
     @SuppressLint("MissingPermission") // Temporary
-    fun getSpecificPairedDevice(deviceId: String): BluetoothDevice? {
+    fun getSpecificPairedDevice(hardwareMac: String): BluetoothDevice? {
         return bluetoothAdapter.bondedDevices
             .firstOrNull { device ->
                 device.name?.startsWith("SiliGuide_") == true &&
-                        device.name?.takeLast(4) == deviceId.takeLast(4)
+                        device.name?.takeLast(6) == hardwareMac.replace(":", "").takeLast(6)
             }
     }
 }

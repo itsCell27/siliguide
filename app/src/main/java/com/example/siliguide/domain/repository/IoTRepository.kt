@@ -29,6 +29,8 @@ interface IoTRepository {
 
     suspend fun getDeviceById(deviceId: String): IoTDevice?
 
+    suspend fun getDeviceByHardwareMac(hardwareMac: String): IoTDevice?
+
     fun connectToDeviceWifi(
         ssid: String,
         password: String,
