@@ -51,6 +51,7 @@ import com.example.siliguide.core.permission.PermissionRequest
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionType
 import com.example.siliguide.core.security.PairingTokenCrypto
+import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.domain.usecase.CheckDeviceWiFiStatusUseCase
 import com.example.siliguide.domain.usecase.ConnectDeviceToWiFUseCase
 import com.example.siliguide.domain.usecase.ScanWifiNetworksUseCase
@@ -63,11 +64,13 @@ import com.example.siliguide.presentation.features.iot.lan_setup.LanWifiUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanProvisioningMethod
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSetupMethodUiState
 import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
+import com.example.siliguide.domain.usecase.GetDeviceByHardwareMacUseCase
 import com.example.siliguide.domain.usecase.UpdateDeviceConnectionModeUseCase
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveAction
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSaveDialogState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanSuccessStage
 import com.example.siliguide.presentation.features.iot.lan_setup.LanBluetoothProvisioningUiState
+import java.util.UUID
 
 data class ValidationDialogState(
     val title: String,
@@ -99,6 +102,7 @@ class IoTViewModel @Inject constructor(
     private val checkDeviceWiFiStatusUseCase: CheckDeviceWiFiStatusUseCase,
     private val updateDeviceIpUseCase: UpdateDeviceIpUseCase,
     private val updateDeviceConnectionModeUseCase: UpdateDeviceConnectionModeUseCase,
+    private val getDeviceByHardwareMacUseCase: GetDeviceByHardwareMacUseCase,
     val permissionManager: PermissionManager,
 
     private val pairingTokenCrypto: PairingTokenCrypto
@@ -125,6 +129,9 @@ class IoTViewModel @Inject constructor(
         private set
 
     var connectedDeviceId by mutableStateOf<String?>(null)
+        private set
+
+    var hardwareMac by mutableStateOf<String?>(null)
         private set
 
     var firmwareVersion by mutableStateOf<String?>(null)
@@ -278,7 +285,7 @@ class IoTViewModel @Inject constructor(
 
                 Log.d(
                     "AP_DEBUG",
-                    "Verification Success! Connected to ${info.deviceId}"
+                    "Verification Success! Connected to ${info.hardwareMac}"
                 )
 
                 withContext(Dispatchers.Main) {
@@ -299,8 +306,11 @@ class IoTViewModel @Inject constructor(
 
                     // --- Check if we are Reconfiguring in AP Setup ---
                     val reconfigId = apReconfigureDeviceId
+                    var reconfigDevice: IoTDevice?
+
                     if (reconfigId != null) {
-                        if (info.deviceId != reconfigId) {
+                        reconfigDevice = getIoTDeviceByIdUseCase(reconfigId)
+                        if (info.hardwareMac != reconfigDevice?.hardwareMac) {
                             showValidationDialog(
                                 title = "Wrong Device",
                                 message = "You connected to a different SiliGuide device. Please connect to the correct device's hotspot."
@@ -310,7 +320,7 @@ class IoTViewModel @Inject constructor(
                         }
 
                         // Device matches! Bypass existing/claimed checks.
-                        connectedDeviceId = info.deviceId
+                        connectedDeviceId = reconfigId
                         pairingToken = info.token
                         firmwareVersion = info.firmware
                         error = null
@@ -320,8 +330,11 @@ class IoTViewModel @Inject constructor(
 
                     // --- Check if we are Reconfiguring or Mode Switching in LAN setup via AP ---
                     val targetId = apReconfigureDeviceId ?: lanModeSwitchDeviceId
+                    var targetDevice: IoTDevice?
+
                     if (targetId != null) {
-                        if (info.deviceId != targetId) {
+                        targetDevice = getIoTDeviceByIdUseCase(targetId)
+                        if (info.hardwareMac != targetDevice?.hardwareMac) {
                             showValidationDialog(
                                 title = "Wrong Device",
                                 message = "You connected to a different SiliGuide device. Please connect to the correct device's hotspot."
@@ -331,7 +344,7 @@ class IoTViewModel @Inject constructor(
                         }
 
                         // Device matches! Bypass existing/claimed checks.
-                        connectedDeviceId = info.deviceId
+                        connectedDeviceId = targetId
                         pairingToken = info.token
                         error = null
                         _apConnectionState.value = "CONNECTED"
@@ -342,7 +355,7 @@ class IoTViewModel @Inject constructor(
                     // 2. Already exists in local database?
                     // ----------------------------------------------------
                     val existingDevice =
-                        getIoTDeviceByIdUseCase(info.deviceId)
+                        getDeviceByHardwareMacUseCase(info.hardwareMac)
 
                     if (existingDevice != null) {
 
@@ -372,12 +385,14 @@ class IoTViewModel @Inject constructor(
                     // ----------------------------------------------------
                     // Passed every validation
                     // ----------------------------------------------------
-                    connectedDeviceId = info.deviceId
+//                    val generate
+//                    connectedDeviceId = info.deviceId
                     pairingToken = info.token
+                    hardwareMac = info.hardwareMac
                     firmwareVersion = info.firmware
 
                     if (deviceName.isEmpty()) {
-                        deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                        deviceName = "SiliGuide${info.hardwareMac.replace(":", "").takeLast(3)}"
                     }
 
                     error = null
@@ -420,8 +435,6 @@ class IoTViewModel @Inject constructor(
             Log.d("IoTViewModel", "Entered finalizeSetup()")
 
             Log.d("IoTViewModel", "connectedDeviceId = $connectedDeviceId")
-            val id = connectedDeviceId ?: return@launch
-            Log.d("IoTViewModel", "connectedDeviceId = $id")
 
             val token = pairingToken ?: ""
             Log.d("IoTViewModel", "pairingToken = $token")
@@ -429,6 +442,9 @@ class IoTViewModel @Inject constructor(
             // Fetch the current userId
             val userId = authRepository.getUserId() ?: return@launch
             Log.d("IoTViewModel", "userId = $userId")
+
+            val mac = hardwareMac ?: return@launch
+            Log.d("IoTViewModel", "hardwareMac = $mac")
 
             // Check if exists
 //            Log.d("IoTViewModel", "Checking existing device...")
@@ -446,19 +462,25 @@ class IoTViewModel @Inject constructor(
 //            }
 //            Log.d("IoTViewModel", "existingDevice = $existingDevice")
 
+            // Update generate device ID
+            val id = UUID.randomUUID().toString()
+            Log.d("IoTViewModel", "connectedDeviceId = $id")
+
             // encrypt pairingToken first before saving to SQLDelight DB
             val encryptedToken = pairingTokenCrypto.encrypt(token)
 
             val newDevice = IoTDevice(
                 deviceId = id,
                 userId = userId,
+                hardwareMac = mac,
                 deviceName = customName.trim().take(DEVICE_NAME_MAX_LENGTH),
                 pairingToken = encryptedToken,
                 isActive = true,
                 lastKnownIp = ip,
                 connectionMode = connectionMode,
                 firmware = firmwareVersion,
-                dateAdded = System.currentTimeMillis()
+                dateAdded = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
             )
 
             try {
@@ -500,7 +522,7 @@ class IoTViewModel @Inject constructor(
 
                     // Same device and now marked as claimed?
                     if (
-                        info.deviceId == id &&
+                        info.hardwareMac == mac &&
                         info.claimed
                     ) {
 
@@ -620,8 +642,11 @@ class IoTViewModel @Inject constructor(
 
                         // --- Check if we are Reconfiguring ---
                         val reconfigId = btReconfigureDeviceId
+                        Log.d("IoTViewModel", "Reconfigure ID BT: $reconfigId")
+                        var reconfigDevice: IoTDevice?
                         if (reconfigId != null) {
-                            if (info.deviceId != reconfigId) {
+                            reconfigDevice = getIoTDeviceByIdUseCase(reconfigId)
+                            if (info.hardwareMac != reconfigDevice?.hardwareMac) {
                                 showValidationDialog(
                                     title = "Wrong Device",
                                     message = "You connected to a different SiliGuide device. Please connect to the correct device."
@@ -632,7 +657,7 @@ class IoTViewModel @Inject constructor(
                             }
 
                             // Device matches, Bypass existing/claimed checks.
-                            connectedDeviceId = info.deviceId
+                            connectedDeviceId = reconfigId
                             pairingToken = info.token ?: ""
                             firmwareVersion = info.firmware ?: ""
                             error = null
@@ -643,7 +668,7 @@ class IoTViewModel @Inject constructor(
                         // ----------------------------------------------------
                         // 2. Already exists in local database?
                         // ----------------------------------------------------
-                        val existingDevice = getIoTDeviceByIdUseCase(info.deviceId)
+                        val existingDevice = getDeviceByHardwareMacUseCase(info.hardwareMac)
 
                         if (existingDevice != null) {
                             showValidationDialog(
@@ -671,12 +696,13 @@ class IoTViewModel @Inject constructor(
                         // ----------------------------------------------------
                         // Passed every validation
                         // ----------------------------------------------------
-                        connectedDeviceId = info.deviceId
+//                        connectedDeviceId = info.deviceId
                         pairingToken = info.token ?: ""
                         firmwareVersion = info.firmware
+                        hardwareMac = info.hardwareMac
 
                         if (deviceName.isEmpty()) {
-                            deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                            deviceName = "SiliGuide${info.hardwareMac.replace(":", "").takeLast(3)}"
                         }
 
                         error = null
@@ -834,10 +860,12 @@ class IoTViewModel @Inject constructor(
 
     fun finalizeBluetoothSetup(customName: String) {
         viewModelScope.launch {
-            val id = connectedDeviceId ?: return@launch
+            // Update generate deviceId
+            val id = UUID.randomUUID().toString()
             val token = pairingToken ?: ""
             val firmware = firmwareVersion ?: ""
             val userId = authRepository.getUserId() ?: return@launch
+            val hardwareMac = hardwareMac ?: return@launch
 
             try {
                 isClaiming = true
@@ -857,6 +885,8 @@ class IoTViewModel @Inject constructor(
                     return@launch   // no save happen, device stay unsaved
                 }
 
+
+
                 // encrypt pairingToken first before saving to SQLDelight DB
                 val encryptedToken = pairingTokenCrypto.encrypt(token)
 
@@ -864,13 +894,15 @@ class IoTViewModel @Inject constructor(
                 val newDevice = IoTDevice(
                     deviceId = id,
                     userId = userId,
+                    hardwareMac = hardwareMac,
                     deviceName = customName.trim().take(DEVICE_NAME_MAX_LENGTH),
                     pairingToken = encryptedToken,
                     isActive = true,
                     lastKnownIp = "",
                     connectionMode = ConnectionMode.BLUETOOTH,
                     firmware = firmware,
-                    dateAdded = System.currentTimeMillis()
+                    dateAdded = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
                 )
 
                 saveIoTDeviceUseCase(newDevice)
@@ -1404,6 +1436,12 @@ class IoTViewModel @Inject constructor(
         lanSelectedPassword = ""
     }
 
+    // Re-hydrate credentials lost to a process-death restart mid-wizard.
+    fun restoreLanCredentials(ssid: String?, password: String?) {
+        if (ssid != null) lanSelectedSsid = ssid
+        if (password != null) lanSelectedPassword = password
+    }
+
     // ---- Step 4a of 4: Device Hotspot (AP) provisioning -------------------
 
     /** SSID prefix the ESP32 broadcasts while unclaimed. */
@@ -1579,12 +1617,14 @@ class IoTViewModel @Inject constructor(
             )
         }
 
-        val deviceId = connectedDeviceId
+        // Update generate deviceId
+        val deviceId = UUID.randomUUID().toString()
         val token = pairingToken
         val ssid = lanSelectedSsid
         val name = deviceName.trim()
+        val mac = hardwareMac
 
-        if (deviceId == null || token.isNullOrBlank()) {
+        if (mac == null || token.isNullOrBlank()) {
             _iotUiState.update { currentState ->
                 currentState.copy(
                     isLoading = false,
@@ -1630,6 +1670,23 @@ class IoTViewModel @Inject constructor(
 
         val password = lanSelectedPassword
 
+        if (password.isBlank()) {
+            _iotUiState.update { currentState ->
+                currentState.copy(
+                    isLoading = false,
+                    loadingMessage = "Loading..."
+                )
+            }
+            lanSaveDialog = LanSaveDialogState(
+                title = "WiFi Password Needed",
+                message = "SiliGuide lost your WiFi password (app was restarted mid-setup). " +
+                        "Please re-enter it for \"$ssid\".",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Enter Password"
+            )
+            return
+        }
+
         viewModelScope.launch {
 
             isFinalizingLan = true
@@ -1670,6 +1727,7 @@ class IoTViewModel @Inject constructor(
                         IoTDevice(
                             deviceId = deviceId,
                             userId = userId,
+                            hardwareMac = mac,
                             deviceName = name.take(DEVICE_NAME_MAX_LENGTH),
                             pairingToken = encryptedToken,
                             isActive = true,
@@ -1678,7 +1736,8 @@ class IoTViewModel @Inject constructor(
                             // Set to AP for now since device is not yet connected to LAN
                             connectionMode = ConnectionMode.AP,
                             firmware = firmwareVersion,
-                            dateAdded = System.currentTimeMillis()
+                            dateAdded = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
                         )
                     )
                 }
@@ -1722,14 +1781,12 @@ class IoTViewModel @Inject constructor(
      */
     fun sendWifiToSavedDevice() {
 
-        // Continue on Step 3 isn't gated by isFinalizingLan
         if (isFinalizingLan) return
 
         val deviceId = lanReconfigureDeviceId
         val token = pairingToken
-        val ready = _lanWifiState.value as? LanWifiUiState.Ready
-
-        val selected = ready?.networks?.firstOrNull { it.ssid == ready.selectedSsid }
+        val ssid = lanSelectedSsid          // CHANGED — plain var, not re-matched against scan list
+        val password = lanSelectedPassword  // CHANGED
 
         if (deviceId == null || token.isNullOrBlank()) {
             lanSaveDialog = LanSaveDialogState(
@@ -1740,7 +1797,7 @@ class IoTViewModel @Inject constructor(
             return
         }
 
-        if (selected == null) {
+        if (ssid.isNullOrBlank()) {
             lanSaveDialog = LanSaveDialogState(
                 title = "No Network Selected",
                 message = "Choose a WiFi network and enter its password to continue."
@@ -1748,16 +1805,16 @@ class IoTViewModel @Inject constructor(
             return
         }
 
-        if (!selected.isOpen && ready.password.isEmpty()) {
+        val ready = _lanWifiState.value as? LanWifiUiState.Ready
+        val selectedNetwork = ready?.networks?.firstOrNull { it.ssid == ssid }
+
+        if (selectedNetwork != null && !selectedNetwork.isOpen && password.isEmpty()) {
             showValidationDialog(
                 title = "Password Required",
-                message = "Enter the password for ${selected.ssid} to continue."
+                message = "Enter the password for $ssid to continue."
             )
             return
         }
-
-        lanSelectedSsid = selected.ssid
-        lanSelectedPassword = ready.password
 
         viewModelScope.launch {
 
@@ -1788,23 +1845,21 @@ class IoTViewModel @Inject constructor(
                         provisionSavedDevice(
                             deviceId = deviceId,
                             token = safeToken,
-                            ssid = selected.ssid,
-                            password = ready.password
+                            ssid = ssid,
+                            password = password
                         )
 
                     LanProvisioningMethod.BLUETOOTH ->
                         provisionSavedDeviceViaBluetooth(
                             deviceId = deviceId,
                             token = safeToken,
-                            ssid = selected.ssid,
-                            password = ready.password
+                            ssid = ssid,
+                            password = password
                         )
                 }
             } finally {
                 _iotUiState.update { currentState ->
-                    currentState.copy(
-                        isLoading = false
-                    )
+                    currentState.copy(isLoading = false)
                 }
                 isFinalizingLan = false
             }
@@ -1952,7 +2007,7 @@ class IoTViewModel @Inject constructor(
                 val result = verifyDeviceConnectionUseCase(host = ip)
 
                 result.onSuccess { info ->
-                    Log.d("AP_DEBUG", "Reached ${info.deviceId} at $ip")
+                    Log.d("AP_DEBUG", "Reached ${info.hardwareMac} at $ip")
                     reached = true
                 }
 
@@ -2235,21 +2290,23 @@ class IoTViewModel @Inject constructor(
 
                 // --- Mode Switch Bypass LAN Setup via Bluetooth ---
                 val targetId = lanModeSwitchDeviceId
+                var targetDevice: IoTDevice?
                 if (targetId != null) {
-                    if (info.deviceId != targetId) {
+                    targetDevice = getIoTDeviceByIdUseCase(targetId)
+                    if (info.hardwareMac != targetDevice?.hardwareMac) {
                         withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
                         continue
                     }
                     // Device matches, bypass existing/claimed checks.
                     lanBluetoothDevice = device
-                    connectedDeviceId = info.deviceId
+                    connectedDeviceId = targetId
                     firmwareVersion = info.firmware
                     pairingToken = info.token ?: ""
 
                     Log.d("VerifyLanBluetoothDevice", "pairing token: $pairingToken")
 
                     if (deviceName.isEmpty()) {
-                        deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                        deviceName = "SiliGuide${info.hardwareMac.replace(":", "").takeLast(3)}"
                     }
 
                     error = null
@@ -2258,7 +2315,7 @@ class IoTViewModel @Inject constructor(
                     return
                 }
 
-                if (getIoTDeviceByIdUseCase(info.deviceId) != null) {
+                if (getDeviceByHardwareMacUseCase(info.hardwareMac) != null) {
                     withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
 
                     _lanBluetoothState.value = lanBluetoothFallbackState()
@@ -2285,12 +2342,13 @@ class IoTViewModel @Inject constructor(
 
                 // Passed everything — socket stays open for finalize
                 lanBluetoothDevice = device
-                connectedDeviceId = info.deviceId
+//                connectedDeviceId = info.deviceId
                 firmwareVersion = info.firmware
                 pairingToken = info.token
+                hardwareMac = info.hardwareMac
 
                 if (deviceName.isEmpty()) {
-                    deviceName = "SiliGuide${info.deviceId.takeLast(3)}"
+                    deviceName = "SiliGuide${info.hardwareMac.replace(":", "").takeLast(3)}"
                 }
 
                 error = null
@@ -2380,13 +2438,15 @@ class IoTViewModel @Inject constructor(
      */
     fun finalizeLanBluetoothMode() {
 
-        val deviceId = connectedDeviceId
+        // Update generate deviceId
+        val deviceId = UUID.randomUUID().toString()
         val firmware = firmwareVersion
         val token = pairingToken
         val ssid = lanSelectedSsid
         val name = deviceName.trim()
+        val mac = hardwareMac
 
-        if (deviceId == null || token.isNullOrBlank()) {
+        if (mac == null || token.isNullOrBlank()) {
             lanSaveDialog = LanSaveDialogState(
                 title = "Device Not Connected",
                 message = "Lost the Bluetooth link to the device. Go back and reconnect."
@@ -2413,6 +2473,17 @@ class IoTViewModel @Inject constructor(
         }
 
         val password = lanSelectedPassword
+
+        if (password.isBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "WiFi Password Needed",
+                message = "SiliGuide lost your WiFi password (app was restarted mid-setup). " +
+                        "Please re-enter it for \"$ssid\".",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Enter Password"
+            )
+            return
+        }
 
         viewModelScope.launch {
 
@@ -2465,6 +2536,7 @@ class IoTViewModel @Inject constructor(
                         IoTDevice(
                             deviceId = deviceId,
                             userId = userId,
+                            hardwareMac = mac,
                             deviceName = name.take(DEVICE_NAME_MAX_LENGTH),
                             pairingToken = encryptedToken,
                             isActive = true,
@@ -2472,7 +2544,8 @@ class IoTViewModel @Inject constructor(
                             lastKnownIp = "",
                             connectionMode = ConnectionMode.LAN,
                             firmware = firmware,
-                            dateAdded = System.currentTimeMillis()
+                            dateAdded = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
                         )
                     )
                 }
@@ -2747,6 +2820,7 @@ class IoTViewModel @Inject constructor(
     // --- DIRECT CONNECTION LOGIC ---
     fun reconfigureBluetoothDirectly() {
         val deviceId = btReconfigureDeviceId ?: return
+        Log.d("IoTViewModel", "reconfigureBluetoothDirectly: $deviceId")
 
         viewModelScope.launch {
             // Show loading state while searching/connecting in the background
@@ -2757,10 +2831,16 @@ class IoTViewModel @Inject constructor(
                 )
             }
 
+            val device = getIoTDeviceByIdUseCase(deviceId)
+
             // Call your new API function
-            val info = withContext(Dispatchers.IO) {
-                bluetoothApi.getSpecificDeviceInfo(deviceId)
+            var info: DeviceInfoDto? = null
+            if (device != null) {
+                info = withContext(Dispatchers.IO) {
+                    bluetoothApi.getSpecificDeviceInfo(device.hardwareMac)
+                }
             }
+
 
             withContext(Dispatchers.Main) {
                 if (info == null) {
@@ -2773,7 +2853,7 @@ class IoTViewModel @Inject constructor(
                 }
 
                 // Security Check: Verify it is the exact device we want
-                if (info.device != "SiliGuide" || info.deviceId != deviceId) {
+                if (info.device != "SiliGuide" || info.hardwareMac != device?.hardwareMac) {
                     _iotUiState.update { it.copy(isLoading = false) }
                     showValidationDialog(
                         title = "Wrong Device",
@@ -2834,6 +2914,19 @@ class IoTViewModel @Inject constructor(
         }
 
         val password = lanSelectedPassword
+        Log.d("IoTViewModel", "finalizeLanModeSwitchAP pass: $password")
+
+        // ADD THIS — catch a process-death wipe before it silently sends blank
+        if (!ssid.isNullOrBlank() && password.isBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "WiFi Password Needed",
+                message = "SiliGuide lost your WiFi password (app was restarted mid-setup). " +
+                        "Please re-enter it for \"$ssid\".",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Enter Password"
+            )
+            return
+        }
 
         viewModelScope.launch {
             isFinalizingLan = true
@@ -2877,6 +2970,18 @@ class IoTViewModel @Inject constructor(
         }
 
         val password = lanSelectedPassword
+
+        // ADD THIS — same guard
+        if (!ssid.isNullOrBlank() && password.isBlank()) {
+            lanSaveDialog = LanSaveDialogState(
+                title = "WiFi Password Needed",
+                message = "SiliGuide lost your WiFi password (app was restarted mid-setup). " +
+                        "Please re-enter it for \"$ssid\".",
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Enter Password"
+            )
+            return
+        }
 
         viewModelScope.launch {
             isFinalizingLan = true
