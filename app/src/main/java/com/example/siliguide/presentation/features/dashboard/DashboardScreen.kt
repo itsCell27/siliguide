@@ -1209,8 +1209,8 @@ private fun Modifier.dashedBorder(
 // PREVIEWS
 // ─────────────────────────────────────────────────────────────────────────────
 private val previewDevices = listOf(
-    IoTDevice("1", "1", "Garden Sensor", "AAA", true, "192.168.1.42", ConnectionMode.LAN, "1.0.0", false, 24052026),
-    IoTDevice("2", "1", "Pot Sensor 2", "BBB", false, "192.168.4.1", ConnectionMode.AP, "1.0.0", false, 23052026)
+    IoTDevice("1", "1","AAAA", "Garden Sensor", "AAA", true, "192.168.1.42", ConnectionMode.LAN, "1.0.0", false, 24052026, 24052026),
+    IoTDevice("2", "1", "AAAA", "Pot Sensor 2", "BBB", false, "192.168.4.1", ConnectionMode.AP, "1.0.0", false, 23052026, 24052026)
 )
 
 private val previewOnline = mapOf("1" to true, "2" to false)
