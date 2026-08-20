@@ -271,6 +271,10 @@ fun SiliGuideNavGraph(
             val viewModel: IoTDeviceDetailViewModel = hiltViewModel()
             val state by viewModel.uiState.collectAsState()
 
+            val popToDashboard: () -> Unit = {
+                navController.popBackStack(Screen.Dashboard.route, false)
+            }
+
             // Triggers a database re-fetch whenever this screen becomes visible again
             val lifecycleOwner = LocalLifecycleOwner.current
             DisposableEffect(lifecycleOwner) {
@@ -303,7 +307,12 @@ fun SiliGuideNavGraph(
                     )
                 },
                 onUnlinkPlant = { viewModel.unlinkPlant() },
-                onRemoveDevice = { /* TODO: device removal */ },
+                onRemoveDevice = {
+                    if (backStackEntry.lifecycleIsResumed()) {
+                        viewModel.removeDevice(onSuccess = popToDashboard)
+                    }
+                },
+                onNavigateToDashboard = popToDashboard,
                 onRenameDevice = { viewModel.renameDevice(it)},
                 onModeChangeConfirmed = { mode ->
                     when (mode) {
@@ -1419,7 +1428,7 @@ fun SiliGuideNavGraph(
 
                 val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Wi-Fi setup was interrupted before the device could be saved. Please try again.")
+//                    HandleLostWizardState(navController, "Wi-Fi setup was interrupted before the device could be saved. Please try again.")
                     return@composable
                 }
 

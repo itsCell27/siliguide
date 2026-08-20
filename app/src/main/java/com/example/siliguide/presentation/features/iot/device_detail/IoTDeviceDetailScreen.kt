@@ -133,7 +133,8 @@ fun IoTDeviceDetailScreen(
     onReconnect: () -> Unit = {},
     onRenameDevice: (String) -> Unit = {},
     onRemoveDevice: () -> Unit = {},
-    onModeChangeConfirmed: (DetailConnectionMode) -> Unit = {}
+    onModeChangeConfirmed: (DetailConnectionMode) -> Unit = {},
+    onNavigateToDashboard: () -> Unit = {}
 ) {
 
     val offlineWarning by viewModel.offlineWarningMessage.collectAsState()
@@ -145,6 +146,8 @@ fun IoTDeviceDetailScreen(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+
+    val removeDeviceDialog by viewModel.removeDeviceDialog.collectAsState()
 
     Box(
         modifier = Modifier
@@ -260,6 +263,19 @@ fun IoTDeviceDetailScreen(
             message = message,
             confirmText = "Got it",
             onConfirm = { viewModel.dismissOfflineWarning() }
+        )
+    }
+
+    // --- REMOVE DEVICE RESULT DIALOG ---
+    removeDeviceDialog?.let { dialog ->
+        MessageDialog(
+            title = dialog.title,
+            message = dialog.message,
+            confirmText = "Got it",
+            onConfirm = {
+                viewModel.dismissRemoveDeviceDialog()
+                if (dialog.shouldNavigateOnDismiss) onNavigateToDashboard()
+            }
         )
     }
 

@@ -30,6 +30,7 @@ import com.example.siliguide.domain.usecase.GetLinkedPlantByDeviceIdUseCase
 import com.example.siliguide.domain.usecase.UnlinkIoTDeviceToPlantUseCase
 import com.example.siliguide.domain.engine.SiliGuideThresholds
 import com.example.siliguide.domain.engine.ThresholdEngine
+import com.example.siliguide.domain.usecase.DeleteDeviceByIdUseCase
 import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 
 @HiltViewModel
@@ -38,7 +39,8 @@ class IoTDeviceDetailViewModel @Inject constructor(
     private val fetchSensorsUseCase: FetchSensorsUseCase,
     private val updateDeviceNameUseCase: UpdateDeviceNameUseCase,
     private val getLinkedPlantByDeviceIdUseCase: GetLinkedPlantByDeviceIdUseCase,
-    private val unlinkIoTDeviceToPlantUseCase: UnlinkIoTDeviceToPlantUseCase
+    private val unlinkIoTDeviceToPlantUseCase: UnlinkIoTDeviceToPlantUseCase,
+    private val deleteDeviceByIdUseCase: DeleteDeviceByIdUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -64,6 +66,20 @@ class IoTDeviceDetailViewModel @Inject constructor(
 
     fun dismissOfflineWarning() {
         _offlineWarningMessage.value = null
+    }
+
+    // --- REMOVE DEVICE RESULT DIALOG ---
+    data class RemoveDeviceDialogUi(
+        val title: String,
+        val message: String,
+        val shouldNavigateOnDismiss: Boolean = false
+    )
+
+    private val _removeDeviceDialog = MutableStateFlow<RemoveDeviceDialogUi?>(null)
+    val removeDeviceDialog = _removeDeviceDialog.asStateFlow()
+
+    fun dismissRemoveDeviceDialog() {
+        _removeDeviceDialog.value = null
     }
 
     /** Called once the screen enters composition. Starts the 3s poll loop. */
@@ -403,6 +419,59 @@ class IoTDeviceDetailViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+
+    fun removeDevice(onSuccess: () -> Unit) {
+        val id = deviceId ?: return
+
+        viewModelScope.launch {
+            stop()  // kill the poll loop before the row disappears out from under it
+
+            val outerResult = withContext(Dispatchers.IO) {
+                runCatching { deleteDeviceByIdUseCase(deviceId = id) }
+            }
+
+            val useCaseResult = outerResult.getOrElse { throwable ->
+                Log.e("IoTDeviceDetailVM", "Failed to remove device", throwable)
+                _removeDeviceDialog.value = RemoveDeviceDialogUi(
+                    title = "Removal Failed",
+                    message = throwable.message ?: "Something went wrong while removing the device."
+                )
+                return@launch
+            }
+
+            useCaseResult.fold(
+                onSuccess = { onSuccess() },
+                onFailure = { e ->
+                    Log.e("IoTDeviceDetailVM", "Failed to remove device", e)
+                    _removeDeviceDialog.value = mapRemoveDeviceError(e)
+                }
+            )
+        }
+    }
+
+    private fun mapRemoveDeviceError(e: Throwable): RemoveDeviceDialogUi = when {
+        e.message == "IoT device not found." -> RemoveDeviceDialogUi(
+            title = "Device Not Found",
+            message = "This device no longer exists in your account.",
+            shouldNavigateOnDismiss = false  // nothing changed, device never touched
+        )
+        e.message == "Device deletion is pending synchronization." -> RemoveDeviceDialogUi(
+            title = "Removal Pending",
+            message = "Removal is queued. It will finish once your connection syncs with the cloud.",
+            shouldNavigateOnDismiss = true  // markDeviceDeleted already ran
+        )
+        e.message?.contains("unreachable") == true -> RemoveDeviceDialogUi(
+            title = "Device Removed",
+            message = "Removed from your account, but the ESP32 could not be reached to reset. It may need a manual reset later.",
+            shouldNavigateOnDismiss = true  // cloud + soft-delete already done
+        )
+        else -> RemoveDeviceDialogUi(
+            title = "Reset Failed",
+            message = "Device was removed from your account, but resetting the physical ESP32 failed. Try again if it's still reachable.",
+            shouldNavigateOnDismiss = true  // soft-delete already done, reset just failed
+        )
     }
 
 
