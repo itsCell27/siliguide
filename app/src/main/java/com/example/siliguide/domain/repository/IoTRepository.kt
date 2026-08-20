@@ -66,6 +66,10 @@ interface IoTRepository {
 
     suspend fun getLastDeviceSensorData(deviceId: String): LastDeviceSensorData?
 
+    suspend fun markDeviceDeleted(updatedAt: Long, deviceId: String)
+
+    suspend fun resetDevice(deviceId: String)
+
     // ADDED: Crucial for the sync process
     suspend fun markDeviceSynced(deviceId: String)
 }

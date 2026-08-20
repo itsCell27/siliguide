@@ -117,6 +117,24 @@ class IoTRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun resetDevice(deviceId: String) {
+        val device = getDeviceById(deviceId) ?: return
+
+        when (device.connectionMode) {
+            ConnectionMode.BLUETOOTH -> {
+                bluetoothApi.resetSpecificDevice(device.hardwareMac, device.pairingToken)
+            }
+
+            ConnectionMode.LAN -> {
+                api.resetDevice(device.lastKnownIp, device.pairingToken)
+            }
+
+            ConnectionMode.AP -> {
+                api.resetDevice(DEFAULT_AP_IP, device.pairingToken)
+            }
+        }
+    }
+
     override suspend fun isDeviceOnline(deviceId: String): Boolean {
 
         val savedDevice = getDeviceById(deviceId)
@@ -295,6 +313,10 @@ class IoTRepositoryImpl @Inject constructor(
             date_added = device.dateAdded,
             updated_at = device.updatedAt
         )
+    }
+
+    override suspend fun markDeviceDeleted(updatedAt: Long, deviceId: String) {
+        queries.markDeviceDeleted(updatedAt, deviceId)
     }
 
     override suspend fun markDeviceSynced(deviceId: String) {

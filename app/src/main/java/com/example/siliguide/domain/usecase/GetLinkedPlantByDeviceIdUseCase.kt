@@ -7,7 +7,7 @@ import javax.inject.Inject
 class GetLinkedPlantByDeviceIdUseCase @Inject constructor(
     private val plantRepository: PlantRepository
 ) {
-    suspend operator fun invoke(deviceId: String): Plant {
+    suspend operator fun invoke(deviceId: String): Plant? {
         return plantRepository.getLinkedPlantsByDeviceId(deviceId)
     }
 }
