@@ -144,12 +144,12 @@ ON CONFLICT(device_id) DO UPDATE SET
     updated_at = excluded.updated_at;
 
 getDevicesByUser:
-SELECT * FROM iot_devices WHERE user_id = ? ORDER BY device_name ASC;
+SELECT * FROM iot_devices WHERE user_id = ? AND is_deleted = 0 ORDER BY device_name ASC;
 
 getUnlinkedDevicesByUser:
 SELECT d.*
 FROM iot_devices AS d
-WHERE d.user_id = ?
+WHERE d.user_id = ? AND d.is_deleted = 0
   AND NOT EXISTS (
       SELECT 1
       FROM plants AS p
@@ -159,13 +159,13 @@ WHERE d.user_id = ?
 ORDER BY d.device_name ASC;
 
 getDeviceById:
-SELECT * FROM iot_devices WHERE device_id = ?;
+SELECT * FROM iot_devices WHERE device_id = ? AND is_deleted = 0;
 
 getDeviceByHardwareMac:
-SELECT * FROM iot_devices WHERE hardware_mac = ?;
+SELECT * FROM iot_devices WHERE hardware_mac = ? AND is_deleted = 0;
 
 getActiveDevicesByUser:
-SELECT * FROM iot_devices WHERE user_id = ? AND is_active = 1;
+SELECT * FROM iot_devices WHERE user_id = ? AND is_active = 1 AND is_deleted = 0;
 
 getLastDeviceSensorData:
 SELECT
@@ -179,21 +179,19 @@ SELECT
     last_electrical_conductivity,
     last_air_temp,
     last_light_intensity
-FROM iot_devices WHERE device_id = ?;
-
-
+FROM iot_devices WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceName:
-UPDATE iot_devices SET device_name = ?, is_synced = 0 WHERE device_id = ?;
+UPDATE iot_devices SET device_name = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceIp:
-UPDATE iot_devices SET last_known_ip = ?, is_synced = 0 WHERE device_id = ?;
+UPDATE iot_devices SET last_known_ip = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceConnectionMode:
-UPDATE iot_devices SET connection_mode = ?, is_synced = 0 WHERE device_id = ?;
+UPDATE iot_devices SET connection_mode = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceActiveStatus:
-UPDATE iot_devices SET is_active = ?, is_synced = 0 WHERE device_id = ?;
+UPDATE iot_devices SET is_active = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceSensorData:
 UPDATE iot_devices
@@ -208,6 +206,14 @@ SET
     last_electrical_conductivity = ?,
     last_air_temp = ?,
     last_light_intensity = ?
+WHERE device_id = ? AND is_deleted = 0;
+
+markDeviceDeleted:
+UPDATE iot_devices
+SET
+    is_deleted = 1,
+    is_synced = 0,
+    updated_at = ?
 WHERE device_id = ?;
 
 markDeviceSynced:
