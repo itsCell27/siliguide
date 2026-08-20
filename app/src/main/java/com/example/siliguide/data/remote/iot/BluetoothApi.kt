@@ -194,4 +194,60 @@ class BluetoothApi @Inject constructor(
 
         return sensorData
     }
+
+
+    /**
+     * LOCKED GATEWAY: Sends a secure wipe/reset command to the IoT Device over Bluetooth.
+     * Firmware validates the AES-GCM mathematical tag before wiping the NVS preferences.
+     */
+    @Throws(Exception::class)
+    suspend fun resetDevice(token: String) {
+        // 1. Decrypt token from SQLDelight DB first
+        val plainToken = pairingTokenCrypto.decrypt(token)
+
+        // 2. Dummy JSON payload (firmware only cares about mathematical decryption success)
+        val unencryptedPayload = """{"command":"factory_reset"}"""
+
+        // 3. Encrypt the JSON into a Base64 string using the pairing token
+        val encryptedBase64 = crypto.encrypt(unencryptedPayload, plainToken)
+            ?: throw SecurityException("Failed to encrypt reset payload.")
+
+        // 4. Construct the Bluetooth command string: "RESET:iv+ciphertext+tag"
+        val secureCommand = "${BluetoothCommands.RESET}:$encryptedBase64"
+
+        // 5. Send over the RFCOMM socket
+        val response = bluetoothManager.executeCommand(secureCommand)
+        Log.d("BluetoothApi", "Reset Response: $response")
+
+        // 6. Validate the device acknowledged the reset
+        if (!response.contains("resetting")) {
+            throw IllegalStateException("Failed to reset device via Bluetooth. Firmware rejected. Response: $response")
+        }
+    }
+
+    /**
+     * Specific function for the Repository to find, connect, reset, and disconnect
+     * a specific SiliGuide device automatically.
+     */
+    suspend fun resetSpecificDevice(hardwareMac: String, token: String): Boolean {
+        // 1. Check if Bluetooth is enabled
+        if (!bluetoothManager.isBluetoothOn()) return false
+
+        // 2. Find the specific paired hardware
+        val device = bluetoothDiscoveryManager.getSpecificPairedDevice(hardwareMac) ?: return false
+
+        // 3. Connect, execute wipe, and cleanly disconnect
+        return try {
+            bluetoothManager.connect(device)
+            resetDevice(token)
+            true
+        } catch (e: Exception) {
+            Log.e("BluetoothApi", "Failed to reset specific device over Bluetooth", e)
+            false
+        } finally {
+            // Even if the ESP32 restarts instantly and drops the connection,
+            // we must cleanly close the Android socket to prevent memory leaks.
+            bluetoothManager.disconnect()
+        }
+    }
 }

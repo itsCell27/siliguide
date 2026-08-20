@@ -143,4 +143,33 @@ class Esp32Api @Inject constructor(
             parameter("token", token)
         }
     }
+
+
+    // Send a secure wipe/reset command to the IoT Device via AES-GCM
+    suspend fun resetDevice(
+        host: String,
+        token: String
+    ) {
+        // 1. Decrypt token from SQLDelight DB first
+        val plainToken = pairingTokenCrypto.decrypt(token)
+
+        // 2. The ESP32 handleReset() function only checks if decryption is mathematically successful
+        // to prove authorization. We can send a simple dummy JSON payload.
+        val unencryptedPayload = """{"command":"factory_reset"}"""
+
+        // 3. Encrypt the JSON into a Base64 string using the pairing token
+        val encryptedBase64Payload = crypto.encrypt(unencryptedPayload, plainToken)
+            ?: throw SecurityException("Failed to encrypt reset payload.")
+
+        // 4. POST the raw encrypted Base64 string to /reset
+        val response = client.post("http://$host/reset") {
+            contentType(ContentType.Text.Plain)
+            setBody(encryptedBase64Payload)
+        }
+
+        // 5. Validate response status code
+        if (response.status.value !in 200..299) {
+            throw IllegalStateException("Failed to reset device. HTTP Status: ${response.status.value}")
+        }
+    }
 }

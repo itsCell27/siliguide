@@ -7,4 +7,5 @@ object BluetoothCommands {
     const val CLAIM = "CLAIM"
     const val CONFIGURE = "CONFIGURE"
     const val GET_WIFI_STATUS = "GET_WIFI_STATUS"
+    const val RESET = "RESET"
 }
