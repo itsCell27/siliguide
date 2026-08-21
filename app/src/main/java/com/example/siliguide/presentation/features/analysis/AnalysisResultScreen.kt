@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,12 +74,15 @@ enum class SensorIconType {
 fun AnalysisResultScreen(
     imageUri: String,
     plantId: String? = null,
+    sessionId: String? = null,
     viewModel: AnalysisViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onTryAnotherPhoto: () -> Unit,
     onSaveAsNote: () -> Unit,
+    onDeleteSuccess: () -> Unit = {},
     isHistoryMode: Boolean = false
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val result = viewModel.analysisUiState.ruleResult
     val predictionLabel = viewModel.analysisUiState.predictionLabel
     val confidence = viewModel.analysisUiState.predictionConfidence
@@ -112,7 +116,10 @@ fun AnalysisResultScreen(
                 ResultTopBar(
                     isOutOfScope = isOutOfScope,
                     sessionTimestamp = sessionTimestamp,
-                    onBack = onNavigateBack
+                    onBack = onNavigateBack,
+                    onDeleteClick = if (isHistoryMode && sessionId != null) {
+                        { showDeleteDialog = true }
+                    } else null
                 )
             },
             bottomBar = {
@@ -160,6 +167,53 @@ fun AnalysisResultScreen(
             }
         }
     }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            icon = {
+                Icon(
+                    Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = Danger
+                )
+            },
+            title = {
+                Text(
+                    "Delete this analysis?",
+                    fontFamily = Fraunces,
+                    fontWeight = FontWeight.Bold,
+                    color = Black
+                )
+            },
+            text = {
+                Text(
+                    "This will permanently remove this analysis record. This action can't be undone.",
+                    color = GrayBody
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        sessionId?.let { id ->
+                            viewModel.deleteAnalysisSession(id) {
+                                onDeleteSuccess()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Delete", color = Danger, fontWeight = FontWeight.Medium)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel", color = GrayBody)
+                }
+            },
+            containerColor = White
+        )
+    }
 //    LoadingOverlay(
 //        isLoading = isLoading,
 //        message = ""
@@ -173,7 +227,8 @@ fun AnalysisResultScreen(
 fun ResultTopBar(
     isOutOfScope: Boolean,
     sessionTimestamp: Long?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onDeleteClick: (() -> Unit)? = null
 ) {
     // Falls back to "now" only for the sliver of time before a fresh
     // capture's timestamp lands in state — after that it's always the
@@ -228,6 +283,27 @@ fun ResultTopBar(
                     color = GrayMedium,
                     modifier = Modifier.padding(top = 1.dp)
                 )
+            }
+
+            // Delete button — only shown when caller supplies a handler (history mode)
+            if (onDeleteClick != null) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(DangerBg)
+                        .border(1.dp, DangerBorder, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Rounded.Delete,
+                            contentDescription = "Delete analysis",
+                            tint = Danger,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
         }
         HorizontalDivider(color = Border)

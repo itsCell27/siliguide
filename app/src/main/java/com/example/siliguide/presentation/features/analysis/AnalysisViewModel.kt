@@ -35,6 +35,7 @@ import com.example.siliguide.data.cache.AnalysisCacheEntry
 import com.example.siliguide.data.local.mapper.JsonMapper
 import com.example.siliguide.domain.model.BoundingBox
 import com.example.siliguide.domain.model.SegmentationDetection
+import com.example.siliguide.domain.usecase.DeleteAnalysisSessionUseCase
 import com.example.siliguide.domain.usecase.GetAnalysisSessionByIdUseCase
 import java.io.File
 
@@ -48,6 +49,7 @@ class AnalysisViewModel @Inject constructor(
     private val internalImageStorage: InternalImageStorage,
     private val analysisCache: AnalysisCache,
     private val getAnalysisSessionByIdUseCase: GetAnalysisSessionByIdUseCase,
+    private val deleteAnalysisSessionUseCase: DeleteAnalysisSessionUseCase,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -708,6 +710,20 @@ class AnalysisViewModel @Inject constructor(
                 sensorData = null
             )
             Log.d("PERF", "UI = ${System.currentTimeMillis()-t3}ms")
+        }
+    }
+
+    /**
+     * Deletes a specific analysis session (used from history mode).
+     */
+    fun deleteAnalysisSession(sessionId: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                deleteAnalysisSessionUseCase(sessionId)
+                onSuccess()
+            } catch (e: Exception) {
+                Log.e("AnalysisViewModel", "Failed to delete session: $sessionId", e)
+            }
         }
     }
 

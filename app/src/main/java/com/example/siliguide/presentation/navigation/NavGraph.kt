@@ -1996,11 +1996,16 @@ fun SiliGuideNavGraph(
             AnalysisResultScreen(
                 imageUri = "",
                 plantId = null,
+                sessionId = sessionId,
 
                 onNavigateBack = { navController.popSafely(backStackEntry) },
                 onSaveAsNote = { },
                 isHistoryMode = true,
-                onTryAnotherPhoto = {}
+                onTryAnotherPhoto = {},
+                onDeleteSuccess = {
+                    if (!backStackEntry.lifecycleIsResumed()) return@AnalysisResultScreen
+                    navController.popBackStack()
+                }
             )
         }
         // --- END ANALYSIS PIPELINE ---
