@@ -12,7 +12,10 @@ fun Plants.toDomainModel(): Plant {
         dateCreated = this.date_created,
         updatedAt = this.updated_at,
         lastAnalyzedAt = this.last_analyzed_at,
+
         isSynced = this.is_synced == 1L, // Converts the SQLite Integer to Boolean
+        isDeleted = this.is_deleted == 1L,
+
         deviceId = this.device_id
     )
 }

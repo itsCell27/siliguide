@@ -286,7 +286,12 @@ getLinkedPlantByDeviceId:
 SELECT * FROM plants WHERE device_id = ? AND is_deleted = 0;
 
 updateLastAnalyzedAt:
-UPDATE plants SET last_analyzed_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+UPDATE plants
+SET
+    last_analyzed_at = ?,
+    updated_at = ?,
+    is_synced = 0
+WHERE plant_id = ? AND is_deleted = 0;
 
 -- Unlink a IoT Device to a plant
 unlinkPlantDevice:
@@ -386,11 +391,6 @@ SELECT * FROM analysis_sessions WHERE user_id = ? AND is_synced = 0;
 deleteSession:
 DELETE FROM analysis_sessions WHERE session_id = ?;
 
-deleteSessionsByPlant:
-DELETE FROM analysis_sessions WHERE plant_id = ?;
-
-deleteOldSessionsByUser:
-DELETE FROM analysis_sessions WHERE user_id = ? AND session_timestamp < ?;
 
 
 -- ============================================================

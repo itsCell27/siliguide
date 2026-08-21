@@ -7,6 +7,9 @@ data class Plant(
     val dateCreated: Long,
     val updatedAt: Long,
     val lastAnalyzedAt: Long?,
+
     val isSynced: Boolean = false, // REQUIRED: For WorkManager offline sync tracking
+    val isDeleted: Boolean = false,
+
     val deviceId: String?
 )

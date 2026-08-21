@@ -17,6 +17,7 @@ fun Iot_devices.toIotDomain(): IoTDevice {
         connectionMode = ConnectionMode.valueOf(connection_mode),
         firmware = firmware,
         isSynced = is_synced == 1L, // Add this: Converts SQLite Long to Boolean
+        isDeleted = is_deleted == 1L,
         dateAdded = date_added,
         updatedAt = updated_at
     )

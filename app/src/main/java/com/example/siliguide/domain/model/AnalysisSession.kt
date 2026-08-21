@@ -32,5 +32,7 @@ data class AnalysisSession(
     val airTemp: Double?,
 
     val isSynced: Boolean = false, // REQUIRED: Sync status
+    val isDeleted: Boolean = false,
+
     val updatedAt: Long
 )
