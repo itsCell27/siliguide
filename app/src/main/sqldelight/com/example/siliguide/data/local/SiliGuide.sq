@@ -121,7 +121,9 @@ updateDisplayName:
 UPDATE users SET display_name = ?, updated_at = ? WHERE user_id = ?;
 
 updateEmail:
-UPDATE users SET email = ? WHERE user_id = ?;
+UPDATE users
+SET email = ?, updated_at = ?
+WHERE user_id = ?;
 
 
 -- ============================================================
@@ -182,16 +184,36 @@ SELECT
 FROM iot_devices WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceName:
-UPDATE iot_devices SET device_name = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
+UPDATE iot_devices
+SET
+    device_name = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceIp:
-UPDATE iot_devices SET last_known_ip = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
+UPDATE iot_devices
+SET
+    last_known_ip = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceConnectionMode:
-UPDATE iot_devices SET connection_mode = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
+UPDATE iot_devices
+SET
+    connection_mode = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceActiveStatus:
-UPDATE iot_devices SET is_active = ?, is_synced = 0 WHERE device_id = ? AND is_deleted = 0;
+UPDATE iot_devices
+SET
+    is_active = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
 
 updateDeviceSensorData:
 UPDATE iot_devices

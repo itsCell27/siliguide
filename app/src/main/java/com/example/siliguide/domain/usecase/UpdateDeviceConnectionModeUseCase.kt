@@ -7,7 +7,8 @@ import javax.inject.Inject
 class UpdateDeviceConnectionModeUseCase @Inject constructor(
     private val ioTRepository: IoTRepository
 ) {
-    suspend operator fun invoke(deviceId: String, connectionMode: ConnectionMode) {
-        ioTRepository.updateDeviceConnectionMode(deviceId, connectionMode)
+    private val currentTimestamp = System.currentTimeMillis()
+    suspend operator fun invoke(connectionMode: ConnectionMode, deviceId: String) {
+        ioTRepository.updateDeviceConnectionMode(connectionMode, currentTimestamp, deviceId)
     }
 }

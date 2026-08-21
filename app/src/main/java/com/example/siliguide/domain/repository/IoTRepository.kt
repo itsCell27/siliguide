@@ -57,10 +57,10 @@ interface IoTRepository {
 
     fun getAllUnlinkedDevices(userId: String): Flow<List<IoTDevice>>
 
-    suspend fun updateDeviceName(deviceName: String, deviceId: String)
-    suspend fun updateDeviceIp(deviceId: String, ip: String)
+    suspend fun updateDeviceName(deviceName: String, updatedAt: Long, deviceId: String)
+    suspend fun updateDeviceIp(ip: String, updatedAt: Long, deviceId: String)
 
-    suspend fun updateDeviceConnectionMode(deviceId: String, connectionMode: ConnectionMode)
+    suspend fun updateDeviceConnectionMode(connectionMode: ConnectionMode, updatedAt: Long, deviceId: String)
 
     suspend fun updateLastDeviceSensorData(deviceId: String, lastSensorData: LastDeviceSensorData)
 

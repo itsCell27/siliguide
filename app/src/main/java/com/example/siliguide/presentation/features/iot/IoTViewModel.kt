@@ -1919,7 +1919,7 @@ class IoTViewModel @Inject constructor(
             .onFailure { Log.e("IoTViewModel", "updateDeviceIp failed", it) }
 
         // ---- Update connection mode to LAN ---------------------------------------
-        runCatching { updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.LAN) }
+        runCatching { updateDeviceConnectionModeUseCase(ConnectionMode.LAN, deviceId) }
             .onFailure { Log.e("IoTViewModel", "updateConnectionMode failed", it) }
 
 
@@ -2639,7 +2639,7 @@ class IoTViewModel @Inject constructor(
         runCatching { updateDeviceIpUseCase(deviceId, status.ip) }
             .onFailure { Log.e("IoTViewModel", "updateDeviceIp failed", it) }
 
-        runCatching { updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.LAN) }
+        runCatching { updateDeviceConnectionModeUseCase(ConnectionMode.LAN, deviceId) }
             .onFailure { Log.e("IoTViewModel", "updateConnectionMode failed", it) }
 
         // Bluetooth was only the delivery channel — LAN mode takes over now
@@ -2761,7 +2761,7 @@ class IoTViewModel @Inject constructor(
 
             try {
                 // Update connection mode to AP
-                updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.AP)
+                updateDeviceConnectionModeUseCase(ConnectionMode.AP, deviceId)
                 // Ensure the IP points to the default AP IP
                 updateDeviceIpUseCase(deviceId, DEFAULT_AP_IP)
 
@@ -2801,7 +2801,7 @@ class IoTViewModel @Inject constructor(
 
             try {
                 // Update connection mode to BLUETOOTH
-                updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.BLUETOOTH)
+                updateDeviceConnectionModeUseCase(ConnectionMode.BLUETOOTH, deviceId)
 
                 _setupComplete.emit(Unit)
             } catch (e: Exception) {
@@ -2865,7 +2865,7 @@ class IoTViewModel @Inject constructor(
                 // Success! Switch the mode in the local SQLDelight database
                 try {
                     _iotUiState.update { it.copy(loadingMessage = "Switching mode...") }
-                    updateDeviceConnectionModeUseCase(deviceId, ConnectionMode.BLUETOOTH)
+                    updateDeviceConnectionModeUseCase(ConnectionMode.BLUETOOTH, deviceId)
 
                     // Trigger the UI to pop back
                     _setupComplete.emit(Unit)

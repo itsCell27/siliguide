@@ -6,7 +6,8 @@ import javax.inject.Inject
 class UpdateDeviceNameUseCase @Inject constructor(
     private val ioTRepository: IoTRepository
 ) {
+    private val currentTimestamp = System.currentTimeMillis()
     suspend operator fun invoke(deviceName: String, deviceId: String) {
-        ioTRepository.updateDeviceName(deviceName, deviceId)
+        ioTRepository.updateDeviceName(deviceName, currentTimestamp, deviceId)
     }
 }
