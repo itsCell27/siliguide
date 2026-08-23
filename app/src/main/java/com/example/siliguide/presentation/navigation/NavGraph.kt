@@ -118,7 +118,9 @@ fun SiliGuideNavGraph(
 
             EmailAuthScreen(
                 onBackClick = { navController.popSafely(backStackEntry) },
-                onContinueClick = { email -> authViewModel.sendEmailOtp(email) },
+                onContinueClick = { email, onSent ->
+                    authViewModel.sendEmailOtp(email, onSuccess = onSent)
+                },
                 onVerifyOtpClick = { email, otp ->
                     authViewModel.verifyEmailOtp(email, otp, onSuccess = {
                         navController.navigate(Screen.Dashboard.route) {
@@ -126,9 +128,12 @@ fun SiliGuideNavGraph(
                         }
                     })
                 },
-                onResendCodeClick = { email -> authViewModel.sendEmailOtp(email) },
+                onResendCodeClick = { email, onSent ->
+                    authViewModel.sendEmailOtp(email, onSuccess = onSent)
+                },
                 isLoading = uiState.isLoading,
-                errorMessage = uiState.errorMessage
+                errorMessage = uiState.errorMessage,
+                onDismissError = { authViewModel.clearError() }
             )
         }
 
