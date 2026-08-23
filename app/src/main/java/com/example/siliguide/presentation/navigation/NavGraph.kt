@@ -91,27 +91,44 @@ fun SiliGuideNavGraph(
 
         // --- AUTHENTICATION ---
         composable(route = Screen.Welcome.route) { backStackEntry ->
+            val authViewModel: AuthViewModel = hiltViewModel()
+            val context = LocalContext.current
+            val uiState by authViewModel.uiState.collectAsState()
+
             WelcomeScreen(
                 onContinueWithEmailClick = {
                     navController.navigateSafely(backStackEntry, Screen.EmailAuth.route)
                 },
-                onContinueWithGoogleClick = { /* TODO */ },
-                onGuestClick = { navController.navigate(Screen.GuestInfo.route) }
+                onContinueWithGoogleClick = {
+                    authViewModel.signInWithGoogle(context, onSuccess = {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Welcome.route) { inclusive = true }
+                        }
+                    })
+                },
+                onGuestClick = { navController.navigate(Screen.GuestInfo.route) },
+                isLoading = uiState.isLoading,
+                errorMessage = uiState.errorMessage
             )
         }
 
         composable(route = Screen.EmailAuth.route) { backStackEntry ->
+            val authViewModel: AuthViewModel = hiltViewModel()
+            val uiState by authViewModel.uiState.collectAsState()
+
             EmailAuthScreen(
                 onBackClick = { navController.popSafely(backStackEntry) },
-                onContinueClick = { email ->
-                    /* TODO: AuthViewModel — send magic link / request OTP for `email` */
-                },
+                onContinueClick = { email -> authViewModel.sendEmailOtp(email) },
                 onVerifyOtpClick = { email, otp ->
-                    /* TODO: AuthViewModel — verify `otp` for `email`, then navigate to Dashboard */
+                    authViewModel.verifyEmailOtp(email, otp, onSuccess = {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Welcome.route) { inclusive = true }
+                        }
+                    })
                 },
-                onResendCodeClick = { email ->
-                    /* TODO: AuthViewModel — resend OTP for `email` */
-                }
+                onResendCodeClick = { email -> authViewModel.sendEmailOtp(email) },
+                isLoading = uiState.isLoading,
+                errorMessage = uiState.errorMessage
             )
         }
 
@@ -139,6 +156,8 @@ fun SiliGuideNavGraph(
 
         // --- DASHBOARD (HOME) ---
         composable(route = Screen.Dashboard.route) { backStackEntry ->
+            val authViewModel: AuthViewModel = hiltViewModel()
+            val context = LocalContext.current
 
             DashboardScreen(
                 onNavigateToCamera = {
@@ -179,7 +198,13 @@ fun SiliGuideNavGraph(
                 onCreateAccountWithEmail = {
                     navController.navigateSafely(backStackEntry, Screen.EmailAuth.route)
                 },
-                onCreateAccountWithGoogle = { /* TODO */ }
+                onCreateAccountWithGoogle = {
+                    authViewModel.signInWithGoogle(context, onSuccess = {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Welcome.route) { inclusive = true }
+                        }
+                    })
+                }
             )
         }
 
