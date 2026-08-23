@@ -27,6 +27,9 @@ credentials = "1.6.0"
 # Supabase
 supabase = "3.6.0"
 
+# Google
+googleid = "1.2.0"
+
 # Local Database & Sync
 sqldelight = "2.3.2"
 workManager = "2.11.2"
@@ -77,6 +80,9 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 # AUTHENTICATION
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+
+# GOOGLE
+google-id = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 
 # SUPABASE (BACKEND)
 supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt", version.ref = "supabase" }
