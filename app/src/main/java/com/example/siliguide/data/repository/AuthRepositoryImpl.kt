@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 class AuthRepositoryImpl @Inject constructor(
     private val dbManager: SiliGuideDatabaseManager,
@@ -141,7 +142,18 @@ class AuthRepositoryImpl @Inject constructor(
 
         if (current != null && current.isGuest) {
             val user = supabase.auth.currentUserOrNull()
-            val isBrandNewAccount = user?.createdAt != null && user.createdAt == user.lastSignInAt
+            val createdAt = user?.createdAt
+            val lastSignIn = user?.lastSignInAt
+
+            /*
+           * Only problem in this if user sends OTP code past 2 mins (120secs)
+           * this logic will assume account already exist
+           * TODO: create a better logic to handle this
+            */
+            val isBrandNewAccount = createdAt != null && lastSignIn != null &&
+                    (lastSignIn - createdAt) < 120.seconds
+
+
             // On a genuine new signup both timestamps are stamped to the same
             // instant — the account is created and signed-in in one motion.
             // If they differ, this account already existed before this call.
