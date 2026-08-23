@@ -206,6 +206,7 @@ fun DashboardScreen(
         onCreateAccountWithGoogle = onCreateAccountWithGoogle,
         profileIsLoading = authUiState.isLoading,
         profileErrorMessage = authUiState.errorMessage,
+        onDismissProfileError = { authViewModel.clearError() }
     )
 }
 
@@ -242,7 +243,8 @@ fun DashboardContent(
     onCreateAccountWithEmail: () -> Unit = {},
     onCreateAccountWithGoogle: () -> Unit = {},
     profileIsLoading: Boolean = false,
-    profileErrorMessage: String? = null
+    profileErrorMessage: String? = null,
+    onDismissProfileError: () -> Unit = {}
 ) {
     // Dynamically compute how much bottom padding the scrollable body needs:
     // system nav bar inset + our custom bottom nav bar height.
@@ -308,6 +310,7 @@ fun DashboardContent(
                         onCreateAccountWithGoogle = onCreateAccountWithGoogle,
                         isLoading = profileIsLoading,
                         errorMessage =profileErrorMessage,
+                        onDismissError = onDismissProfileError
                     )
                 }
             }

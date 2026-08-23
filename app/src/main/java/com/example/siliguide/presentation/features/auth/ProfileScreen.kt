@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.core.ui.components.ErrorDialog
 
 private const val DISPLAY_NAME_MAX_LENGTH = 20
 
@@ -74,7 +75,8 @@ fun ProfileContent(
     onConfirmGuestLogOut: () -> Unit = {},
     onConfirmDeleteAccount: () -> Unit = {},
     onCreateAccountWithEmail: () -> Unit = {},
-    onCreateAccountWithGoogle: () -> Unit = {}
+    onCreateAccountWithGoogle: () -> Unit = {},
+    onDismissError: () -> Unit = {}
 ) {
     var showChangeNameDialog by remember { mutableStateOf(false) }
     var showLogOutDialog by remember { mutableStateOf(false) }
@@ -114,7 +116,6 @@ fun ProfileContent(
                 GuestBanner(
                     onCreateAccountClick = { showCreateAccountDialog = true },
                     isLoading = isLoading,
-                    errorMessage = errorMessage
                 )
             } else {
                 SectionLabel("ACCOUNT SETTINGS")
@@ -246,6 +247,10 @@ fun ProfileContent(
                 onCreateAccountWithGoogle()
             }
         )
+    }
+
+    if (errorMessage != null) {
+        ErrorDialog(message = errorMessage, onDismiss = onDismissError)
     }
 }
 
@@ -383,7 +388,6 @@ private fun initialsOf(name: String): String =
 private fun GuestBanner(
     onCreateAccountClick: () -> Unit,
     isLoading: Boolean = false,
-    errorMessage: String? = null
 ) {
     Column(
         modifier = Modifier
@@ -417,15 +421,15 @@ private fun GuestBanner(
                 Text("Create Account", style = MaterialTheme.typography.titleSmall)
             }
         }
-        if (errorMessage != null) {
-            Text(
-                errorMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = Danger,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+//        if (errorMessage != null) {
+//            Text(
+//                errorMessage,
+//                style = MaterialTheme.typography.bodySmall,
+//                color = Danger,
+//                textAlign = TextAlign.Center,
+//                modifier = Modifier.fillMaxWidth()
+//            )
+//        }
     }
 }
 
@@ -839,7 +843,7 @@ private fun CreateAccountDialog(
                     border = BorderStroke(1.5.dp, Border),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Black, containerColor = White)
                 ) {
-                    ProfileGoogleIcon(modifier = Modifier.size(15.dp))
+                    GoogleIcon(modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Continue with Google", style = MaterialTheme.typography.titleSmall)
                 }

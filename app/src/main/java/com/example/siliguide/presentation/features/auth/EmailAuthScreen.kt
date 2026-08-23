@@ -21,12 +21,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.core.ui.components.ErrorDialog
 import kotlinx.coroutines.delay
 
 private const val OTP_LENGTH = 6
@@ -37,11 +42,12 @@ private enum class EmailAuthStep { EMAIL_ENTRY, OTP_VERIFY }
 @Composable
 fun EmailAuthScreen(
     onBackClick: () -> Unit,
-    onContinueClick: (email: String) -> Unit = {},
+    onContinueClick: (email: String, onSuccess: () -> Unit) -> Unit = { _, _ -> },
     onVerifyOtpClick: (email: String, otp: String) -> Unit = { _, _ -> },
-    onResendCodeClick: (email: String) -> Unit = {},
+    onResendCodeClick: (email: String, onSuccess: () -> Unit) -> Unit = { _, _ -> },
     isLoading: Boolean = false,
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    onDismissError: () -> Unit = {}
 ) {
     var step by remember { mutableStateOf(EmailAuthStep.EMAIL_ENTRY) }
     var email by remember { mutableStateOf("") }
@@ -115,12 +121,13 @@ fun EmailAuthScreen(
                             isEmailValid = isEmailValid,
                             onContinue = {
                                 if (isEmailValid) {
-                                    onContinueClick(email.trim())
-                                    step = EmailAuthStep.OTP_VERIFY
+                                    onContinueClick(email.trim()) {
+                                        // Only reached if the send actually succeeded
+                                        step = EmailAuthStep.OTP_VERIFY
+                                    }
                                 }
                             },
-                            isLoading = isLoading,
-                            errorMessage = errorMessage
+                            isLoading = isLoading
                         )
 
                         EmailAuthStep.OTP_VERIFY -> OtpVerifyContent(
@@ -131,16 +138,21 @@ fun EmailAuthScreen(
                             secondsLeft = secondsLeft,
                             onVerify = { onVerifyOtpClick(email.trim(), otp) },
                             onResend = {
-                                onResendCodeClick(email.trim())
-                                resendTick++
+                                onResendCodeClick(email.trim()) {
+                                    // Only restart the 60s countdown if the resend actually succeeded
+                                    resendTick++
+                                }
                             },
-                            isLoading = isLoading,
-                            errorMessage = errorMessage
+                            isLoading = isLoading
                         )
                     }
                 }
             }
         }
+    }
+
+    if (errorMessage != null) {
+        ErrorDialog(message = errorMessage, onDismiss = onDismissError)
     }
 }
 
@@ -151,8 +163,7 @@ private fun ColumnScope.EmailEntryContent(
     onEmailChange: (String) -> Unit,
     isEmailValid: Boolean,
     onContinue: () -> Unit,
-    isLoading: Boolean = false,
-    errorMessage: String? = null
+    isLoading: Boolean = false
 ) {
     Column {
         Spacer(Modifier.height(4.dp))
@@ -228,15 +239,6 @@ private fun ColumnScope.EmailEntryContent(
         )
     }
 
-    if (errorMessage != null) {
-        Text(
-            errorMessage,
-            style = MaterialTheme.typography.bodySmall,
-            color = Danger,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-    }
-
     Button(
         onClick = onContinue,
         enabled = isEmailValid && !isLoading,
@@ -274,8 +276,7 @@ private fun ColumnScope.OtpVerifyContent(
     secondsLeft: Int,
     onVerify: () -> Unit,
     onResend: () -> Unit,
-    isLoading: Boolean = false,
-    errorMessage: String? = null
+    isLoading: Boolean = false
 ) {
     Column {
         Spacer(Modifier.height(4.dp))
@@ -355,15 +356,6 @@ private fun ColumnScope.OtpVerifyContent(
                 )
             }
         }
-    }
-
-    if (errorMessage != null) {
-        Text(
-            errorMessage,
-            style = MaterialTheme.typography.bodySmall,
-            color = Danger,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
     }
 
     Button(

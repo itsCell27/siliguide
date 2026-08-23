@@ -140,18 +140,19 @@ class AuthRepositoryImpl @Inject constructor(
         val now = System.currentTimeMillis()
 
         if (current != null && current.isGuest) {
-            // Refuse to merge this guest's local data onto an account that
-            // already has its own local row on this device — that's not a
-            // guest "upgrading," that's two unrelated data sets colliding on
-            // the same primary key.
-            val existingLocalRow = dbManager.queries.getUserById(realUserId).executeAsOneOrNull()
-            if (existingLocalRow != null) {
-                supabase.auth.signOut() // undo the Supabase-side login, stay a guest
+            val user = supabase.auth.currentUserOrNull()
+            val isBrandNewAccount = user?.createdAt != null && user.createdAt == user.lastSignInAt
+            // On a genuine new signup both timestamps are stamped to the same
+            // instant — the account is created and signed-in in one motion.
+            // If they differ, this account already existed before this call.
+
+            if (!isBrandNewAccount) {
+                supabase.auth.signOut()
                 throw IllegalStateException(
-                    "This email is already linked to an existing account on this device. " +
-                            "Log in instead, or use a different email to create a new one."
+                    "This email is already registered. Log in instead, or use a different email to create a new account."
                 )
             }
+
             dbManager.queries.transaction {
                 dbManager.queries.migrateGuestToAuthenticated(
                     newUserId = realUserId,

@@ -58,11 +58,14 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun sendEmailOtp(email: String) {
+    fun sendEmailOtp(email: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = AuthUiState(isLoading = true)
             sendEmailOtpUseCase(email)
-                .onSuccess { _uiState.value = AuthUiState(isLoading = false) }
+                .onSuccess {
+                    _uiState.value = AuthUiState(isLoading = false)
+                    onSuccess()
+                }
                 .onFailure { e -> _uiState.value = AuthUiState(isLoading = false, errorMessage = e.message) }
         }
     }
