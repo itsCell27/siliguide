@@ -52,8 +52,10 @@ import coil.compose.AsyncImage
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.model.AnalysisSession
+import com.example.siliguide.domain.model.AuthProvider
 import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
+import com.example.siliguide.presentation.features.auth.AuthViewModel
 import com.example.siliguide.presentation.features.auth.ProfileAuthProvider
 import com.example.siliguide.presentation.features.auth.ProfileContent
 import kotlinx.coroutines.launch
@@ -133,12 +135,18 @@ fun DashboardScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     var isAddMenuOpen by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(DashboardTab.HOME) }
+    val authViewModel: AuthViewModel = hiltViewModel()
 
-    // TODO: swap these placeholder fields for AuthViewModel's real
-    // session/profile state (display name, email, provider) once exposed
-    val profileDisplayName = "Juan Dela Cruz"
-    val profileEmail: String? = "juan.delacruz@email.com"
-    val profileAuthProvider = ProfileAuthProvider.EMAIL
+    val userProfile by authViewModel.userProfile.collectAsState()
+    val profileDisplayName = userProfile?.displayName ?: ""
+    val profileEmail = userProfile?.email
+    val profileAuthProvider = when (userProfile?.provider) {
+        AuthProvider.GOOGLE -> ProfileAuthProvider.GOOGLE
+        AuthProvider.EMAIL -> ProfileAuthProvider.EMAIL
+        AuthProvider.GUEST, null -> ProfileAuthProvider.GUEST
+    }
+
+    val authUiState by authViewModel.uiState.collectAsState()
 
     val displayPlants = uiState.plants.map { domainPlant ->
 
@@ -185,19 +193,19 @@ fun DashboardScreen(
             /* TODO: AuthViewModel — persist new display name */
         },
         onConfirmLogOut = {
-            /* TODO: AuthViewModel — sign out */
-            onSignedOut()
+            authViewModel.signOut(onSuccess = onSignedOut)
         },
         onConfirmGuestLogOut = {
-            /* TODO: AuthViewModel — wipe guest data, sign out */
-            onSignedOut()
+            authViewModel.guestLogOut(onSuccess = onSignedOut)
         },
         onConfirmDeleteAccount = {
             /* TODO: AuthViewModel — delete account */
             onSignedOut()
         },
         onCreateAccountWithEmail = onCreateAccountWithEmail,
-        onCreateAccountWithGoogle = onCreateAccountWithGoogle
+        onCreateAccountWithGoogle = onCreateAccountWithGoogle,
+        profileIsLoading = authUiState.isLoading,
+        profileErrorMessage = authUiState.errorMessage,
     )
 }
 
@@ -232,7 +240,9 @@ fun DashboardContent(
     onConfirmGuestLogOut: () -> Unit = {},
     onConfirmDeleteAccount: () -> Unit = {},
     onCreateAccountWithEmail: () -> Unit = {},
-    onCreateAccountWithGoogle: () -> Unit = {}
+    onCreateAccountWithGoogle: () -> Unit = {},
+    profileIsLoading: Boolean = false,
+    profileErrorMessage: String? = null
 ) {
     // Dynamically compute how much bottom padding the scrollable body needs:
     // system nav bar inset + our custom bottom nav bar height.
@@ -295,7 +305,9 @@ fun DashboardContent(
                         onConfirmGuestLogOut = onConfirmGuestLogOut,
                         onConfirmDeleteAccount = onConfirmDeleteAccount,
                         onCreateAccountWithEmail = onCreateAccountWithEmail,
-                        onCreateAccountWithGoogle = onCreateAccountWithGoogle
+                        onCreateAccountWithGoogle = onCreateAccountWithGoogle,
+                        isLoading = profileIsLoading,
+                        errorMessage =profileErrorMessage,
                     )
                 }
             }

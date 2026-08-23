@@ -39,7 +39,9 @@ fun EmailAuthScreen(
     onBackClick: () -> Unit,
     onContinueClick: (email: String) -> Unit = {},
     onVerifyOtpClick: (email: String, otp: String) -> Unit = { _, _ -> },
-    onResendCodeClick: (email: String) -> Unit = {}
+    onResendCodeClick: (email: String) -> Unit = {},
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
     var step by remember { mutableStateOf(EmailAuthStep.EMAIL_ENTRY) }
     var email by remember { mutableStateOf("") }
@@ -116,7 +118,9 @@ fun EmailAuthScreen(
                                     onContinueClick(email.trim())
                                     step = EmailAuthStep.OTP_VERIFY
                                 }
-                            }
+                            },
+                            isLoading = isLoading,
+                            errorMessage = errorMessage
                         )
 
                         EmailAuthStep.OTP_VERIFY -> OtpVerifyContent(
@@ -129,7 +133,9 @@ fun EmailAuthScreen(
                             onResend = {
                                 onResendCodeClick(email.trim())
                                 resendTick++
-                            }
+                            },
+                            isLoading = isLoading,
+                            errorMessage = errorMessage
                         )
                     }
                 }
@@ -144,7 +150,9 @@ private fun ColumnScope.EmailEntryContent(
     email: String,
     onEmailChange: (String) -> Unit,
     isEmailValid: Boolean,
-    onContinue: () -> Unit
+    onContinue: () -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
     Column {
         Spacer(Modifier.height(4.dp))
@@ -220,9 +228,18 @@ private fun ColumnScope.EmailEntryContent(
         )
     }
 
+    if (errorMessage != null) {
+        Text(
+            errorMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = Danger,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+    }
+
     Button(
         onClick = onContinue,
-        enabled = isEmailValid,
+        enabled = isEmailValid && !isLoading,
         modifier = Modifier
             .fillMaxWidth()
             .height(50.dp),
@@ -235,7 +252,15 @@ private fun ColumnScope.EmailEntryContent(
         ),
         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp)
     ) {
-        Text("Continue", style = MaterialTheme.typography.titleSmall)
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = White,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text("Continue", style = MaterialTheme.typography.titleSmall)
+        }
     }
 }
 
@@ -248,7 +273,9 @@ private fun ColumnScope.OtpVerifyContent(
     isOtpComplete: Boolean,
     secondsLeft: Int,
     onVerify: () -> Unit,
-    onResend: () -> Unit
+    onResend: () -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
     Column {
         Spacer(Modifier.height(4.dp))
@@ -330,9 +357,18 @@ private fun ColumnScope.OtpVerifyContent(
         }
     }
 
+    if (errorMessage != null) {
+        Text(
+            errorMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = Danger,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+    }
+
     Button(
         onClick = onVerify,
-        enabled = isOtpComplete,
+        enabled = isOtpComplete && !isLoading,
         modifier = Modifier
             .fillMaxWidth()
             .height(50.dp),
@@ -345,7 +381,15 @@ private fun ColumnScope.OtpVerifyContent(
         ),
         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp)
     ) {
-        Text("Verify", style = MaterialTheme.typography.titleSmall)
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = White,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text("Verify", style = MaterialTheme.typography.titleSmall)
+        }
     }
 }
 

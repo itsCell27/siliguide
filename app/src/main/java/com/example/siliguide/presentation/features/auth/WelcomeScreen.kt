@@ -16,6 +16,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.example.siliguide.R
@@ -29,7 +31,9 @@ import com.example.siliguide.core.ui.theme.*
 fun WelcomeScreen(
     onContinueWithEmailClick: () -> Unit,
     onContinueWithGoogleClick: () -> Unit,
-    onGuestClick: () -> Unit
+    onGuestClick: () -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
@@ -218,6 +222,7 @@ fun WelcomeScreen(
                             // Continue with Google — outlined
                             OutlinedButton(
                                 onClick = onContinueWithGoogleClick,
+                                enabled = !isLoading,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(btnHeight),
@@ -225,14 +230,33 @@ fun WelcomeScreen(
                                 border = BorderStroke(1.5.dp, GreenPrimary),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = White,
-                                    contentColor = GreenPrimary
+                                    contentColor = GreenPrimary,
+                                    disabledContentColor = GreenPrimary.copy(alpha = 0.5f)
                                 )
                             ) {
-                                GoogleIcon(modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(8.dp))
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = GreenPrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    GoogleIcon(modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Continue with Google",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                }
+                            }
+
+                            if (errorMessage != null) {
                                 Text(
-                                    "Continue with Google",
-                                    style = MaterialTheme.typography.titleSmall
+                                    errorMessage,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Danger,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
 
@@ -317,46 +341,31 @@ private fun EnvelopeIcon(modifier: Modifier = Modifier, color: Color) {
     }
 }
 
-// ── Google "G" icon (Canvas, brand colors, simplified) ─────────────────────────
+// ── Google "G" icon (real path data, traced from icons8 SVG) ────────────────
 @Composable
 private fun GoogleIcon(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val d = size.minDimension
-        val strokeW = d * 0.24f
-        val topLeft = Offset(strokeW / 2f, strokeW / 2f)
-        val arcSize = Size(d - strokeW, d - strokeW)
+    val googlePaths = remember {
+        listOf(
+            "M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" to Color(0xFFFFC107),
+            "M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" to Color(0xFFFF3D00),
+            "M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" to Color(0xFF4CAF50),
+            "M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" to Color(0xFF1976D2)
+        )
+    }
 
-        // Four quarter-arcs approximating the multicolor Google ring
-        drawArc(
-            color = Color(0xFF4285F4),
-            startAngle = -45f, sweepAngle = 90f, useCenter = false,
-            topLeft = topLeft, size = arcSize,
-            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
-        )
-        drawArc(
-            color = Color(0xFF34A853),
-            startAngle = 45f, sweepAngle = 90f, useCenter = false,
-            topLeft = topLeft, size = arcSize,
-            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
-        )
-        drawArc(
-            color = Color(0xFFFBBC05),
-            startAngle = 135f, sweepAngle = 90f, useCenter = false,
-            topLeft = topLeft, size = arcSize,
-            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
-        )
-        drawArc(
-            color = Color(0xFFEA4335),
-            startAngle = 225f, sweepAngle = 90f, useCenter = false,
-            topLeft = topLeft, size = arcSize,
-            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
-        )
-        // Horizontal bar (the "G" crossbar / opening)
-        drawRect(
-            color = Color(0xFF4285F4),
-            topLeft = Offset(d * 0.5f, d * 0.42f),
-            size = Size(d * 0.42f, d * 0.16f)
-        )
+    Canvas(modifier = modifier) {
+        // SVG viewBox is 48x48 — scale that space to whatever size this
+        // Canvas is actually given, anchored at the same top-left origin
+        // the path coordinates were written against.
+        val scaleFactor = size.width / 48f
+        scale(scaleFactor, scaleFactor, pivot = Offset.Zero) {
+            googlePaths.forEach { (pathData, color) ->
+                drawPath(
+                    path = PathParser().parsePathString(pathData).toPath(),
+                    color = color
+                )
+            }
+        }
     }
 }
 

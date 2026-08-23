@@ -67,6 +67,8 @@ fun ProfileContent(
     email: String?,
     authProvider: ProfileAuthProvider,
     appVersion: String = "v1.0.0",
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
     onSaveDisplayName: (String) -> Unit = {},
     onConfirmLogOut: () -> Unit = {},
     onConfirmGuestLogOut: () -> Unit = {},
@@ -109,7 +111,11 @@ fun ProfileContent(
             AccountCard(displayName = displayName, email = email, authProvider = authProvider)
 
             if (isGuest) {
-                GuestBanner(onCreateAccountClick = { showCreateAccountDialog = true })
+                GuestBanner(
+                    onCreateAccountClick = { showCreateAccountDialog = true },
+                    isLoading = isLoading,
+                    errorMessage = errorMessage
+                )
             } else {
                 SectionLabel("ACCOUNT SETTINGS")
                 SettingsGroup {
@@ -374,7 +380,11 @@ private fun initialsOf(name: String): String =
 
 // ── Guest warning banner + Create Account CTA ────────────────────────────────
 @Composable
-private fun GuestBanner(onCreateAccountClick: () -> Unit) {
+private fun GuestBanner(
+    onCreateAccountClick: () -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -395,12 +405,26 @@ private fun GuestBanner(onCreateAccountClick: () -> Unit) {
         )
         Button(
             onClick = onCreateAccountClick,
+            enabled = !isLoading,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Warning, contentColor = White),
             contentPadding = PaddingValues(vertical = 10.dp)
         ) {
-            Text("Create Account", style = MaterialTheme.typography.titleSmall)
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = White, strokeWidth = 2.dp)
+            } else {
+                Text("Create Account", style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        if (errorMessage != null) {
+            Text(
+                errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = Danger,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
