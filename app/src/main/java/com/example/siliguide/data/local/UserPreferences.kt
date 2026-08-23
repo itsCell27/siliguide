@@ -35,4 +35,11 @@ class UserPreferences @Inject constructor(
             prefs[isGuest] = session.isGuest
         }
     }
+
+    suspend fun clearSession() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(userId)
+            prefs.remove(isGuest)
+        }
+    }
 }
