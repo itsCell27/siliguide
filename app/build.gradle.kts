@@ -29,7 +29,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.siliguide"
-        minSdk = 24
+        minSdk = 30     // android 11
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
