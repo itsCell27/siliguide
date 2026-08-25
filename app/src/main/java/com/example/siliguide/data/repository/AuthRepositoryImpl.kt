@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import com.example.siliguide.domain.repository.SyncRepository
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
@@ -31,7 +32,8 @@ import kotlin.time.Duration.Companion.seconds
 class AuthRepositoryImpl @Inject constructor(
     private val dbManager: SiliGuideDatabaseManager,
     private val userPreferences: UserPreferences,
-    private val supabase: SupabaseClient
+    private val supabase: SupabaseClient,
+    private val syncRepository: SyncRepository
 ) : AuthRepository {
 
     override suspend fun createGuestSession(): String {
@@ -185,6 +187,7 @@ class AuthRepositoryImpl @Inject constructor(
             )
         }
         userPreferences.saveSession(UserSession(realUserId, isGuest = false))
+        syncRepository.enqueueOneTimeSync()
     }
 
     override suspend fun updateDisplayName(newName: String): Result<Unit> = try {

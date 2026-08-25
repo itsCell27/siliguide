@@ -24,6 +24,7 @@ import com.example.siliguide.domain.engine.ThresholdEngine
 import com.example.siliguide.core.ui.components.monitoring.MonitoringReading
 import com.example.siliguide.core.ui.components.monitoring.MonitoringStatus
 import com.example.siliguide.domain.usecase.GetIoTDeviceByIdUseCase
+import com.example.siliguide.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,7 +57,8 @@ class PlantViewModel @Inject constructor(
     private val markPlantAsDeletedByIdUseCase: MarkPlantAsDeletedByIdUseCase,
     private val fetchSensorsUseCase: FetchSensorsUseCase,
     private val ioTRepository: IoTRepository,
-    private val getIoTDeviceByIdUseCase: GetIoTDeviceByIdUseCase
+    private val getIoTDeviceByIdUseCase: GetIoTDeviceByIdUseCase,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     // Add this state to store the ID of the newly created plant
@@ -127,6 +129,7 @@ class PlantViewModel @Inject constructor(
 
                 if (verifiedPlant != null) {
                     _createdPlantId.value = newPlantId
+                    syncRepository.enqueueOneTimeSync()
                 } else {
                     // Optional: handle retry or error if DB is extremely slow
                 }
@@ -136,17 +139,18 @@ class PlantViewModel @Inject constructor(
 
     fun markPlantAsDeleted(plantId: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            try {
-                markPlantAsDeletedByIdUseCase(plantId)
-                // If the marked deleted plant was the one currently loaded, clear the state
-                if (_plantState.value?.plantId == plantId) {
-                    _plantState.value = null
+            val result = deletePlantByIdUseCase(plantId)
+            result.fold(
+                onSuccess = {
+                    if (_plantState.value?.plantId == plantId) {
+                        _plantState.value = null
+                    }
+                    onComplete()
+                },
+                onFailure = { e ->
+                    e.printStackTrace()
                 }
-                onComplete() // Callback to handle navigation (e.g., pop back to Dashboard)
-            } catch (e: Exception) {
-                // Handle error if necessary
-                e.printStackTrace()
-            }
+            )
         }
     }
 
@@ -155,6 +159,7 @@ class PlantViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 updatePlantNameUseCase(plantId, newName)
+                syncRepository.enqueueOneTimeSync()
                 // Reload the plant to reflect the new name in the UI
                 loadPlant(plantId)
             } catch (e: Exception) {
@@ -167,6 +172,7 @@ class PlantViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 unlinkIoTDeviceToPlantUseCase(plantId)
+                syncRepository.enqueueOneTimeSync()
                 // Reload the plant to reflect the new state (no device linked)
                 loadPlant(plantId)
             } catch (e: Exception) {

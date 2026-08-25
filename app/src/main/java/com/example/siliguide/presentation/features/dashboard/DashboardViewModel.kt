@@ -9,6 +9,7 @@ import com.example.siliguide.domain.model.Plant
 import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.repository.IoTRepository
 import com.example.siliguide.domain.repository.PlantRepository
+import com.example.siliguide.domain.repository.SyncRepository
 import com.example.siliguide.domain.usecase.CheckDeviceConnectionUseCase
 import com.example.siliguide.domain.usecase.GetPlantsUseCase
 import com.example.siliguide.domain.usecase.GetIoTDevicesUseCase
@@ -19,6 +20,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
@@ -30,8 +32,13 @@ class DashboardViewModel @Inject constructor(
     private val getIoTDevicesUseCase: GetIoTDevicesUseCase,
     private val authRepository: AuthRepository,
     private val checkDeviceConnectionUseCase: CheckDeviceConnectionUseCase,
-    private val getLatestSessionByPlantId: GetLatestSessionByPlantId
+    private val getLatestSessionByPlantId: GetLatestSessionByPlantId,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
+
+    init {
+        syncRepository.schedulePeriodicSync()
+    }
 
     /**
      * Bumped by [refresh] to re-run the whole pipeline.
@@ -84,10 +91,13 @@ class DashboardViewModel @Inject constructor(
                 initialValue = DashboardUiState(isLoading = true)
             )
 
-    /** Pull-to-refresh. Re-pings every device and re-reads the latest sessions. */
+    /** Pull-to-refresh. Re-pings every device, re-reads the latest sessions, and triggers cloud sync. */
     fun refresh() {
         _isRefreshing.value = true
         refreshTrigger.value = System.currentTimeMillis()
+        viewModelScope.launch {
+            syncRepository.syncNow()
+        }
     }
 
     /**

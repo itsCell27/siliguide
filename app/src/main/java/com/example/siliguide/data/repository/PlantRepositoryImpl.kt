@@ -78,4 +78,14 @@ class PlantRepositoryImpl @Inject constructor(
             .executeAsList()
             .map { it.toDomainModel() }
     }
+
+    override suspend fun getUnsyncedPlants(userId: String): List<Plant> {
+        return queries.getUnsyncedPlantsByUser(userId)
+            .executeAsList()
+            .map { it.toDomainModel() }
+    }
+
+    override suspend fun markPlantSynced(plantId: String) {
+        queries.markPlantSynced(plantId)
+    }
 }

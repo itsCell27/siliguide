@@ -322,4 +322,10 @@ class IoTRepositoryImpl @Inject constructor(
     override suspend fun markDeviceSynced(deviceId: String) {
         queries.markDeviceSynced(deviceId)
     }
+
+    override suspend fun getUnsyncedDevices(userId: String): List<IoTDevice> {
+        return queries.getUnsyncedDevicesByUser(userId)
+            .executeAsList()
+            .map { it.toIotDomain() }
+    }
 }

@@ -21,7 +21,7 @@ import com.example.siliguide.domain.usecase.AnalyzePlantUseCase
 import com.example.siliguide.domain.usecase.FetchSensorsUseCase
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.AuthRepository
-import com.example.siliguide.domain.usecase.SaveAnalysisSessionUseCase
+import com.example.siliguide.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +37,7 @@ import com.example.siliguide.domain.model.BoundingBox
 import com.example.siliguide.domain.model.SegmentationDetection
 import com.example.siliguide.domain.usecase.DeleteAnalysisSessionUseCase
 import com.example.siliguide.domain.usecase.GetAnalysisSessionByIdUseCase
+import com.example.siliguide.domain.usecase.SaveAnalysisSessionUseCase
 import java.io.File
 
 @HiltViewModel
@@ -50,6 +51,7 @@ class AnalysisViewModel @Inject constructor(
     private val analysisCache: AnalysisCache,
     private val getAnalysisSessionByIdUseCase: GetAnalysisSessionByIdUseCase,
     private val deleteAnalysisSessionUseCase: DeleteAnalysisSessionUseCase,
+    private val syncRepository: SyncRepository,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -469,6 +471,7 @@ class AnalysisViewModel @Inject constructor(
 
             try {
                 saveAnalysisSessionUseCase(session)
+                syncRepository.enqueueOneTimeSync()
                 withContext(Dispatchers.Main) {
                     onSuccess()
                 }
@@ -718,12 +721,13 @@ class AnalysisViewModel @Inject constructor(
      */
     fun deleteAnalysisSession(sessionId: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
-            try {
-                deleteAnalysisSessionUseCase(sessionId)
-                onSuccess()
-            } catch (e: Exception) {
-                Log.e("AnalysisViewModel", "Failed to delete session: $sessionId", e)
-            }
+            val result = deleteAnalysisSessionUseCase(sessionId)
+            result.fold(
+                onSuccess = { onSuccess() },
+                onFailure = { e ->
+                    Log.e("AnalysisViewModel", "Failed to delete session: $sessionId", e)
+                }
+            )
         }
     }
 

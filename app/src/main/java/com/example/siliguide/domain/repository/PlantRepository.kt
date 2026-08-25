@@ -19,4 +19,7 @@ interface PlantRepository {
     suspend fun unlinkDevice(updatedAt: Long, plantId: String)
 
     suspend fun getPlantByDeviceId(deviceId: String): List<Plant>
+
+    suspend fun getUnsyncedPlants(userId: String): List<Plant>
+    suspend fun markPlantSynced(plantId: String)
 }

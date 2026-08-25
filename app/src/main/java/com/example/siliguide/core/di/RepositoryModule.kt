@@ -10,6 +10,8 @@ import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.repository.IoTRepository
 import com.example.siliguide.domain.repository.PlantRepository
 import com.example.siliguide.domain.repository.WifiScanRepository
+import com.example.siliguide.data.repository.SyncRepositoryImpl
+import com.example.siliguide.domain.repository.SyncRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -46,4 +48,10 @@ abstract class RepositoryModule {
     abstract fun bindWifiScanRepository(
        impl: WifiScannerImpl
     ): WifiScanRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncRepository(
+        impl: SyncRepositoryImpl
+    ): SyncRepository
 }

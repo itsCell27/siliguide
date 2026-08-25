@@ -29,12 +29,12 @@ private val limitations = listOf(
     InfoRow("No cloud backup",        "All data stored on this device only",                   false),
     InfoRow("Data lost on uninstall", "Plants and analysis records deleted permanently",       false),
     InfoRow("No multi-device access", "Cannot access data from another device",                false),
-//    InfoRow("No account migration",   "Guest data cannot be transferred to a new account",    false),
 )
 
 private val canDo = listOf(
     InfoRow("Full plant analysis — offline", "Camera, ML models and rule engine work without internet", true),
     InfoRow("IoT device connection",          "Connect your ESP32 sensor for live readings",            true),
+    //InfoRow("Seamless account migration",     "Upgrade to an account anytime to back up and sync your data", true),
 )
 
 // ── Screen ────────────────────────────────────────────────────────────────────

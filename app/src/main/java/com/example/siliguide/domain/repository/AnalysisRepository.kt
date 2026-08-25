@@ -17,4 +17,5 @@ interface AnalysisRepository {
 
     suspend fun getPartialSessionsByUser(userId: String): List<AnalysisSession>
     suspend fun getCompleteSessionsByUser(userId: String): List<AnalysisSession>
+    suspend fun getUnsyncedSessions(userId: String): List<AnalysisSession>
 }

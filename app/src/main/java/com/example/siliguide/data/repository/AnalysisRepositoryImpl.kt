@@ -116,4 +116,12 @@ class AnalysisRepositoryImpl @Inject constructor(
             queries.deleteSession(sessionId)
         }
     }
+
+    override suspend fun getUnsyncedSessions(userId: String): List<AnalysisSession> {
+        return withContext(Dispatchers.IO) {
+            queries.getUnsyncedSessionsByUser(userId)
+                .executeAsList()
+                .map { it.toDomainModel() }
+        }
+    }
 }

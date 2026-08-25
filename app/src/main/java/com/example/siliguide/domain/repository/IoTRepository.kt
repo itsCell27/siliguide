@@ -72,4 +72,5 @@ interface IoTRepository {
 
     // ADDED: Crucial for the sync process
     suspend fun markDeviceSynced(deviceId: String)
+    suspend fun getUnsyncedDevices(userId: String): List<IoTDevice>
 }

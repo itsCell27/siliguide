@@ -38,4 +38,15 @@ class InternalImageStorage @Inject constructor(
             null
         }
     }
+
+    fun deleteImage(imagePath: String?): Boolean {
+        if (imagePath.isNullOrBlank()) return false
+        return try {
+            val file = File(imagePath)
+            if (file.exists()) file.delete() else false
+        } catch (e: Exception) {
+            Log.e("InternalImageStorage", "Failed to delete image: $imagePath", e)
+            false
+        }
+    }
 }
