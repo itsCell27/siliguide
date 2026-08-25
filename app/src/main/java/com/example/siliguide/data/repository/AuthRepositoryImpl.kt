@@ -186,6 +186,15 @@ class AuthRepositoryImpl @Inject constructor(
         }
         userPreferences.saveSession(UserSession(realUserId, isGuest = false))
     }
+
+    override suspend fun updateDisplayName(newName: String): Result<Unit> = try {
+        val userId = userPreferences.sessionFlow.first()?.userId
+            ?: throw IllegalStateException("No signed-in user")
+        dbManager.queries.updateDisplayName(newName, System.currentTimeMillis(), userId)
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(Exception(e.toFriendlyAuthError()))
+    }
 }
 
 /**

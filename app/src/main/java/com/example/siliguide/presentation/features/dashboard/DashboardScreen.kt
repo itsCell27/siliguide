@@ -189,8 +189,8 @@ fun DashboardScreen(
         profileDisplayName  = profileDisplayName,
         profileEmail        = profileEmail,
         profileAuthProvider = profileAuthProvider,
-        onSaveDisplayName = {
-            /* TODO: AuthViewModel — persist new display name */
+        onSaveDisplayName = { newName ->
+            authViewModel.updateDisplayName(newName)
         },
         onConfirmLogOut = {
             authViewModel.signOut(onSuccess = onSignedOut)

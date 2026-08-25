@@ -19,6 +19,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import com.example.siliguide.domain.model.UserProfile
 import com.example.siliguide.domain.repository.AuthRepository
+import com.example.siliguide.domain.usecase.UpdateDisplayNameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,7 +43,8 @@ class AuthViewModel @Inject constructor(
     private val signInWithGoogleUseCase: SignInWithGoogleUseCase,
     private val signOutUseCase: SignOutUseCase,
     private val guestLogOutUseCase: GuestLogOutUseCase,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val updateDisplayNameUseCase: UpdateDisplayNameUseCase
 ) : ViewModel() {
 
     val userProfile: StateFlow<UserProfile?> = authRepository.getUserProfileFlow()
@@ -147,6 +149,15 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             guestLogOutUseCase()
             onSuccess()
+        }
+    }
+
+    fun updateDisplayName(newName: String) {
+        viewModelScope.launch {
+            _uiState.value = AuthUiState(isLoading = true)
+            updateDisplayNameUseCase(newName)
+                .onSuccess { _uiState.value = AuthUiState(isLoading = false) }
+                .onFailure { e -> _uiState.value = AuthUiState(isLoading = false, errorMessage = e.message) }
         }
     }
 
