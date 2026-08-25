@@ -1,11 +1,23 @@
 package com.example.siliguide.presentation.features.iot.bluetooth_setup
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,49 +26,38 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.core.permission.PermissionUtils
+import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.core.ui.theme.Border
 import com.example.siliguide.core.ui.theme.GrayMedium
 import com.example.siliguide.core.ui.theme.Info
 import com.example.siliguide.core.ui.theme.InfoBg
+import com.example.siliguide.core.ui.theme.InfoBlue
 import com.example.siliguide.core.ui.theme.InfoBorder
 import com.example.siliguide.core.ui.theme.SiliGuideTheme
+import com.example.siliguide.core.ui.theme.White
+import com.example.siliguide.presentation.features.iot.IoTViewModel
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.BluetoothIllustrationCard
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.BluetoothSetupTopBar
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.CircularIconBadge
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.ProgressHeader
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.RequirementChecklist
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.components.WizardBottomActions
-import android.Manifest
-import android.util.Log
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import com.google.accompanist.permissions.isGranted
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.example.siliguide.core.permission.PermissionStatus
-import com.example.siliguide.core.permission.PermissionType
-import com.example.siliguide.core.permission.PermissionUtils
-import com.example.siliguide.core.ui.components.PermissionDialog
-import com.example.siliguide.core.ui.theme.Border
-import com.example.siliguide.core.ui.theme.InfoBlue
-import com.example.siliguide.core.ui.theme.White
-import com.example.siliguide.presentation.features.iot.IoTViewModel
 import kotlinx.coroutines.launch
 
 private const val INTRO_PROGRESS = 0f
@@ -72,7 +73,6 @@ private val BLUETOOTH_REQUIREMENTS = listOf(
  * Explains what Bluetooth Classic mode does before the user pairs a device
  * through Android Bluetooth Settings.
  */
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun BluetoothIntroScreen(
     onContinue: () -> Unit,
@@ -83,6 +83,7 @@ fun BluetoothIntroScreen(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var showRationaleDialog by remember {
         mutableStateOf(false)
@@ -92,19 +93,51 @@ fun BluetoothIntroScreen(
         mutableStateOf(false)
     }
 
-    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-
-        val granted =
-            result.values.all { it }
-
-        if (granted) {
-
+    val checkPermissionsAndNavigate: () -> Unit = {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             onContinue()
+        } else {
+            val connectGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+
+            val scanGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (connectGranted && scanGranted) {
+                showRationaleDialog = false
+                showSettingsDialog = false
+                onContinue()
+            }
         }
     }
 
+    // Automatically navigate when user returns to screen with Bluetooth permissions granted
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                checkPermissionsAndNavigate()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.isNotEmpty() && result.values.all { it }
+        if (granted) {
+            showRationaleDialog = false
+            showSettingsDialog = false
+            onContinue()
+        }
+    }
 
     Scaffold(
         modifier = modifier
