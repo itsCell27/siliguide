@@ -29,7 +29,7 @@ private val limitations = listOf(
     InfoRow("No cloud backup",        "All data stored on this device only",                   false),
     InfoRow("Data lost on uninstall", "Plants and analysis records deleted permanently",       false),
     InfoRow("No multi-device access", "Cannot access data from another device",                false),
-    InfoRow("No account migration",   "Guest data cannot be transferred to a new account",    false),
+//    InfoRow("No account migration",   "Guest data cannot be transferred to a new account",    false),
 )
 
 private val canDo = listOf(
