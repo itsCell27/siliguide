@@ -180,7 +180,6 @@ class SeeAllViewModel @Inject constructor(
         }
     }
 
-
     val visiblePlants: StateFlow<List<SeeAllPlantItem>> =
         combine(allPlants, _plantQuery) { plants, query ->
             if (query.isBlank()) {
@@ -194,26 +193,6 @@ class SeeAllViewModel @Inject constructor(
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = emptyList()
             )
-
-
-    // Link a plant to an IoT device
-    fun linkPlantToDevice(deviceId: String, plantId: String) {
-        viewModelScope.launch {
-            runCatching {
-                // Invokes the injected use case
-                linkIoTDeviceToPlantUseCase(
-                    deviceId = deviceId,
-                    plantId = plantId
-                )
-            }.onSuccess {
-                // The device was successfully linked.
-                // The UI will update automatically if your database flows trigger a re-emission.
-            }.onFailure { exception ->
-                // Log or handle the error if the update fails
-                exception.printStackTrace()
-            }
-        }
-    }
 
 
     // ── Enrichment ────────────────────────────────────────────────────────

@@ -3,10 +3,12 @@ package com.example.siliguide.data.sync
 import android.content.Context
 import android.util.Log
 import com.example.siliguide.core.security.PairingTokenCrypto
+import com.example.siliguide.data.local.sqldelight.SiliGuideDatabaseManager
 import com.example.siliguide.data.remote.supabase.datasource.SupabaseAnalysisRemoteSource
 import com.example.siliguide.data.remote.supabase.datasource.SupabaseIoTRemoteSource
 import com.example.siliguide.data.remote.supabase.datasource.SupabasePlantRemoteSource
 import com.example.siliguide.data.remote.supabase.datasource.SupabaseStorageSource
+import com.example.siliguide.data.remote.supabase.datasource.SupabaseUserRemoteSource
 import com.example.siliguide.data.remote.supabase.dto.toDomain
 import com.example.siliguide.data.remote.supabase.dto.toDto
 import com.example.siliguide.domain.repository.AnalysisRepository
@@ -32,6 +34,8 @@ class SyncEngine @Inject constructor(
     private val plantRemoteSource: SupabasePlantRemoteSource,
     private val ioTRemoteSource: SupabaseIoTRemoteSource,
     private val analysisRemoteSource: SupabaseAnalysisRemoteSource,
+    private val userRemoteSource: SupabaseUserRemoteSource,
+    private val dbManager: SiliGuideDatabaseManager,
     private val supabaseClient: SupabaseClient,
     @param:ApplicationContext private val context: Context
 ) {
@@ -63,16 +67,18 @@ class SyncEngine @Inject constructor(
 
             // =========================================================================
             // PUSH PHASE (Local -> Supabase)
-            // Foreign-Key Enforced Order: IoT Devices -> Plants -> Analysis Sessions
+            // Foreign-Key Enforced Order: Users -> IoT Devices -> Plants -> Analysis Sessions
             // =========================================================================
+            pushUser(userId)
             pushDevices(userId)
             pushPlants(userId)
             pushAnalysisSessions(userId)
 
             // =========================================================================
             // PULL PHASE (Supabase -> Local)
-            // Foreign-Key Enforced Order: IoT Devices -> Plants -> Analysis Sessions
+            // Foreign-Key Enforced Order: Users -> IoT Devices -> Plants -> Analysis Sessions
             // =========================================================================
+            pullUser(userId)
             pullDevices(userId)
             pullPlants(userId)
             pullAnalysisSessions(userId)
@@ -86,6 +92,18 @@ class SyncEngine @Inject constructor(
     }
 
     // --- PUSH IMPLEMENTATIONS ---
+
+    private suspend fun pushUser(userId: String) {
+        val localUser = dbManager.queries.getUserById(userId).executeAsOneOrNull()
+        if (localUser != null && localUser.is_guest == 0L) {
+            Log.d(TAG, "Pushing user profile for $userId to Supabase (display_name=${localUser.display_name})")
+            userRemoteSource.updateDisplayName(
+                userId = userId,
+                displayName = localUser.display_name,
+                updatedAt = java.time.Instant.ofEpochMilli(localUser.updated_at).toString()
+            )
+        }
+    }
 
     private suspend fun pushDevices(userId: String) {
         val unsyncedDevices = ioTRepository.getUnsyncedDevices(userId)
@@ -204,6 +222,31 @@ class SyncEngine @Inject constructor(
     }
 
     // --- PULL IMPLEMENTATIONS ---
+
+    private suspend fun pullUser(userId: String) {
+        val remoteUser = userRemoteSource.fetchUserById(userId)
+        if (remoteUser != null) {
+            Log.d(TAG, "Pulled user profile from Supabase: display_name=${remoteUser.displayName}")
+            val localUser = dbManager.queries.getUserById(userId).executeAsOneOrNull()
+            val now = System.currentTimeMillis()
+            if (localUser == null) {
+                dbManager.queries.insertUser(
+                    user_id = remoteUser.id,
+                    display_name = remoteUser.displayName,
+                    email = remoteUser.email,
+                    is_guest = 0L,
+                    created_at = now,
+                    updated_at = now
+                )
+            } else if (localUser.display_name != remoteUser.displayName) {
+                dbManager.queries.updateDisplayName(
+                    display_name = remoteUser.displayName,
+                    updated_at = now,
+                    user_id = userId
+                )
+            }
+        }
+    }
 
     private suspend fun pullDevices(userId: String) {
         val remoteDeviceDtos = ioTRemoteSource.fetchDevicesByUser(userId)

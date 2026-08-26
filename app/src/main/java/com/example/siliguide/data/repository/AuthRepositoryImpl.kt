@@ -1,7 +1,9 @@
 package com.example.siliguide.data.repository
 
+import android.util.Log
 import com.example.siliguide.data.local.sqldelight.SiliGuideDatabaseManager
 import com.example.siliguide.data.local.UserPreferences
+import com.example.siliguide.data.remote.supabase.datasource.SupabaseUserRemoteSource
 import com.example.siliguide.domain.model.UserSession
 import com.example.siliguide.domain.repository.AuthRepository
 import io.github.jan.supabase.SupabaseClient
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import com.example.siliguide.domain.repository.SyncRepository
 import java.io.IOException
+import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -33,7 +36,8 @@ class AuthRepositoryImpl @Inject constructor(
     private val dbManager: SiliGuideDatabaseManager,
     private val userPreferences: UserPreferences,
     private val supabase: SupabaseClient,
-    private val syncRepository: SyncRepository
+    private val syncRepository: SyncRepository,
+    private val userRemoteSource: SupabaseUserRemoteSource
 ) : AuthRepository {
 
     override suspend fun createGuestSession(): String {
@@ -58,7 +62,10 @@ class AuthRepositoryImpl @Inject constructor(
         userPreferences.sessionFlow.first()?.userId
 
     override suspend fun sendEmailOtp(email: String): Result<Unit> = try {
-        supabase.auth.signInWith(OTP) { this.email = email }
+        supabase.auth.signInWith(OTP) {
+            this.email = email
+            createUser = true
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(e.toFriendlyAuthError()))
@@ -70,10 +77,14 @@ class AuthRepositoryImpl @Inject constructor(
             email = email,
             token = token
         )
-        val user = supabase.auth.currentUserOrNull()
-            ?: throw IllegalStateException("No user after verify")
-        val displayName = user.email?.substringBefore("@") ?: "User"
-        handlePostSignIn(realUserId = user.id, email = user.email, displayName = displayName)
+        val session = supabase.auth.currentSessionOrNull()
+            ?: throw IllegalStateException("Verification succeeded but no session was established.")
+        val realUserId = session.user?.id
+            ?: throw IllegalStateException("Authenticated user has no ID.")
+        val derivedName = session.user?.userMetadata?.get("name")?.toString()?.trim('"')
+            ?.takeIf { it.isNotBlank() }
+            ?: email.substringBefore("@")
+        handlePostSignIn(realUserId, email, derivedName)
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(e.toFriendlyAuthError()))
@@ -84,11 +95,14 @@ class AuthRepositoryImpl @Inject constructor(
             this.idToken = idToken
             this.provider = Google
         }
-        val user = supabase.auth.currentUserOrNull()
-            ?: throw IllegalStateException("No user after google sign-in")
-        val displayName = user.userMetadata?.get("full_name")?.toString()
-            ?: user.email?.substringBefore("@") ?: "User"
-        handlePostSignIn(realUserId = user.id, email = user.email, displayName = displayName)
+        val session = supabase.auth.currentSessionOrNull()
+            ?: throw IllegalStateException("Google sign-in succeeded but no session was established.")
+        val realUserId = session.user?.id
+            ?: throw IllegalStateException("Authenticated user has no ID.")
+        val displayName = session.user?.userMetadata?.get("full_name")?.toString()?.trim('"')
+            ?: session.user?.email?.substringBefore("@")
+            ?: "User"
+        handlePostSignIn(realUserId = realUserId, email = session.user?.email, displayName = displayName)
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(e.toFriendlyAuthError()))
@@ -136,7 +150,7 @@ class AuthRepositoryImpl @Inject constructor(
         userPreferences.clearSession()
     }
 
-    // Shared by both sign-in paths — migrates guest data if the current
+    // Handles the post-auth database logic: migrates data if the current
     // local session is a guest, otherwise just inserts a fresh user row.
     private suspend fun handlePostSignIn(realUserId: String, email: String?, displayName: String) {
         val current = userPreferences.sessionFlow.first()
@@ -148,10 +162,10 @@ class AuthRepositoryImpl @Inject constructor(
             val lastSignIn = user?.lastSignInAt
 
             /*
-           * Only problem in this if user sends OTP code past 2 mins (120secs)
-           * this logic will assume account already exist
-           * TODO: create a better logic to handle this
-            */
+            * Only problem in this if user sends OTP code past 2 mins (120secs)
+            * this logic will assume account already exist
+            * TODO: create a better logic to handle this
+             */
             val isBrandNewAccount = createdAt != null && lastSignIn != null &&
                     (lastSignIn - createdAt) < 120.seconds
 
@@ -191,9 +205,22 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateDisplayName(newName: String): Result<Unit> = try {
-        val userId = userPreferences.sessionFlow.first()?.userId
+        val session = userPreferences.sessionFlow.first()
             ?: throw IllegalStateException("No signed-in user")
-        dbManager.queries.updateDisplayName(newName, System.currentTimeMillis(), userId)
+        val userId = session.userId
+        val now = System.currentTimeMillis()
+
+        dbManager.queries.updateDisplayName(newName, now, userId)
+
+        if (!session.isGuest) {
+            try {
+                userRemoteSource.updateDisplayName(userId, newName, Instant.ofEpochMilli(now).toString())
+            } catch (e: Exception) {
+                Log.w("AuthRepositoryImpl", "Direct update of display_name to Supabase failed, queued for sync", e)
+            }
+            syncRepository.enqueueOneTimeSync()
+        }
+
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(e.toFriendlyAuthError()))
