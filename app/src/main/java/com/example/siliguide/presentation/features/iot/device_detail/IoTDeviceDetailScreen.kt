@@ -780,7 +780,7 @@ private fun NoLinkedPlantCard(onLinkPlant: () -> Unit) {
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "Link this device to a plant to start tracking sensor readings and analyses.",
+            text = "Link this device to a plant to view live sensor readings.",
             style = WizardSubCaptionStyle,
             color = GrayMedium,
             textAlign = TextAlign.Center,
