@@ -137,7 +137,6 @@ fun IoTDeviceDetailScreen(
     onNavigateToDashboard: () -> Unit = {}
 ) {
 
-    val offlineWarning by viewModel.offlineWarningMessage.collectAsState()
     var showRemoveDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showUnlinkDialog by remember { mutableStateOf(false) }
@@ -256,15 +255,7 @@ fun IoTDeviceDetailScreen(
         }
     }
 
-    // --- OFFLINE WARNING DIALOG ---
-    offlineWarning?.let { message ->
-        MessageDialog(
-            title = "Device Offline",
-            message = message,
-            confirmText = "Got it",
-            onConfirm = { viewModel.dismissOfflineWarning() }
-        )
-    }
+
 
     // --- REMOVE DEVICE RESULT DIALOG ---
     removeDeviceDialog?.let { dialog ->

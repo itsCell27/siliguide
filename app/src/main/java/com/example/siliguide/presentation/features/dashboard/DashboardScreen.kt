@@ -65,7 +65,7 @@ import kotlin.math.roundToInt
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 private val BottomNavHeight  = 68.dp
-private val IotCardWidth     = 150.dp
+private val IotCardWidth     = 168.dp
 private val AddDeviceCardWidth = 100.dp
 
 // Dashboard is a summary, not a full list — "See all" carries the rest
@@ -580,14 +580,20 @@ fun IoTDeviceCard(
                     fontSize = 10.sp,
                     fontFamily = DMSans,
                     color = GrayMedium,
-                    modifier = Modifier.padding(end = 8.dp)
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(end = 6.dp)
                 )
                 Text(
                     text = if (isOnline) "Connected" else "Offline",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = DMSans,
-                    color = if (isOnline) GreenPrimary else GrayHint
+                    color = if (isOnline) GreenPrimary else GrayHint,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -1352,6 +1358,33 @@ fun DashboardRefreshingPreview() {
             devices = previewDevices,
             deviceOnline = previewOnline,
             isRefreshing = true,
+            onRefresh = {},
+            isAddMenuOpen = false, onAddMenuToggle = {},
+            selectedTab = DashboardTab.HOME, onTabChange = {},
+            onNavigateToCamera = {}, onNavigateToAddPlant = {}, onNavigateToAddIoT = {},
+            onNavigateToPlantDetail = {}, onNavigateToSeeAllPlants = {},
+            onNavigateToSeeAllDevices = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Small Phone (320x640)", widthDp = 320, heightDp = 640)
+@Composable
+fun DashboardSmallPhonePreview() {
+    SiliGuideTheme {
+        DashboardContent(
+            plants = listOf(
+                PlantItem(
+                    "1", "Labuyo Plant #1",
+                    PlantCondition(
+                        "healthy", "Healthy", null, false,
+                        System.currentTimeMillis() - 12 * 60_000
+                    )
+                )
+            ),
+            devices = previewDevices,
+            deviceOnline = previewOnline,
+            isRefreshing = false,
             onRefresh = {},
             isAddMenuOpen = false, onAddMenuToggle = {},
             selectedTab = DashboardTab.HOME, onTabChange = {},

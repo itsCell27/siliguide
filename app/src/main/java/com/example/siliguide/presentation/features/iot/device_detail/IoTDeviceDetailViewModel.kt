@@ -60,14 +60,6 @@ class IoTDeviceDetailViewModel @Inject constructor(
     private var deviceId: String? = null
     private var currentLinkedPlantId: String? = null
 
-    // --- DIALOG STATE ---
-    private val _offlineWarningMessage = MutableStateFlow<String?>(null)
-    val offlineWarningMessage = _offlineWarningMessage.asStateFlow()
-
-    fun dismissOfflineWarning() {
-        _offlineWarningMessage.value = null
-    }
-
     // --- REMOVE DEVICE RESULT DIALOG ---
     data class RemoveDeviceDialogUi(
         val title: String,
@@ -478,17 +470,6 @@ class IoTDeviceDetailViewModel @Inject constructor(
     // --- MODE CHANGE SHEET LOGIC ---
 
     fun requestModeChange() {
-        val currentStatus = _uiState.value.status
-
-        if (currentStatus == DeviceConnectionStatus.OFFLINE ||
-            currentStatus == DeviceConnectionStatus.RECONNECTING) {
-
-            _offlineWarningMessage.value =
-                "Cannot change connection mode right now. The device is currently offline or unreachable. Please ensure it is powered on and try again."
-            return
-        }
-
-        // Device is online! Safe to open the sheet.
         _uiState.update { it.copy(isModeChangeSheetOpen = true) }
     }
 

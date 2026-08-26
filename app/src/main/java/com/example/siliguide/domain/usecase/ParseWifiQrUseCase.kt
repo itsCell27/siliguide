@@ -11,7 +11,7 @@ class ParseWifiQrUseCase @Inject constructor() {
         return try {
 
             // STANDARD WIFI QR FORMAT
-            // WIFI:T:WPA;S:SiliGuide_IoT;P:12345678;;
+            // WIFI:T:WPA;S:SiliGuide_IoT;P:Sili9PN7n3D;;
 
             if (raw.startsWith("WIFI:")) {
 
