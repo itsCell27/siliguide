@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -122,10 +123,11 @@ fun SeeAllDevicesScreen(
                     items = devices,
                     key = { it.deviceId }
                 ) { device ->
+                    val onClick = remember(device.deviceId) { { onDeviceClick(device.deviceId) } }
                     DeviceListItem(
                         device = device,
                         isLinkingMode = isLinkingMode,
-                        onClick = { onDeviceClick(device.deviceId) }
+                        onClick = onClick
                     )
                 }
             }

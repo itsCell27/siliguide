@@ -15,6 +15,7 @@ import com.example.siliguide.domain.usecase.GetPlantsUseCase
 import com.example.siliguide.domain.usecase.GetUnlinkedDevicesUseCase
 import com.example.siliguide.domain.usecase.LinkIoTDeviceToPlantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -26,9 +27,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
@@ -91,20 +94,22 @@ class SeeAllViewModel @Inject constructor(
                         // mapLatest so a DB write during a ping round cancels it
                         // instead of queueing another
                         .mapLatest { devices ->
+                            withContext(Dispatchers.IO) {
+                                val online = pingDevices(devices)
 
-                            val online = pingDevices(devices)
-
-                            devices.map { device ->
-                                SeeAllDeviceItem(
-                                    deviceId = device.deviceId,
-                                    name = device.deviceName,
-                                    mode = device.connectionMode,
-                                    isOnline = online[device.deviceId] ?: device.isActive,
-                                )
+                                devices.map { device ->
+                                    SeeAllDeviceItem(
+                                        deviceId = device.deviceId,
+                                        name = device.deviceName,
+                                        mode = device.connectionMode,
+                                        isOnline = online[device.deviceId] ?: false,
+                                    )
+                                }
                             }
                         }
                 }
             }
+            .flowOn(Dispatchers.IO)
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -137,25 +142,26 @@ class SeeAllViewModel @Inject constructor(
                 } else {
                     getPlantsUseCase(userId)
                         .mapLatest { plants ->
+                            withContext(Dispatchers.IO) {
+                                val sessions = loadLatestSessions(plants)
 
-                            val sessions = loadLatestSessions(plants)
+                                plants.map { plant ->
+                                    val session = sessions[plant.plantId]
 
-                            plants.map { plant ->
-
-                                val session = sessions[plant.plantId]
-
-                                SeeAllPlantItem(
-                                    plantId = plant.plantId,
-                                    name = plant.name,
-                                    status = session.toStatus(),
-                                    conditionLabel = session.toLabel(),
-                                    lastAnalyzedAt = session?.sessionTimestamp,
-                                    lastAnalyzedImagePath = session?.imagePath
-                                )
+                                    SeeAllPlantItem(
+                                        plantId = plant.plantId,
+                                        name = plant.name,
+                                        status = session.toStatus(),
+                                        conditionLabel = session.toLabel(),
+                                        lastAnalyzedAt = session?.sessionTimestamp,
+                                        lastAnalyzedImagePath = session?.imagePath
+                                    )
+                                }
                             }
                         }
                 }
             }
+            .flowOn(Dispatchers.IO)
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -166,14 +172,16 @@ class SeeAllViewModel @Inject constructor(
 
     // ADDED onSuccess callback so the UI knows exactly when to pop back to the plant detail screen
     fun linkPlantToDevice(deviceId: String, plantId: String, onSuccess: () -> Unit = {}) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 linkIoTDeviceToPlantUseCase(
                     deviceId = deviceId,
                     plantId = plantId
                 )
             }.onSuccess {
-                onSuccess()
+                withContext(Dispatchers.Main) {
+                    onSuccess()
+                }
             }.onFailure { exception ->
                 exception.printStackTrace()
             }
@@ -200,56 +208,47 @@ class SeeAllViewModel @Inject constructor(
     /**
      * Live reachability per device.
      *
-     * Same three guards as the dashboard, and they matter more here because
-     * this list is uncapped:
+     * Executed strictly on Dispatchers.IO so blocking network and Bluetooth
+     * RFCOMM socket connections never block the UI main thread.
      *
-     *  1. Bluetooth is not pinged — getSpecificDeviceInfo() opens a blocking
-     *     RFCOMM socket that ignores withTimeoutOrNull, and it would steal the
-     *     singleton socket from any setup flow in progress.
-     *  2. Per-device deadline, so one dead IP cannot hold the batch.
-     *  3. Batch deadline, so twenty saved devices still settle in seconds.
+     *  1. Per-device deadline, so one dead IP/offline Bluetooth cannot hold the batch.
+     *  2. Batch deadline, so uncapped saved devices still settle in seconds.
      */
-    private suspend fun pingDevices(devices: List<IoTDevice>): Map<String, Boolean> {
+    private suspend fun pingDevices(devices: List<IoTDevice>): Map<String, Boolean> =
+        withContext(Dispatchers.IO) {
+            if (devices.isEmpty()) return@withContext emptyMap()
 
-        if (devices.isEmpty()) return emptyMap()
-
-        val results = withTimeoutOrNull(PING_BATCH_TIMEOUT_MS) {
-            coroutineScope {
-                devices
-                    .map { device ->
-                        async {
-                            val online = when (device.connectionMode) {
-
-                                ConnectionMode.BLUETOOTH -> device.isActive
-
-                                else -> withTimeoutOrNull(PING_TIMEOUT_MS) {
+            val results = withTimeoutOrNull(PING_BATCH_TIMEOUT_MS) {
+                coroutineScope {
+                    devices
+                        .map { device ->
+                            async(Dispatchers.IO) {
+                                val online = withTimeoutOrNull(PING_TIMEOUT_MS) {
                                     runCatching {
                                         checkDeviceConnectionUseCase(device.deviceId)
                                     }.getOrDefault(false)
                                 } ?: false
+
+                                device.deviceId to online
                             }
-
-                            device.deviceId to online
                         }
-                    }
-                    .awaitAll()
-                    .toMap()
+                        .awaitAll()
+                        .toMap()
+                }
             }
-        }
 
-        return results ?: emptyMap()
-    }
+            results ?: emptyMap()
+        }
 
     private suspend fun loadLatestSessions(
         plants: List<Plant>
-    ): Map<String, AnalysisSession?> {
+    ): Map<String, AnalysisSession?> = withContext(Dispatchers.IO) {
+        if (plants.isEmpty()) return@withContext emptyMap()
 
-        if (plants.isEmpty()) return emptyMap()
-
-        return coroutineScope {
+        coroutineScope {
             plants
                 .map { plant ->
-                    async {
+                    async(Dispatchers.IO) {
                         val session = runCatching {
                             getLatestSessionByPlantId(plant.plantId)
                         }.getOrNull()

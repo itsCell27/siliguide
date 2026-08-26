@@ -353,7 +353,7 @@ private fun AccountCard(displayName: String, email: String?, authProvider: Profi
     }
 }
 
-private fun initialsOf(name: String): String =
+fun initialsOf(name: String): String =
     name.trim()
         .split(" ")
         .filter { it.isNotBlank() }

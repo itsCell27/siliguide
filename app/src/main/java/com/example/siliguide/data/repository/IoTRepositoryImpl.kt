@@ -39,6 +39,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 class IoTRepositoryImpl @Inject constructor(
     private val api: Esp32Api,
@@ -73,52 +74,51 @@ class IoTRepositoryImpl @Inject constructor(
 
         // Select the communication transport based on how this IoT device
         // was originally registered.
-        return when (device?.connectionMode) {
+        return withContext(Dispatchers.IO) {
+            when (device?.connectionMode) {
+                // ------------------------------------------------------------
+                // BLUETOOTH MODE
+                // ------------------------------------------------------------
+                // The ESP32 is already connected through Bluetooth
+                // so no IP address is required.
+                ConnectionMode.BLUETOOTH -> {
+                    val responseDto = bluetoothApi.getSpecificDeviceSensorData(
+                        hardwareMac = device.hardwareMac,
+                        token = device.pairingToken
+                    ) ?: throw IllegalStateException("Failed to fetch sensor data via Bluetooth")
 
-            // ------------------------------------------------------------
-            // BLUETOOTH MODE
-            // ------------------------------------------------------------
-            // The ESP32 is already connected through Bluetooth
-            // so no IP address is required.
-            ConnectionMode.BLUETOOTH -> {
-                val responseDto = bluetoothApi.getSpecificDeviceSensorData(
-                    hardwareMac = device.hardwareMac,
-                    token = device.pairingToken
-                ) ?: throw IllegalStateException("Failed to fetch sensor data via Bluetooth")
+                    responseDto.toDomain()
+                }
 
-                responseDto.toDomain()
-            }
+                // ------------------------------------------------------------
+                // LOCAL AREA NETWORK (LAN) MODE
+                // ------------------------------------------------------------
+                // The ESP32 is connected to the same Wi-Fi network as the phone.
+                // Use the last known IP address stored in the local database.
+                ConnectionMode.LAN -> {
+                    val ip = device.lastKnownIp
 
-            // ------------------------------------------------------------
-            // LOCAL AREA NETWORK (LAN) MODE
-            // ------------------------------------------------------------
-            // The ESP32 is connected to the same Wi-Fi network as the phone.
-            // Use the last known IP address stored in the local database.
-            ConnectionMode.LAN -> {
+                    api.getSensorData(host = ip, token = device.pairingToken)
+                        .toDomain()
+                }
 
-                val ip = device.lastKnownIp
-
-                api.getSensorData(host = ip, token = device.pairingToken)
-                    .toDomain()
-            }
-
-            // ------------------------------------------------------------
-            // ACCESS POINT (AP) MODE
-            // ------------------------------------------------------------
-            // During initial setup (or if no device has been selected),
-            // the phone connects directly to the ESP32 hotspot.
-            // ESP32 always uses the default gateway IP 192.168.4.1 in AP mode.
-            ConnectionMode.AP,
-            null -> {
-
-                api.getSensorData(host = DEFAULT_AP_IP, token = device?.pairingToken)
-                    .toDomain()
+                // ------------------------------------------------------------
+                // ACCESS POINT (AP) MODE
+                // ------------------------------------------------------------
+                // During initial setup (or if no device has been selected),
+                // the phone connects directly to the ESP32 hotspot.
+                // ESP32 always uses the default gateway IP 192.168.4.1 in AP mode.
+                ConnectionMode.AP,
+                null -> {
+                    api.getSensorData(host = DEFAULT_AP_IP, token = device?.pairingToken)
+                        .toDomain()
+                }
             }
         }
     }
 
-    override suspend fun resetDevice(deviceId: String) {
-        val device = getDeviceById(deviceId) ?: return
+    override suspend fun resetDevice(deviceId: String) = withContext(Dispatchers.IO) {
+        val device = getDeviceById(deviceId) ?: return@withContext
 
         when (device.connectionMode) {
             ConnectionMode.BLUETOOTH -> {
@@ -135,17 +135,14 @@ class IoTRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun isDeviceOnline(deviceId: String): Boolean {
-
+    override suspend fun isDeviceOnline(deviceId: String): Boolean = withContext(Dispatchers.IO) {
         val savedDevice = getDeviceById(deviceId)
-            ?: return false
+            ?: return@withContext false
 
         Log.d("IoTRepositoryImpl", "Checking if device is online... $savedDevice")
         Log.d("IoTRepositoryImpl", "Checking if device is online... ${savedDevice.connectionMode}")
-        return try {
-
+        return@withContext try {
             val info = when (savedDevice.connectionMode) {
-
                 ConnectionMode.AP ->
                     api.getDeviceInfo(DEFAULT_AP_IP)
 
@@ -158,9 +155,7 @@ class IoTRepositoryImpl @Inject constructor(
             Log.d("IoTRepositoryImpl", "Checking if device is online... ${info?.hardwareMac}")
 
             info?.hardwareMac == savedDevice.hardwareMac
-
         } catch (_: Exception) {
-
             false
         }
     }

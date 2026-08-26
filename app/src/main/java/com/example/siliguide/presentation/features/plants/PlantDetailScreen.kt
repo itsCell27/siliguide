@@ -629,8 +629,8 @@ fun AnalysisHistoryRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        val thumbSize = if (compact) 55.dp else 60.dp
-        val thumbRadius = if (compact) 10.dp else 11.dp
+        val thumbSize = if (compact) 55.dp else 70.dp
+        val thumbRadius = if (compact) 10.dp else 13.dp
 
         // Thumbnail — actual leaf photo when we have one, gradient placeholder otherwise
         val image = item.imagePath

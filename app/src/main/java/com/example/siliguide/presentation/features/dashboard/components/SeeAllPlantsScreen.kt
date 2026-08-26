@@ -211,8 +211,8 @@ private fun PlantListItem(
     isSelectionMode: Boolean = false, // Added parameter
     isSelected: Boolean = false,
 ) {
-    val thumbSize = if (compact) 55.dp else 60.dp
-    val thumbRadius = if (compact) 10.dp else 11.dp
+    val thumbSize = if (compact) 55.dp else 70.dp
+    val thumbRadius = if (compact) 10.dp else 13.dp
 
     val borderColor = if (isSelected) GreenPrimary else Border
     val borderWidth = if (isSelected) 2.dp else 1.dp

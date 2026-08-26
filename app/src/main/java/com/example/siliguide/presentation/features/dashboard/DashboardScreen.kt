@@ -58,6 +58,7 @@ import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.presentation.features.auth.AuthViewModel
 import com.example.siliguide.presentation.features.auth.ProfileAuthProvider
 import com.example.siliguide.presentation.features.auth.ProfileContent
+import com.example.siliguide.presentation.features.auth.initialsOf
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.roundToInt
@@ -149,25 +150,26 @@ fun DashboardScreen(
 
     val authUiState by authViewModel.uiState.collectAsState()
 
-    val displayPlants = uiState.plants.map { domainPlant ->
+    val displayPlants = remember(uiState.plants, uiState.devices, uiState.latestSessions, uiState.deviceOnline) {
+        uiState.plants.map { domainPlant ->
+            val linkedDevice = uiState.devices.find { it.deviceId == domainPlant.deviceId }
+            val session = uiState.latestSessions[domainPlant.plantId]
 
-        val linkedDevice = uiState.devices.find { it.deviceId == domainPlant.deviceId }
-        val session = uiState.latestSessions[domainPlant.plantId]
-
-        PlantItem(
-            id = domainPlant.plantId,
-            name = domainPlant.name,
-            condition = PlantCondition(
-                status = session.toStatus(),
-                label = session.toLabel(),
-                deviceName = linkedDevice?.deviceName,
-                isDeviceConnected = linkedDevice
-                    ?.let { uiState.deviceOnline[it.deviceId] } ?: false,
-                lastAnalyzedAt = session?.sessionTimestamp,
-                isPartial = session?.isPartial ?: false,
-                imagePath = session?.imagePath
+            PlantItem(
+                id = domainPlant.plantId,
+                name = domainPlant.name,
+                condition = PlantCondition(
+                    status = session.toStatus(),
+                    label = session.toLabel(),
+                    deviceName = linkedDevice?.deviceName,
+                    isDeviceConnected = linkedDevice
+                        ?.let { uiState.deviceOnline[it.deviceId] } ?: false,
+                    lastAnalyzedAt = session?.sessionTimestamp,
+                    isPartial = session?.isPartial ?: false,
+                    imagePath = session?.imagePath
+                )
             )
-        )
+        }
     }
 
     DashboardContent(
@@ -251,6 +253,8 @@ fun DashboardContent(
         .calculateBottomPadding()
     val scrollBodyBottomPadding = BottomNavHeight + systemNavBarInset
 
+    val initialName = initialsOf(profileDisplayName)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -261,7 +265,10 @@ fun DashboardContent(
         Column(modifier = Modifier.fillMaxSize()) {
             when (selectedTab) {
                 DashboardTab.HOME -> {
-                    TopBarSection(onAvatarClick = { onTabChange(DashboardTab.PROFILE) })
+                    TopBarSection(
+                        userInitial = initialName,
+                        onAvatarClick = { onTabChange(DashboardTab.PROFILE) }
+                    )
 
                     // Wraps only the scrolling area, so the top bar stays put while
                     // the indicator pulls down over the content
@@ -366,7 +373,7 @@ fun DashboardContent(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun TopBarSection(
-    userInitial: String = "J",
+    userInitial: String = "G",
     onAvatarClick: () -> Unit = {}
 ) {
     Column {
@@ -488,12 +495,14 @@ fun IoTDevicesSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 devices.take(DashboardDeviceLimit).forEach { device ->
-                    IoTDeviceCard(
-                        device = device,
-                        isOnline = deviceOnline[device.deviceId] ?: device.isActive,
-                        onClick = { onDeviceClick(device.deviceId) },
-                        modifier = Modifier.width(IotCardWidth)
-                    )
+                    key(device.deviceId) {
+                        IoTDeviceCard(
+                            device = device,
+                            isOnline = deviceOnline[device.deviceId] ?: device.isActive,
+                            onClick = { onDeviceClick(device.deviceId) },
+                            modifier = Modifier.width(IotCardWidth)
+                        )
+                    }
                 }
 
                 AddDeviceCard(onClick = onAddDevice)
@@ -701,11 +710,12 @@ fun PlantsSection(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 plants.take(DashboardPlantLimit).forEach { plant ->
-                    PlantCard(
-                        plant = plant,
-                        onNavigateToDetail = { onNavigateToPlantDetail(plant.id) },
-                        compact = true
-                    )
+                    key(plant.id) {
+                        PlantCard(
+                            plant = plant,
+                            onNavigateToDetail = { onNavigateToPlantDetail(plant.id) }
+                        )
+                    }
                 }
             }
         }
@@ -718,8 +728,8 @@ fun PlantsSection(
 @Composable
 fun PlantCard(plant: PlantItem, onNavigateToDetail: () -> Unit, compact: Boolean = false) {
 
-    val thumbSize = if (compact) 55.dp else 60.dp
-    val thumbRadius = if (compact) 10.dp else 11.dp
+    val thumbSize = if (compact) 55.dp else 70.dp
+    val thumbRadius = if (compact) 10.dp else 13.dp
 
     Card(
         modifier = Modifier

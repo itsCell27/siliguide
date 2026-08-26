@@ -163,16 +163,14 @@ class BluetoothApi @Inject constructor(
         val device = bluetoothDiscoveryManager.getSpecificPairedDevice(hardwareMac) ?: return null
 
         // connect to the device
-        try {
+        return try {
             bluetoothManager.connect(device)
+            getDeviceInfo()
         } catch (e: Exception) {
-            return null
+            null
+        } finally {
+            bluetoothManager.disconnect()
         }
-
-        val info = getDeviceInfo()
-        bluetoothManager.disconnect()
-
-        return info
     }
 
     suspend fun getSpecificDeviceSensorData(hardwareMac: String, token: String): SensorResponseDto? {
@@ -183,16 +181,14 @@ class BluetoothApi @Inject constructor(
         val device = bluetoothDiscoveryManager.getSpecificPairedDevice(hardwareMac) ?: return null
 
         // connect to the device
-        try {
+        return try {
             bluetoothManager.connect(device)
+            getSensorData(token)
         } catch (e: Exception) {
-            return null
+            null
+        } finally {
+            bluetoothManager.disconnect()
         }
-
-        val sensorData = getSensorData(token)
-        bluetoothManager.disconnect()
-
-        return sensorData
     }
 
 

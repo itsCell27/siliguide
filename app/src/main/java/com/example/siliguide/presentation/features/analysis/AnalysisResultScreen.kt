@@ -49,6 +49,7 @@ import com.example.siliguide.domain.engine.ThresholdLevel
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.components.LoadingScreen
 import com.example.siliguide.presentation.features.dashboard.formatLastAnalyzed
+import com.example.siliguide.presentation.features.plants.formatTimestamp
 
 data class SensorRowData(
     val name: String,
@@ -233,7 +234,7 @@ fun ResultTopBar(
     // Falls back to "now" only for the sliver of time before a fresh
     // capture's timestamp lands in state — after that it's always the
     // session's real sessionTimestamp (live capture or reopened history).
-    val timeLabel = formatLastAnalyzed(sessionTimestamp ?: System.currentTimeMillis())
+    val timeLabel = formatTimestamp(sessionTimestamp ?: System.currentTimeMillis())
 
     Column(
         modifier = Modifier
@@ -1427,7 +1428,7 @@ fun OutOfScopeContent(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ResultBullet("Frame a single Siling Labuyo leaf inside the bounding box")
                 ResultBullet("Use natural daylight — avoid heavy shadows or direct flash")
-                ResultBullet("Hold the camera steady, ~15–20 cm from the leaf")
+                ResultBullet("Hold the camera steady")
                 ResultBullet("Ensure the symptom is clearly visible before capturing")
             }
         }

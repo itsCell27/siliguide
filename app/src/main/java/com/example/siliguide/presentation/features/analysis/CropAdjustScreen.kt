@@ -32,8 +32,10 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -42,6 +44,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -88,6 +91,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.example.siliguide.R
 
 /** Crop box = 75% of the smaller container dimension. */
 private const val CROP_BOX_FRACTION = 0.75f
@@ -108,6 +112,7 @@ fun CropAdjustScreen(
     var blurryPreview by remember { mutableStateOf<Bitmap?>(null) }
     val showBlurSheet = blurryPreview != null
 
+    val goodFocusImage = ImageBitmap.imageResource(R.drawable.curling).asAndroidBitmap()
     // 1. Load the raw image efficiently
     LaunchedEffect(rawImageUri) {
         withContext(Dispatchers.IO) {
@@ -251,7 +256,7 @@ fun CropAdjustScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
 
-            GlassCircleButton(onClick = onCancel) {
+            GlassCircleButton(onClick = onCancel, isProcessing = !isProcessing) {
 
                 Canvas(modifier = Modifier.size(14.dp)) {
 
@@ -355,10 +360,10 @@ fun CropAdjustScreen(
         }
 
         // Pipeline loading overlay (screen 9B)
-        if (isProcessing) {
-
-            PipelineLoadingOverlay()
-        }
+//        if (isProcessing) {
+//
+//            PipelineLoadingOverlay()
+//        }
 
         // Blurry feedback sheet (screen 9C)
         AnimatedVisibility(
@@ -380,7 +385,8 @@ fun CropAdjustScreen(
                     blurryPreview?.recycle()
                     blurryPreview = null
                     onCancel()
-                }
+                },
+                goodFocusImage = goodFocusImage
             )
         }
     }
@@ -519,7 +525,8 @@ private fun StepRow(
 @Composable
 private fun BlurryImageSheet(
     blurryImage: Bitmap?,
-    onNewPicture: () -> Unit
+    onNewPicture: () -> Unit,
+    goodFocusImage: Bitmap
 ) {
 
     Column(
@@ -593,7 +600,7 @@ private fun BlurryImageSheet(
                 modifier = Modifier.weight(1f),
                 label = "Good focus",
                 isGood = true,
-                image = null
+                image = goodFocusImage
             )
         }
     }
@@ -706,6 +713,7 @@ private fun NewPictureButton(
 private fun GlassCircleButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    isProcessing: Boolean = true,
     content: @Composable () -> Unit
 ) {
 
@@ -723,6 +731,7 @@ private fun GlassCircleButton(
             )
             .clickable(
                 interactionSource = interaction,
+                enabled = isProcessing,
                 indication = null,
                 onClick = onClick
             ),

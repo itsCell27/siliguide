@@ -15,12 +15,14 @@ import com.example.siliguide.domain.usecase.GetPlantsUseCase
 import com.example.siliguide.domain.usecase.GetIoTDevicesUseCase
 import com.example.siliguide.domain.usecase.GetLatestSessionByPlantId
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
@@ -68,23 +70,24 @@ class DashboardViewModel @Inject constructor(
                         // mapLatest so a fast second emission cancels an
                         // in-flight round of device pings instead of queueing
                         .mapLatest { (plants, devices) ->
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                // Only enrich what the dashboard actually shows
+                                val deviceOnline = pingDevices(devices.take(DEVICE_LIMIT))
+                                val latestSessions = loadLatestSessions(plants.take(PLANT_LIMIT))
 
-                            // Only enrich what the dashboard actually shows
-                            val deviceOnline = pingDevices(devices.take(DEVICE_LIMIT))
-                            val latestSessions = loadLatestSessions(plants.take(PLANT_LIMIT))
-
-                            _isRefreshing.value = false
-
-                            DashboardUiState(
-                                plants = plants,
-                                devices = devices,
-                                deviceOnline = deviceOnline,
-                                latestSessions = latestSessions,
-                                isLoading = false
-                            )
+                                DashboardUiState(
+                                    plants = plants,
+                                    devices = devices,
+                                    deviceOnline = deviceOnline,
+                                    latestSessions = latestSessions,
+                                    isLoading = false
+                                )
+                            }
                         }
+                        .onEach { _isRefreshing.value = false }
                 }
             }
+            .flowOn(kotlinx.coroutines.Dispatchers.IO)
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5000),
@@ -95,7 +98,7 @@ class DashboardViewModel @Inject constructor(
     fun refresh() {
         _isRefreshing.value = true
         refreshTrigger.value = System.currentTimeMillis()
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             syncRepository.syncNow()
         }
     }
@@ -103,48 +106,37 @@ class DashboardViewModel @Inject constructor(
     /**
      * Live reachability per device.
      *
-     * Three guards, because a liveness check must never be able to stall the
-     * dashboard:
+     * Executed strictly on Dispatchers.IO so blocking network and Bluetooth
+     * RFCOMM socket connections never block the UI main thread.
      *
-     *  1. Bluetooth devices are NOT pinged. getSpecificDeviceInfo() opens a
-     *     full RFCOMM socket, and BluetoothSocket.connect() is blocking and
-     *     ignores withTimeoutOrNull — so it cannot even be bounded. It would
-     *     also steal the singleton socket from any setup flow in progress.
-     *     Their stored flag is shown instead.
-     *  2. Per-device deadline, so one unreachable IP cannot hold the batch.
-     *  3. Batch deadline, so the dashboard settles within a fixed budget no
-     *     matter how many devices are saved.
+     *  1. Per-device deadline (PING_TIMEOUT_MS), so one unreachable device cannot hold the batch.
+     *  2. Batch deadline (PING_BATCH_TIMEOUT_MS), so the dashboard settles within a fixed budget.
      */
-    private suspend fun pingDevices(devices: List<IoTDevice>): Map<String, Boolean> {
+    private suspend fun pingDevices(devices: List<IoTDevice>): Map<String, Boolean> =
+        withContext(Dispatchers.IO) {
+            if (devices.isEmpty()) return@withContext emptyMap()
 
-        if (devices.isEmpty()) return emptyMap()
-
-        val results = withTimeoutOrNull(PING_BATCH_TIMEOUT_MS) {
-            coroutineScope {
-                devices
-                    .map { device ->
-                        async {
-                            val online = when (device.connectionMode) {
-
-                                ConnectionMode.BLUETOOTH -> device.isActive
-
-                                else -> withTimeoutOrNull(PING_TIMEOUT_MS) {
+            val results = withTimeoutOrNull(PING_BATCH_TIMEOUT_MS) {
+                coroutineScope {
+                    devices
+                        .map { device ->
+                            async(Dispatchers.IO) {
+                                val online = withTimeoutOrNull(PING_TIMEOUT_MS) {
                                     runCatching {
                                         checkDeviceConnectionUseCase(device.deviceId)
                                     }.getOrDefault(false)
                                 } ?: false
+
+                                device.deviceId to online
                             }
-
-                            device.deviceId to online
                         }
-                    }
-                    .awaitAll()
-                    .toMap()
+                        .awaitAll()
+                        .toMap()
+                }
             }
-        }
 
-        return results ?: emptyMap()
-    }
+            results ?: emptyMap()
+        }
 
     private companion object {
         const val DEVICE_LIMIT = 2
@@ -157,14 +149,13 @@ class DashboardViewModel @Inject constructor(
     /** Newest analysis per plant, or null where a plant has never been analyzed. */
     private suspend fun loadLatestSessions(
         plants: List<Plant>
-    ): Map<String, AnalysisSession?> {
+    ): Map<String, AnalysisSession?> = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (plants.isEmpty()) return@withContext emptyMap()
 
-        if (plants.isEmpty()) return emptyMap()
-
-        return coroutineScope {
+        coroutineScope {
             plants
                 .map { plant ->
-                    async {
+                    async(kotlinx.coroutines.Dispatchers.IO) {
                         val session = runCatching {
                             getLatestSessionByPlantId(plant.plantId)
                         }.getOrNull()
