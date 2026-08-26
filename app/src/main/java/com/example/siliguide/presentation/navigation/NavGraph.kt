@@ -72,6 +72,8 @@ import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDe
 import com.example.siliguide.presentation.features.iot.device_detail.IoTDeviceDetailViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavOptionsBuilder
+import com.example.siliguide.presentation.features.auth.DeleteAccountScreen
+import com.example.siliguide.presentation.features.auth.DeleteAccountViewModel
 import com.example.siliguide.presentation.features.auth.EmailAuthScreen
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllViewModel
 import com.example.siliguide.presentation.features.dashboard.components.SeeAllDevicesScreen
@@ -209,9 +211,44 @@ fun SiliGuideNavGraph(
                             popUpTo(Screen.Welcome.route) { inclusive = true }
                         }
                     })
+                },
+                onNavigateToDeleteAccount = {
+                    navController.navigateSafely(backStackEntry, Screen.DeleteAccount.route)
                 }
             )
         }
+
+
+        composable(route = Screen.DeleteAccount.route) { backStackEntry ->
+            val authViewModel: AuthViewModel = hiltViewModel()
+            val deleteAccountViewModel: DeleteAccountViewModel = hiltViewModel()
+            val userProfile by authViewModel.userProfile.collectAsState()
+            val uiState by deleteAccountViewModel.uiState.collectAsState()
+            val email = userProfile?.email ?: ""
+
+            DeleteAccountScreen(
+                userEmail = email,
+                onBackClick = { navController.popSafely(backStackEntry) },
+                onKeepAccountClick = { navController.popSafely(backStackEntry) },
+                onSendCodeClick = { onSent ->
+                    deleteAccountViewModel.sendConfirmationCode(email, onSuccess = onSent)
+                },
+                onResendCodeClick = { onSent ->
+                    deleteAccountViewModel.resendConfirmationCode(email, onSuccess = onSent)
+                },
+                onConfirmDeletionClick = { otp ->
+                    deleteAccountViewModel.confirmDeletion(email, otp, onSuccess = {
+                        navController.navigate(Screen.Welcome.route) {
+                            popUpTo(Screen.Dashboard.route) { inclusive = true }
+                        }
+                    })
+                },
+                isLoading = uiState.isLoading,
+                errorMessage = uiState.errorMessage,
+                onDismissError = { deleteAccountViewModel.clearError() }
+            )
+        }
+
 
         // --- SEE ALL: IOT DEVICES ---
         composable(

@@ -6,4 +6,5 @@ interface SyncRepository {
     fun enqueueOneTimeSync()
     fun schedulePeriodicSync()
     suspend fun syncNow(): SyncResult
+    fun cancelAllSync()
 }

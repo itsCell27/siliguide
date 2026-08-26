@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -49,25 +50,24 @@ fun EmailAuthScreen(
     errorMessage: String? = null,
     onDismissError: () -> Unit = {}
 ) {
-    var step by remember { mutableStateOf(EmailAuthStep.EMAIL_ENTRY) }
-    var email by remember { mutableStateOf("") }
-    var otp by remember { mutableStateOf("") }
-    var secondsLeft by remember { mutableIntStateOf(RESEND_WAIT_SECONDS) }
-    var resendTick by remember { mutableIntStateOf(0) }
+    var step by rememberSaveable { mutableStateOf(EmailAuthStep.EMAIL_ENTRY) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var otp by rememberSaveable { mutableStateOf("") }
+    var targetResendTimestampMillis by rememberSaveable { mutableLongStateOf(0L) }
+    var secondsLeft by rememberSaveable { mutableIntStateOf(0) }
 
     val isEmailValid = remember(email) { Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() }
     val isOtpComplete = otp.length == OTP_LENGTH
 
-    // Countdown for "Resend code in Ns" — (re)starts whenever we enter OTP_VERIFY
-    // or the caller taps Resend (resendTick bump).
-    LaunchedEffect(step, resendTick) {
-        if (step == EmailAuthStep.OTP_VERIFY) {
-            var remaining = RESEND_WAIT_SECONDS
-            secondsLeft = remaining
-            while (remaining > 0) {
-                delay(1000)
-                remaining--
+    // Wall-clock countdown: accurately tracks elapsed time across app switches and backgrounding.
+    LaunchedEffect(step, targetResendTimestampMillis) {
+        if (step == EmailAuthStep.OTP_VERIFY && targetResendTimestampMillis > 0L) {
+            while (true) {
+                val now = System.currentTimeMillis()
+                val remaining = ((targetResendTimestampMillis - now) / 1000).toInt().coerceAtLeast(0)
                 secondsLeft = remaining
+                if (remaining <= 0) break
+                delay(500)
             }
         }
     }
@@ -97,6 +97,8 @@ fun EmailAuthScreen(
                                 if (step == EmailAuthStep.OTP_VERIFY) {
                                     step = EmailAuthStep.EMAIL_ENTRY
                                     otp = ""
+                                    targetResendTimestampMillis = 0L
+                                    secondsLeft = 0
                                 } else {
                                     onBackClick()
                                 }
@@ -122,7 +124,7 @@ fun EmailAuthScreen(
                             onContinue = {
                                 if (isEmailValid) {
                                     onContinueClick(email.trim()) {
-                                        // Only reached if the send actually succeeded
+                                        targetResendTimestampMillis = System.currentTimeMillis() + (RESEND_WAIT_SECONDS * 1000L)
                                         step = EmailAuthStep.OTP_VERIFY
                                     }
                                 }
@@ -139,8 +141,7 @@ fun EmailAuthScreen(
                             onVerify = { onVerifyOtpClick(email.trim(), otp) },
                             onResend = {
                                 onResendCodeClick(email.trim()) {
-                                    // Only restart the 60s countdown if the resend actually succeeded
-                                    resendTick++
+                                    targetResendTimestampMillis = System.currentTimeMillis() + (RESEND_WAIT_SECONDS * 1000L)
                                 }
                             },
                             isLoading = isLoading

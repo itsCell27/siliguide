@@ -129,6 +129,7 @@ fun DashboardScreen(
     onSignedOut: () -> Unit = {},
     onCreateAccountWithEmail: () -> Unit = {},
     onCreateAccountWithGoogle: () -> Unit = {},
+    onNavigateToDeleteAccount: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -198,10 +199,7 @@ fun DashboardScreen(
         onConfirmGuestLogOut = {
             authViewModel.guestLogOut(onSuccess = onSignedOut)
         },
-        onConfirmDeleteAccount = {
-            /* TODO: AuthViewModel — delete account */
-            onSignedOut()
-        },
+        onConfirmDeleteAccount = onNavigateToDeleteAccount,
         onCreateAccountWithEmail = onCreateAccountWithEmail,
         onCreateAccountWithGoogle = onCreateAccountWithGoogle,
         profileIsLoading = authUiState.isLoading,

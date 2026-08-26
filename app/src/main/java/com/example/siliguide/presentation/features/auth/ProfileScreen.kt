@@ -168,7 +168,7 @@ fun ProfileContent(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { showDeleteAccountDialog = true }
+                            ) { onConfirmDeleteAccount() }
                             .padding(vertical = 6.dp)
                     )
                 }

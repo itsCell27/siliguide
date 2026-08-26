@@ -74,4 +74,9 @@ class SyncRepositoryImpl @Inject constructor(
         }
         return syncEngine.sync(session.userId)
     }
+
+    override fun cancelAllSync() {
+        workManager.cancelUniqueWork(ONE_TIME_SYNC_WORK_NAME)
+        workManager.cancelUniqueWork(PERIODIC_SYNC_WORK_NAME)
+    }
 }

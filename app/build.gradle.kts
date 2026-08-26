@@ -128,6 +128,7 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.storage)
     implementation(libs.supabase.realtime)
+    implementation(libs.supabase.functions)
 
     // Google
     implementation(libs.google.id)

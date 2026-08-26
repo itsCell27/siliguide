@@ -87,6 +87,7 @@ class AuthRepositoryImpl @Inject constructor(
         handlePostSignIn(realUserId, email, derivedName)
         Result.success(Unit)
     } catch (e: Exception) {
+        Log.d("VerifyEmailOTP", e.toString())
         Result.failure(Exception(e.toFriendlyAuthError()))
     }
 
@@ -228,13 +229,49 @@ class AuthRepositoryImpl @Inject constructor(
 }
 
 /**
- * Raw exception text (Ktor timeout URLs, IOException stack noise) is not
- * something to show a user. Map the common network failure shapes to plain
- * language; anything unrecognized falls back to its own message.
+ * Raw exception text (Ktor timeout URLs, IOException stack noise, Supabase JSON error bodies)
+ * is mapped to clear, plain-language messages for the user.
  */
-private fun Throwable.toFriendlyAuthError(): String = when (this) {
-    is HttpRequestTimeoutException -> "Request timed out. Check your connection and try again."
-    is IOException -> "No internet connection. Check your network and try again."
-    is android.database.sqlite.SQLiteConstraintException -> "This email is already linked to an existing account on this device. Log in instead, or use a different email."
-    else -> message ?: "Something went wrong. Please try again."
+private fun Throwable.toFriendlyAuthError(): String {
+    val rawMsg = (message ?: "").lowercase()
+
+    return when {
+        this is HttpRequestTimeoutException || rawMsg.contains("timeout") ->
+            "Request timed out. Check your connection and try again."
+
+        this is IOException || rawMsg.contains("unable to resolve host") || rawMsg.contains("failed to connect") || rawMsg.contains("network") ->
+            "No internet connection. Check your network and try again."
+
+        this is android.database.sqlite.SQLiteConstraintException ->
+            "This email is already linked to an existing account on this device. Log in instead, or use a different email."
+
+        rawMsg.contains("otp_expired") || rawMsg.contains("token has expired") || (rawMsg.contains("expired") && rawMsg.contains("token")) ->
+            "The verification code has expired. Please request a new code."
+
+        rawMsg.contains("invalid") && (rawMsg.contains("token") || rawMsg.contains("otp") || rawMsg.contains("code")) ->
+            "Invalid verification code. Please check the code in your email and try again."
+
+        rawMsg.contains("rate_limit") || rawMsg.contains("rate limit") || rawMsg.contains("429") || rawMsg.contains("once every") || rawMsg.contains("too many") || rawMsg.contains("security purposes") ->
+            "Too many requests. Please wait a moment before requesting another code."
+
+        rawMsg.contains("user not found") || rawMsg.contains("user_not_found") ->
+            "No account found associated with this email address."
+
+        rawMsg.contains("session") && (rawMsg.contains("expired") || rawMsg.contains("not found")) ->
+            "Your session has expired. Please sign in again."
+
+        else -> {
+            val clean = message
+                ?.replace(Regex("[{}\"'\\[\\]]"), "")
+                ?.replace("error_code:", "")
+                ?.replace("msg:", "")
+                ?.trim()
+
+            if (!clean.isNullOrBlank() && !clean.contains("io.github.jan") && !clean.contains("PostgrestRestException") && !clean.contains("AuthRestException") && !clean.contains("Exception")) {
+                clean
+            } else {
+                "Something went wrong. Please try again."
+            }
+        }
+    }
 }

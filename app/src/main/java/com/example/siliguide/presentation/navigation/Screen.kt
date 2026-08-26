@@ -10,6 +10,7 @@ sealed class Screen(val route: String) {
     object GuestInfo : Screen("guest_info")
     object Profile : Screen("profile")
     object Dashboard : Screen("dashboard")
+    object DeleteAccount : Screen("delete_account")
 
     object SeeAllDevices : Screen("see_all_devices?plantId={plantId}") {
         fun createRoute(plantId: String? = null): String {

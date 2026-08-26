@@ -9,6 +9,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.storage.Storage
+import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.serializer.KotlinXSerializer
 import io.ktor.client.plugins.HttpTimeout
 import com.example.siliguide.BuildConfig
@@ -31,6 +32,7 @@ object SupabaseModule {
             install(Auth)
             install(Postgrest)
             install(Storage)
+            install(Functions)
 
             defaultSerializer = KotlinXSerializer(
                 Json {
