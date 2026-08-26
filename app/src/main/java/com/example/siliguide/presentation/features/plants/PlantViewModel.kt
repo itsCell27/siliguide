@@ -427,7 +427,7 @@ class PlantViewModel @Inject constructor(
     }
 
     private companion object {
-        const val MONITOR_POLL_INTERVAL_MS = 3_000L
+        const val MONITOR_POLL_INTERVAL_MS = 1_000L
         const val MONITOR_FETCH_TIMEOUT_MS = 2_500L
         const val MONITOR_DASH = "—"
     }
