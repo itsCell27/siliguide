@@ -1,19 +1,28 @@
 package com.example.siliguide.core.ml
 
+import android.graphics.Bitmap
+import android.util.Log
 import com.example.siliguide.domain.model.PolygonPoint
+import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
 import org.opencv.imgproc.Imgproc
-import android.graphics.Bitmap
 
 object ContourExtractor {
+
+    private fun ensureOpenCV() {
+        if (!OpenCVLoader.initLocal()) {
+            Log.e("ContourExtractor", "Failed to initialize OpenCV")
+        }
+    }
 
     fun extractPolygon(
         bitmap: Bitmap
     ): List<PolygonPoint> {
+        ensureOpenCV()
 
         val src = Mat()
 

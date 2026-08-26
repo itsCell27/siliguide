@@ -33,12 +33,17 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
 class AuthRepositoryImpl @Inject constructor(
-    private val dbManager: SiliGuideDatabaseManager,
+    private val dbManagerProvider: dagger.Lazy<SiliGuideDatabaseManager>,
     private val userPreferences: UserPreferences,
-    private val supabase: SupabaseClient,
-    private val syncRepository: SyncRepository,
-    private val userRemoteSource: SupabaseUserRemoteSource
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
+    private val syncRepositoryProvider: dagger.Lazy<SyncRepository>,
+    private val userRemoteSourceProvider: dagger.Lazy<SupabaseUserRemoteSource>
 ) : AuthRepository {
+
+    private val dbManager get() = dbManagerProvider.get()
+    private val supabase get() = supabaseProvider.get()
+    private val syncRepository get() = syncRepositoryProvider.get()
+    private val userRemoteSource get() = userRemoteSourceProvider.get()
 
     override suspend fun createGuestSession(): String {
         val guestId = UUID.randomUUID().toString()

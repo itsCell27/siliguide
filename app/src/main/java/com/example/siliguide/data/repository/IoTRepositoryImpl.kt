@@ -42,12 +42,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class IoTRepositoryImpl @Inject constructor(
-    private val api: Esp32Api,
-    private val bluetoothApi: BluetoothApi,
-    private val wifiProvisioningManager: WifiProvisioningManager,
+    private val apiProvider: dagger.Lazy<Esp32Api>,
+    private val bluetoothApiProvider: dagger.Lazy<BluetoothApi>,
+    private val wifiProvisioningManagerProvider: dagger.Lazy<WifiProvisioningManager>,
     @param:ApplicationContext private val context: Context,
     driver: SqlDriver
 ) : IoTRepository {
+
+    private val api get() = apiProvider.get()
+    private val bluetoothApi get() = bluetoothApiProvider.get()
+    private val wifiProvisioningManager get() = wifiProvisioningManagerProvider.get()
 
     companion object {
         /**

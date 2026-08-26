@@ -14,7 +14,10 @@ import com.example.siliguide.data.sync.SyncResult
 import com.example.siliguide.data.sync.SyncWorker
 import com.example.siliguide.domain.repository.SyncRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,9 +25,11 @@ import javax.inject.Singleton
 @Singleton
 class SyncRepositoryImpl @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val syncEngine: SyncEngine,
+    private val syncEngineProvider: dagger.Lazy<SyncEngine>,
     private val userPreferences: UserPreferences
 ) : SyncRepository {
+
+    private val syncEngine get() = syncEngineProvider.get()
 
     companion object {
         private const val ONE_TIME_SYNC_WORK_NAME = "sili_one_time_sync"
@@ -34,37 +39,41 @@ class SyncRepositoryImpl @Inject constructor(
     private val workManager by lazy { WorkManager.getInstance(context) }
 
     override fun enqueueOneTimeSync() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
 
-        val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(constraints)
-            .build()
+            val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints)
+                .build()
 
-        workManager.enqueueUniqueWork(
-            ONE_TIME_SYNC_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
-            syncRequest
-        )
+            workManager.enqueueUniqueWork(
+                ONE_TIME_SYNC_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                syncRequest
+            )
+        }
     }
 
     override fun schedulePeriodicSync() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
 
-        val periodicSyncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
-            15, TimeUnit.MINUTES
-        )
-            .setConstraints(constraints)
-            .build()
+            val periodicSyncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
+                15, TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .build()
 
-        workManager.enqueueUniquePeriodicWork(
-            PERIODIC_SYNC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            periodicSyncRequest
-        )
+            workManager.enqueueUniquePeriodicWork(
+                PERIODIC_SYNC_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                periodicSyncRequest
+            )
+        }
     }
 
     override suspend fun syncNow(): SyncResult {
@@ -76,7 +85,9 @@ class SyncRepositoryImpl @Inject constructor(
     }
 
     override fun cancelAllSync() {
-        workManager.cancelUniqueWork(ONE_TIME_SYNC_WORK_NAME)
-        workManager.cancelUniqueWork(PERIODIC_SYNC_WORK_NAME)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            workManager.cancelUniqueWork(ONE_TIME_SYNC_WORK_NAME)
+            workManager.cancelUniqueWork(PERIODIC_SYNC_WORK_NAME)
+        }
     }
 }

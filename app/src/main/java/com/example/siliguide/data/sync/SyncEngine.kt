@@ -26,19 +26,31 @@ import javax.inject.Singleton
 
 @Singleton
 class SyncEngine @Inject constructor(
-    private val plantRepository: PlantRepository,
-    private val ioTRepository: IoTRepository,
-    private val analysisRepository: AnalysisRepository,
-    private val pairingTokenCrypto: PairingTokenCrypto,
-    private val storageSource: SupabaseStorageSource,
-    private val plantRemoteSource: SupabasePlantRemoteSource,
-    private val ioTRemoteSource: SupabaseIoTRemoteSource,
-    private val analysisRemoteSource: SupabaseAnalysisRemoteSource,
-    private val userRemoteSource: SupabaseUserRemoteSource,
-    private val dbManager: SiliGuideDatabaseManager,
-    private val supabaseClient: SupabaseClient,
+    private val plantRepositoryProvider: dagger.Lazy<PlantRepository>,
+    private val ioTRepositoryProvider: dagger.Lazy<IoTRepository>,
+    private val analysisRepositoryProvider: dagger.Lazy<AnalysisRepository>,
+    private val pairingTokenCryptoProvider: dagger.Lazy<PairingTokenCrypto>,
+    private val storageSourceProvider: dagger.Lazy<SupabaseStorageSource>,
+    private val plantRemoteSourceProvider: dagger.Lazy<SupabasePlantRemoteSource>,
+    private val ioTRemoteSourceProvider: dagger.Lazy<SupabaseIoTRemoteSource>,
+    private val analysisRemoteSourceProvider: dagger.Lazy<SupabaseAnalysisRemoteSource>,
+    private val userRemoteSourceProvider: dagger.Lazy<SupabaseUserRemoteSource>,
+    private val dbManagerProvider: dagger.Lazy<SiliGuideDatabaseManager>,
+    private val supabaseClientProvider: dagger.Lazy<SupabaseClient>,
     @param:ApplicationContext private val context: Context
 ) {
+    private val plantRepository get() = plantRepositoryProvider.get()
+    private val ioTRepository get() = ioTRepositoryProvider.get()
+    private val analysisRepository get() = analysisRepositoryProvider.get()
+    private val pairingTokenCrypto get() = pairingTokenCryptoProvider.get()
+    private val storageSource get() = storageSourceProvider.get()
+    private val plantRemoteSource get() = plantRemoteSourceProvider.get()
+    private val ioTRemoteSource get() = ioTRemoteSourceProvider.get()
+    private val analysisRemoteSource get() = analysisRemoteSourceProvider.get()
+    private val userRemoteSource get() = userRemoteSourceProvider.get()
+    private val dbManager get() = dbManagerProvider.get()
+    private val supabaseClient get() = supabaseClientProvider.get()
+
     companion object {
         private const val TAG = "SyncEngine"
     }
