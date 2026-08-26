@@ -589,7 +589,7 @@ private fun NoDeviceCard(onLinkDevice: () -> Unit) {
         }
         Text("No IoT device linked", fontSize = 13.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = GrayBody)
         Text(
-            "Link a device to monitor live soil and climate data for this plant.",
+            "Link a device to monitor live soil and environmental data for this plant.",
             fontSize = 11.sp, fontFamily = DMSans, color = GrayMedium, textAlign = TextAlign.Center, lineHeight = 16.sp
         )
         Box(
