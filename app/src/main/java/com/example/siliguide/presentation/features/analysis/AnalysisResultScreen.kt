@@ -278,7 +278,7 @@ fun ResultTopBar(
                     lineHeight = 18.sp
                 )
                 Text(
-                    text = if (isOutOfScope) "Image rejected" else "Labuyo plant · $timeLabel",
+                    text = if (isOutOfScope) "Image rejected" else timeLabel,
                     fontSize = 11.sp,
                     color = GrayMedium,
                     modifier = Modifier.padding(top = 1.dp)

@@ -85,41 +85,30 @@ fun BluetoothIntroScreen(
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var showRationaleDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var showSettingsDialog by remember {
-        mutableStateOf(false)
-    }
-
-    val checkPermissionsAndNavigate: () -> Unit = {
+    val checkPermissionGranted = {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            onContinue()
+            true
         } else {
-            val connectGranted = ContextCompat.checkSelfPermission(
+            ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
-
-            val scanGranted = ContextCompat.checkSelfPermission(
+            ) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.BLUETOOTH_SCAN
             ) == PackageManager.PERMISSION_GRANTED
-
-            if (connectGranted && scanGranted) {
-                showRationaleDialog = false
-                showSettingsDialog = false
-                onContinue()
-            }
         }
     }
 
-    // Automatically navigate when user returns to screen with Bluetooth permissions granted
+    var isBluetoothPermissionGranted by remember {
+        mutableStateOf(checkPermissionGranted())
+    }
+
+    // Dynamically update button appearance when returning to screen
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                checkPermissionsAndNavigate()
+                isBluetoothPermissionGranted = checkPermissionGranted()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -128,10 +117,19 @@ fun BluetoothIntroScreen(
         }
     }
 
+    var showRationaleDialog by remember {
+        mutableStateOf(false)
+    }
+
+    var showSettingsDialog by remember {
+        mutableStateOf(false)
+    }
+
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         val granted = result.isNotEmpty() && result.values.all { it }
+        isBluetoothPermissionGranted = granted || checkPermissionGranted()
         if (granted) {
             showRationaleDialog = false
             showSettingsDialog = false
@@ -157,6 +155,7 @@ fun BluetoothIntroScreen(
             ) {
                 WizardBottomActions(
                     primaryLabel = "Continue",
+                    primaryIsOutlined = !isBluetoothPermissionGranted,
                     onPrimaryClick = {
 
                         scope.launch {

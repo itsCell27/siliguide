@@ -665,6 +665,7 @@ fun WizardBottomActions(
     primaryLabel: String,
     onPrimaryClick: () -> Unit,
     primaryEnabled: Boolean = true,
+    primaryIsOutlined: Boolean = false,
     secondaryLabel: String? = null,
     onSecondaryClick: (() -> Unit)? = null,
     secondaryIsLink: Boolean = false,
@@ -676,16 +677,31 @@ fun WizardBottomActions(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Button(
-            onClick = onPrimaryClick,
-            enabled = primaryEnabled,
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-        ) {
-            Text(primaryLabel, style = MaterialTheme.typography.titleSmall, color = White)
+        if (primaryIsOutlined) {
+            OutlinedButton(
+                onClick = onPrimaryClick,
+                enabled = primaryEnabled,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, GreenPrimary),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = GreenPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(primaryLabel, style = MaterialTheme.typography.titleSmall, color = GreenPrimary)
+            }
+        } else {
+            Button(
+                onClick = onPrimaryClick,
+                enabled = primaryEnabled,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(primaryLabel, style = MaterialTheme.typography.titleSmall, color = White)
+            }
         }
         if (secondaryLabel != null && onSecondaryClick != null) {
             if (secondaryIsLink) {
