@@ -7,11 +7,17 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @Singleton
 class BluetoothManager @Inject constructor(
@@ -44,43 +50,51 @@ class BluetoothManager @Inject constructor(
 
     @SuppressLint("MissingPermission") // Temporary until runtime permissions are implemented
     @Throws(Exception::class)
-    fun connect(device: BluetoothDevice) {
+    suspend fun connect(device: BluetoothDevice, timeoutMs: Long = 3000L) = withContext(Dispatchers.IO) {
 
         Log.d(
             "BluetoothManager",
-            "instance=${System.identityHashCode(this)}"
+            "instance=${System.identityHashCode(this@BluetoothManager)} connecting to ${device.address} (${device.name})"
         )
 
         disconnect()
 
         bluetoothAdapter.cancelDiscovery()
 
-        try {
-            socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+        val newSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+        socket = newSocket
 
-            socket?.connect()
+        try {
+            withTimeout(timeoutMs) {
+                suspendCancellableCoroutine { continuation ->
+                    continuation.invokeOnCancellation {
+                        try {
+                            newSocket.close()
+                        } catch (_: Exception) {}
+                    }
+                    try {
+                        newSocket.connect()
+                        if (continuation.isActive) {
+                            continuation.resume(Unit)
+                        }
+                    } catch (e: Exception) {
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(e)
+                        }
+                    }
+                }
+            }
+
             Log.d(
                 "BluetoothManager",
-                "Connected=${socket?.isConnected}"
+                "Connected=${newSocket.isConnected}"
             )
 
-            input = socket?.inputStream
-            output = socket?.outputStream
+            input = newSocket.inputStream
+            output = newSocket.outputStream
             Log.d(
                 "BluetoothManager",
                 "Input=${input != null} Output=${output != null}"
-            )
-            Log.d(
-                "BluetoothManager",
-                "socket=$socket"
-            )
-            Log.d(
-                "BluetoothManager",
-                "input=$input"
-            )
-            Log.d(
-                "BluetoothManager",
-                "output=$output"
             )
 
         } catch (e: Exception) {

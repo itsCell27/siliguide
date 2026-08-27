@@ -50,7 +50,7 @@ enum class LanProvisioningMethod { ACCESS_POINT, BLUETOOTH }
  * everything runs over LAN.
  */
 data class LanSetupMethodUiState(
-    val selectedMethod: LanProvisioningMethod = LanProvisioningMethod.ACCESS_POINT
+    val selectedMethod: LanProvisioningMethod = LanProvisioningMethod.BLUETOOTH
 )
 
 @Composable

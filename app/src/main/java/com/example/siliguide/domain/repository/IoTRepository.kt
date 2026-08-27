@@ -5,12 +5,12 @@ import com.example.siliguide.data.remote.iot.dto.WiFiStatusDto
 import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.LastDeviceSensorData
-import com.example.siliguide.domain.model.SensorResponse
+import com.example.siliguide.domain.model.SensorFetchResult
 import kotlinx.coroutines.flow.Flow
 
 // The Domain layer defines WHAT it needs, not HOW to get it.
 interface IoTRepository {
-    suspend fun getSensors(deviceId: String? = null): SensorResponse
+    suspend fun getSensors(deviceId: String? = null): SensorFetchResult
 
     // Returns the deviceId if successful, or an Exception if it fails
     suspend fun verifyDeviceConnection(host: String): Result<DeviceInfoDto>

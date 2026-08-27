@@ -5,8 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.navigation.compose.rememberNavController
 import com.example.siliguide.core.ui.theme.SiliGuideTheme
 import com.example.siliguide.presentation.MainViewModel
@@ -24,14 +28,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SiliGuideTheme {
-                // Collect the DataStore state (null = loading, string = route)
                 val startDest by mainViewModel.startDestination.collectAsState()
+                var resolvedStartDest by rememberSaveable { mutableStateOf<String?>(null) }
 
-                if (startDest != null) {
+                LaunchedEffect(startDest) {
+                    if (resolvedStartDest == null && startDest != null) {
+                        resolvedStartDest = startDest
+                    }
+                }
+
+                val initialRoute = resolvedStartDest ?: startDest
+
+                if (initialRoute != null) {
                     val navController = rememberNavController()
                     SiliGuideNavGraph(
                         navController = navController,
-                        startDestination = startDest!! // Pass the dynamic route
+                        startDestination = initialRoute
                     )
                 }
             }

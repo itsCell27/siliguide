@@ -216,11 +216,11 @@ private fun PairedDeviceCard(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = "Device ID: ${device.deviceId}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = GrayMedium
-                )
+//                Text(
+//                    text = "Device ID: ${device.deviceId}",
+//                    style = MaterialTheme.typography.bodySmall,
+//                    color = GrayMedium
+//                )
             }
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,

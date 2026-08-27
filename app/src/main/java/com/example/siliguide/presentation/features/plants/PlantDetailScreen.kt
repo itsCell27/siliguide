@@ -89,6 +89,8 @@ fun PlantDetailScreen(
     onNavigateToSeeAllHistory: (plantId: String) -> Unit = {},
     onNavigateToAnalysisDetail: (sessionId: String) -> Unit = {},
     onNavigateToLinkDevice: () -> Unit = {},
+    onNavigateToDeviceDetails: (deviceId: String) -> Unit = {},
+    onNavigateToRepairDevice: (deviceId: String) -> Unit = {},
     viewModel: PlantViewModel = hiltViewModel()
 ) {
     val plant            by viewModel.plantState.collectAsState()
@@ -215,6 +217,7 @@ fun PlantDetailScreen(
                         lastSeenText = liveMonitoring.lastSeenText,
                         staleNote = liveMonitoring.staleNote,
                         onReconnect = { viewModel.retryReconnect() },
+                        onRepair = { iotDevice?.deviceId?.let { onNavigateToRepairDevice(it) } },
                         connectionMode = iotDevice?.connectionMode ?: ConnectionMode.AP
                     )
                 }

@@ -149,7 +149,7 @@ fun BluetoothConnectionScreenContent(
         },
         bottomBar = {
             Box(
-                modifier = modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .background(White)
                     .border(BorderStroke(1.dp, Border))

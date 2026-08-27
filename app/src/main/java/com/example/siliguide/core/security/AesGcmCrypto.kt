@@ -23,24 +23,28 @@ class AesGcmCrypto @Inject constructor() {
     private val ivLengthBytes = 12
     private val tagLengthBytes = 16
 
-    fun decrypt(base64Payload: String, pairingToken: String): String {
-        val raw = Base64.decode(base64Payload, Base64.NO_WRAP)
-        require(raw.size > ivLengthBytes + tagLengthBytes) {
-            "AES-GCM payload too short to contain IV and tag"
+    fun decrypt(base64Payload: String, pairingToken: String): String? {
+        return try {
+            val raw = Base64.decode(base64Payload, Base64.NO_WRAP) ?: return null
+            if (raw.size <= ivLengthBytes + tagLengthBytes) {
+                return null
+            }
+
+            val iv = raw.copyOfRange(0, ivLengthBytes)
+            val cipherTextWithTag = raw.copyOfRange(ivLengthBytes, raw.size)
+
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                keyFromToken(pairingToken),
+                GCMParameterSpec(tagLengthBytes * 8, iv)
+            )
+
+            val plainBytes = cipher.doFinal(cipherTextWithTag)
+            String(plainBytes, Charsets.UTF_8)
+        } catch (e: Exception) {
+            null
         }
-
-        val iv = raw.copyOfRange(0, ivLengthBytes)
-        val cipherTextWithTag = raw.copyOfRange(ivLengthBytes, raw.size)
-
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(
-            Cipher.DECRYPT_MODE,
-            keyFromToken(pairingToken),
-            GCMParameterSpec(tagLengthBytes * 8, iv)
-        )
-
-        val plainBytes = cipher.doFinal(cipherTextWithTag)
-        return String(plainBytes, Charsets.UTF_8)
     }
 
     fun encrypt(plaintext: String, pairingToken: String): String {

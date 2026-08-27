@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.siliguide.R
+import com.example.siliguide.core.ui.components.shimmer
 import com.example.siliguide.core.ui.theme.Black
 import com.example.siliguide.core.ui.theme.Border
 import com.example.siliguide.core.ui.theme.DMSans
@@ -90,6 +91,7 @@ data class SeeAllPlantItem(
 fun SeeAllPlantsScreen(
     plants: List<SeeAllPlantItem>,
     query: String,
+    isLoading: Boolean = false,
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
     onPlantClick: (String) -> Unit,
@@ -112,7 +114,22 @@ fun SeeAllPlantsScreen(
 
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                if (plants.isEmpty()) {
+                if (isLoading && plants.isEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(
+                            start = 22.dp,
+                            end = 22.dp,
+                            top = 12.dp,
+                            bottom = if (isSelectionMode) 120.dp else 16.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(count = 5) {
+                            PlantListItemSkeleton(isSelectionMode = isSelectionMode)
+                        }
+                    }
+                } else if (plants.isEmpty()) {
                     if (query.isBlank()) {
                         SeeAllEmptyState(
                             title = "No plants yet",
@@ -198,6 +215,70 @@ fun SeeAllPlantsScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlantListItemSkeleton(
+    compact: Boolean = false,
+    isSelectionMode: Boolean = false
+) {
+    val thumbSize = if (compact) 55.dp else 70.dp
+    val thumbRadius = if (compact) 10.dp else 13.dp
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = White),
+        shape  = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(thumbSize)
+                    .clip(RoundedCornerShape(thumbRadius))
+                    .shimmer()
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 130.dp, height = 16.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .shimmer()
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 90.dp, height = 10.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .shimmer()
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 70.dp, height = 12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .shimmer()
+                )
+            }
+
+            if (isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .shimmer()
+                )
             }
         }
     }
@@ -445,6 +526,21 @@ private fun SeeAllPlantsNoResultsPreview() {
         SeeAllPlantsScreen(
             plants = emptyList(),
             query = "xyz123",
+            onQueryChange = {},
+            onBack = {},
+            onPlantClick = {}
+        )
+    }
+}
+
+@Preview(name = "Loading state", showSystemUi = true, widthDp = 360, heightDp = 740)
+@Composable
+private fun SeeAllPlantsLoadingPreview() {
+    SiliGuideTheme {
+        SeeAllPlantsScreen(
+            plants = emptyList(),
+            query = "",
+            isLoading = true,
             onQueryChange = {},
             onBack = {},
             onPlantClick = {}

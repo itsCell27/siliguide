@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.siliguide.core.ui.components.shimmer
 import com.example.siliguide.core.ui.theme.Black
 import com.example.siliguide.core.ui.theme.Border
 import com.example.siliguide.core.ui.theme.DMSans
@@ -56,6 +57,7 @@ data class SeeAllDeviceItem(
 fun SeeAllDevicesScreen(
     devices: List<SeeAllDeviceItem>,
     query: String,
+    isLoading: Boolean = false,
     isLinkingMode: Boolean = false,
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
@@ -71,7 +73,22 @@ fun SeeAllDevicesScreen(
         onBack = onBack,
         modifier = modifier
     ) {
-        if (devices.isEmpty()) {
+        if (isLoading && devices.isEmpty()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 22.dp,
+                    end = 22.dp,
+                    top = 12.dp,
+                    bottom = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(count = 5) {
+                    DeviceListItemSkeleton(isLinkingMode = isLinkingMode)
+                }
+            }
+        } else if (devices.isEmpty()) {
 
             if (query.isBlank()) {
                 if (isLinkingMode) {
@@ -131,6 +148,63 @@ fun SeeAllDevicesScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DeviceListItemSkeleton(
+    isLinkingMode: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(White)
+            .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .shimmer()
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 120.dp, height = 14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .shimmer()
+            )
+            Box(
+                modifier = Modifier
+                    .size(width = 60.dp, height = 10.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .shimmer()
+            )
+        }
+
+        if (isLinkingMode) {
+            Box(
+                modifier = Modifier
+                    .size(width = 32.dp, height = 14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .shimmer()
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .shimmer()
+            )
         }
     }
 }
@@ -272,6 +346,21 @@ private fun SeeAllDevicesEmptyPreview() {
         SeeAllDevicesScreen(
             devices = emptyList(),
             query = "",
+            onQueryChange = {},
+            onBack = {},
+            onDeviceClick = {}
+        )
+    }
+}
+
+@Preview(name = "Loading state", showSystemUi = true, widthDp = 360, heightDp = 740)
+@Composable
+private fun SeeAllDevicesLoadingPreview() {
+    SiliGuideTheme {
+        SeeAllDevicesScreen(
+            devices = emptyList(),
+            query = "",
+            isLoading = true,
             onQueryChange = {},
             onBack = {},
             onDeviceClick = {}

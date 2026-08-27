@@ -6,12 +6,14 @@ import com.example.siliguide.domain.model.Plant
 import com.example.siliguide.domain.model.IoTDevice
 import com.example.siliguide.domain.model.AnalysisSession
 import com.example.siliguide.domain.model.LastDeviceSensorData
+import com.example.siliguide.domain.model.SensorFetchResult
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.AuthRepository
 import com.example.siliguide.domain.repository.IoTRepository
 import com.example.siliguide.domain.usecase.AddPlantUseCase
 import com.example.siliguide.domain.usecase.DeletePlantByIdUseCase
 import com.example.siliguide.domain.usecase.FetchSensorsUseCase
+import com.example.siliguide.domain.usecase.FetchSensorsWithStatusUseCase
 import com.example.siliguide.domain.usecase.GetPlantsUseCase
 import com.example.siliguide.domain.usecase.GetAnalysisSessionsByPlantUseCase
 import com.example.siliguide.domain.usecase.GetPlantByIdUseCase
@@ -55,6 +57,7 @@ class PlantViewModel @Inject constructor(
     private val updatePlantNameUseCase: UpdatePlantNameUseCase,
     private val markPlantAsDeletedByIdUseCase: MarkPlantAsDeletedByIdUseCase,
     private val fetchSensorsUseCase: FetchSensorsUseCase,
+    private val fetchSensorsWithStatusUseCase: FetchSensorsWithStatusUseCase,
     private val ioTRepository: IoTRepository,
     private val getIoTDeviceByIdUseCase: GetIoTDeviceByIdUseCase,
     private val syncRepository: SyncRepository
@@ -239,21 +242,50 @@ class PlantViewModel @Inject constructor(
 
     private suspend fun pollDeviceOnce(deviceId: String) {
 
-        val response = withContext(Dispatchers.IO) {
+        val result = withContext(Dispatchers.IO) {
             runCatching {
                 withTimeoutOrNull(MONITOR_FETCH_TIMEOUT_MS) {
-                    fetchSensorsUseCase(deviceId)
+                    fetchSensorsWithStatusUseCase(deviceId)
                 }
             }.getOrNull()
         }
 
-        if (response != null) {
-
-            onLiveDeviceReading(deviceId, response)
-        } else {
-
-            onDeviceOffline(deviceId)
+        when (result) {
+            is SensorFetchResult.Success -> {
+                onLiveDeviceReading(deviceId, result.response)
+            }
+            is SensorFetchResult.TokenRejected -> {
+                onDeviceNeedsRepairing(deviceId)
+            }
+            is SensorFetchResult.Unreachable, null -> {
+                onDeviceOffline(deviceId)
+            }
         }
+    }
+
+    private suspend fun onDeviceNeedsRepairing(deviceId: String) {
+        val last = withContext(Dispatchers.IO) {
+            runCatching { ioTRepository.getLastDeviceSensorData(deviceId) }.getOrNull()
+        }
+
+        val ago = last?.lastSeenAt?.let { monitorTimeAgo(it) }
+
+        _liveMonitoring.value = LiveMonitoringUiState(
+            status = MonitoringStatus.NEEDS_REPAIRING,
+            readings = if (last == null) emptyList() else buildMonitoringReadings(
+                moisture = last.lastSoilMoisture,
+                soilTemp = last.lastSoilTemp,
+                ph = last.lastSoilPh,
+                nitrogen = last.lastNitrogen,
+                phosphorus = last.lastPhosphorus,
+                potassium = last.lastPotassium,
+                ec = last.lastElectricalConductivity,
+                airTemp = last.lastAirTemp,
+                light = last.lastLightIntensity
+            ),
+            lastSeenText = ago?.let { "Last seen $it" },
+            staleNote = "Device was reset · Tap to re-pair"
+        )
     }
 
     private suspend fun onLiveDeviceReading(deviceId: String, response: SensorResponse) {
@@ -409,7 +441,7 @@ class PlantViewModel @Inject constructor(
 
     private companion object {
         const val MONITOR_POLL_INTERVAL_MS = 1_000L
-        const val MONITOR_FETCH_TIMEOUT_MS = 2_500L
+        const val MONITOR_FETCH_TIMEOUT_MS = 5_000L
         const val MONITOR_DASH = "—"
     }
 }

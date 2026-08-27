@@ -91,7 +91,7 @@ enum class DetailConnectionMode(
     )
 }
 
-enum class DeviceConnectionStatus { CONNECTED, OFFLINE, RECONNECTING }
+enum class DeviceConnectionStatus { CONNECTED, OFFLINE, RECONNECTING, NEEDS_REPAIRING }
 
 data class SensorReadingUi(
     val label: String,
@@ -135,6 +135,7 @@ fun IoTDeviceDetailScreen(
     onRenameDevice: (String) -> Unit = {},
     onRemoveDevice: () -> Unit = {},
     onModeChangeConfirmed: (DetailConnectionMode) -> Unit = {},
+    onRepairDevice: () -> Unit = {},
     onNavigateToDashboard: () -> Unit = {}
 ) {
 
@@ -189,7 +190,8 @@ fun IoTDeviceDetailScreen(
 
                 StatusCard(
                     state = state,
-                    onReconnect = onReconnect
+                    onReconnect = onReconnect,
+                    onRepair = onRepairDevice
                 )
 
                 SectionHeading("Linked plant")
@@ -508,10 +510,11 @@ private fun SectionHeading(text: String) {
 @Composable
 private fun StatusCard(
     state: IoTDeviceDetailUiState,
-    onReconnect: () -> Unit
+    onReconnect: () -> Unit,
+    onRepair: () -> Unit
 ) {
 
-    val isOffline = state.status == DeviceConnectionStatus.OFFLINE
+    val isOffline = state.status == DeviceConnectionStatus.OFFLINE || state.status == DeviceConnectionStatus.NEEDS_REPAIRING
 
     MonitoringCard(
         title = state.deviceName,
@@ -533,6 +536,7 @@ private fun StatusCard(
         staleNote = state.staleNote,
         offlineNote = state.offlineNote,
         onReconnect = onReconnect,
+        onRepair = onRepair,
         connectionMode = state.connectionMode
     )
 }
@@ -541,6 +545,7 @@ private fun DeviceConnectionStatus.toMonitoringStatus(): MonitoringStatus = when
     DeviceConnectionStatus.CONNECTED -> MonitoringStatus.CONNECTED
     DeviceConnectionStatus.OFFLINE -> MonitoringStatus.OFFLINE
     DeviceConnectionStatus.RECONNECTING -> MonitoringStatus.RECONNECTING
+    DeviceConnectionStatus.NEEDS_REPAIRING -> MonitoringStatus.NEEDS_REPAIRING
 }
 
 @Composable

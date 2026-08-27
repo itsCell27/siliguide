@@ -3,6 +3,11 @@ package com.example.siliguide.presentation.features.dashboard
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,6 +35,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -50,6 +56,7 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.siliguide.R
+import com.example.siliguide.core.ui.components.shimmer
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.model.AnalysisSession
 import com.example.siliguide.domain.model.AuthProvider
@@ -176,6 +183,7 @@ fun DashboardScreen(
         plants              = displayPlants,
         devices             = uiState.devices,
         deviceOnline        = uiState.deviceOnline,
+        isLoading           = uiState.isLoading,
         isRefreshing        = isRefreshing,
         onRefresh           = { viewModel.refresh() },
         isAddMenuOpen       = isAddMenuOpen,
@@ -219,6 +227,7 @@ fun DashboardContent(
     plants: List<PlantItem>,
     devices: List<IoTDevice>,
     deviceOnline: Map<String, Boolean>,
+    isLoading: Boolean = false,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     isAddMenuOpen: Boolean,
@@ -288,12 +297,14 @@ fun DashboardContent(
                             IoTDevicesSection(
                                 devices = devices,
                                 deviceOnline = deviceOnline,
+                                isLoading = isLoading,
                                 onAddDevice = onNavigateToAddIoT,
                                 onDeviceClick = onNavigateToDeviceDetail,
                                 onSeeAllDevices = onNavigateToSeeAllDevices
                             )
                             PlantsSection(
                                 plants = plants,
+                                isLoading = isLoading,
                                 onSeeAll = onNavigateToSeeAllPlants,
                                 onNavigateToPlantDetail = onNavigateToPlantDetail
                             )
@@ -433,6 +444,7 @@ fun TopBarSection(
 fun IoTDevicesSection(
     devices: List<IoTDevice>,
     deviceOnline: Map<String, Boolean>,
+    isLoading: Boolean = false,
     onAddDevice: () -> Unit,
     onDeviceClick: (String) -> Unit = {},
     onSeeAllDevices: () -> Unit = {}
@@ -460,7 +472,19 @@ fun IoTDevicesSection(
             }
         }
 
-        if (devices.isEmpty()) {
+        if (isLoading && devices.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 22.dp)
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                repeat(2) {
+                    IoTDeviceCardSkeleton()
+                }
+            }
+        } else if (devices.isEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -498,7 +522,7 @@ fun IoTDevicesSection(
                     key(device.deviceId) {
                         IoTDeviceCard(
                             device = device,
-                            isOnline = deviceOnline[device.deviceId] ?: device.isActive,
+                            isOnline = deviceOnline[device.deviceId] ?: false,
                             onClick = { onDeviceClick(device.deviceId) },
                             modifier = Modifier.width(IotCardWidth)
                         )
@@ -601,6 +625,71 @@ fun IoTDeviceCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IOT DEVICE CARD SKELETON
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun IoTDeviceCardSkeleton(modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .width(IotCardWidth)
+            .wrapContentHeight(),
+        colors = CardDefaults.cardColors(containerColor = White),
+        shape  = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .shimmer()
+                )
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .shimmer()
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(width = 90.dp, height = 14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .shimmer()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 45.dp, height = 10.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .shimmer()
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 45.dp, height = 10.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .shimmer()
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADD DEVICE CARD  — dashed tile pinned to the end of the IoT row
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
@@ -649,6 +738,7 @@ fun AddDeviceCard(onClick: () -> Unit) {
 @Composable
 fun PlantsSection(
     plants: List<PlantItem>,
+    isLoading: Boolean = false,
     onSeeAll: () -> Unit,
     onNavigateToPlantDetail: (plantId: String) -> Unit
 ) {
@@ -671,7 +761,18 @@ fun PlantsSection(
             }
         }
 
-        if (plants.isEmpty()) {
+        if (isLoading && plants.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 22.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                repeat(2) {
+                    PlantCardSkeleton()
+                }
+            }
+        } else if (plants.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -812,6 +913,55 @@ fun PlantCard(plant: PlantItem, onNavigateToDetail: () -> Unit, compact: Boolean
                         color = GrayBody
                     )
                 }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLANT CARD SKELETON
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun PlantCardSkeleton(compact: Boolean = false, modifier: Modifier = Modifier) {
+    val thumbSize = if (compact) 55.dp else 70.dp
+    val thumbRadius = if (compact) 10.dp else 13.dp
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = White),
+        shape  = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(thumbSize)
+                    .clip(RoundedCornerShape(thumbRadius))
+                    .shimmer()
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 130.dp, height = 16.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .shimmer()
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 90.dp, height = 12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .shimmer()
+                )
             }
         }
     }

@@ -65,6 +65,16 @@ class SeeAllViewModel @Inject constructor(
     private val _plantQuery = MutableStateFlow("")
     val plantQuery: StateFlow<String> = _plantQuery.asStateFlow()
 
+    private val _isDevicesLoading = MutableStateFlow(true)
+    val isDevicesLoading: StateFlow<Boolean> = _isDevicesLoading.asStateFlow()
+
+    private val _isPlantsLoading = MutableStateFlow(true)
+    val isPlantsLoading: StateFlow<Boolean> = _isPlantsLoading.asStateFlow()
+
+    private val _deviceOnline = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    private var pingJob: kotlinx.coroutines.Job? = null
+    private var lastPushedDevices: List<IoTDevice>? = null
+
     fun onDeviceQueryChange(value: String) {
         _deviceQuery.value = value
     }
@@ -79,8 +89,8 @@ class SeeAllViewModel @Inject constructor(
     private val allDevices: StateFlow<List<SeeAllDeviceItem>> =
         authRepository.getUserIdFlow()
             .flatMapLatest { userId ->
-
                 if (userId == null) {
+                    _isDevicesLoading.value = false
                     flowOf(emptyList())
                 } else {
                     // SWITCH: Use getUnlinkedDevicesUseCase if we are linking a plant
@@ -90,23 +100,26 @@ class SeeAllViewModel @Inject constructor(
                         getIoTDevicesUseCase(userId)
                     }
 
-                    devicesFlow
-                        // mapLatest so a DB write during a ping round cancels it
-                        // instead of queueing another
-                        .mapLatest { devices ->
-                            withContext(Dispatchers.IO) {
+                    combine(devicesFlow, _deviceOnline) { devices, onlineMap ->
+                        _isDevicesLoading.value = false
+                        if (devices != lastPushedDevices) {
+                            lastPushedDevices = devices
+                            pingJob?.cancel()
+                            pingJob = viewModelScope.launch(Dispatchers.IO) {
                                 val online = pingDevices(devices)
-
-                                devices.map { device ->
-                                    SeeAllDeviceItem(
-                                        deviceId = device.deviceId,
-                                        name = device.deviceName,
-                                        mode = device.connectionMode,
-                                        isOnline = online[device.deviceId] ?: false,
-                                    )
-                                }
+                                _deviceOnline.value = online
                             }
                         }
+
+                        devices.map { device ->
+                            SeeAllDeviceItem(
+                                deviceId = device.deviceId,
+                                name = device.deviceName,
+                                mode = device.connectionMode,
+                                isOnline = onlineMap[device.deviceId] ?: false,
+                            )
+                        }
+                    }
                 }
             }
             .flowOn(Dispatchers.IO)
@@ -136,12 +149,13 @@ class SeeAllViewModel @Inject constructor(
     private val allPlants: StateFlow<List<SeeAllPlantItem>> =
         authRepository.getUserIdFlow()
             .flatMapLatest { userId ->
-
                 if (userId == null) {
+                    _isPlantsLoading.value = false
                     flowOf(emptyList())
                 } else {
                     getPlantsUseCase(userId)
                         .mapLatest { plants ->
+                            _isPlantsLoading.value = false
                             withContext(Dispatchers.IO) {
                                 val sessions = loadLatestSessions(plants)
 

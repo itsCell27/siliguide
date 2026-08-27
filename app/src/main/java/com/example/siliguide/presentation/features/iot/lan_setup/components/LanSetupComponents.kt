@@ -460,7 +460,7 @@ fun WizardNumberedRow(
 @Composable
 fun WizardActionRow(
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     tileColor: Color,
     onClick: () -> Unit,
     icon: @Composable () -> Unit
@@ -491,7 +491,9 @@ fun WizardActionRow(
                 fontWeight = FontWeight.Medium,
                 color = Black
             )
-            Text(text = subtitle, style = WizardSubCaptionStyle, color = GrayMedium)
+            if (subtitle != null) {
+                Text(text = subtitle, style = WizardSubCaptionStyle, color = GrayMedium)
+            }
         }
 
         ChevronRightIcon()

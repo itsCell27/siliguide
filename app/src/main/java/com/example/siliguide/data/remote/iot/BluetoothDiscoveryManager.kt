@@ -24,10 +24,18 @@ class BluetoothDiscoveryManager @Inject constructor(
 
     @SuppressLint("MissingPermission") // Temporary
     fun getSpecificPairedDevice(hardwareMac: String): BluetoothDevice? {
+        val cleanMac = hardwareMac.replace(":", "").uppercase()
         return bluetoothAdapter.bondedDevices
             .firstOrNull { device ->
-                device.name?.startsWith("SiliGuide_") == true &&
-                        device.name?.takeLast(6) == hardwareMac.replace(":", "").takeLast(6)
+                val deviceAddress = device.address?.replace(":", "")?.uppercase()
+                val name = device.name.orEmpty()
+                deviceAddress == cleanMac ||
+                device.address.equals(hardwareMac, ignoreCase = true) ||
+                (name.startsWith("SiliGuide_") && (
+                    cleanMac.endsWith(name.removePrefix("SiliGuide_").uppercase()) ||
+                    name.removePrefix("SiliGuide_").uppercase() == cleanMac.takeLast(4) ||
+                    name.removePrefix("SiliGuide_").uppercase() == cleanMac.takeLast(6)
+                ))
             }
     }
 }

@@ -4,9 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.siliguide.domain.model.ConnectionMode
 import com.example.siliguide.domain.model.LastDeviceSensorData
+import com.example.siliguide.domain.model.SensorFetchResult
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.IoTRepository
-import com.example.siliguide.domain.usecase.FetchSensorsUseCase
+import com.example.siliguide.domain.usecase.FetchSensorsWithStatusUseCase
 import com.example.siliguide.domain.usecase.UpdateDeviceNameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,7 @@ import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
 @HiltViewModel
 class IoTDeviceDetailViewModel @Inject constructor(
     private val ioTRepository: IoTRepository,
-    private val fetchSensorsUseCase: FetchSensorsUseCase,
+    private val fetchSensorsWithStatusUseCase: FetchSensorsWithStatusUseCase,
     private val updateDeviceNameUseCase: UpdateDeviceNameUseCase,
     private val getLinkedPlantByDeviceIdUseCase: GetLinkedPlantByDeviceIdUseCase,
     private val unlinkIoTDeviceToPlantUseCase: UnlinkIoTDeviceToPlantUseCase,
@@ -126,10 +127,8 @@ class IoTDeviceDetailViewModel @Inject constructor(
             runCatching { ioTRepository.getDeviceById(deviceId) }.getOrNull()
         } ?: return
 
-        val plant = device.deviceId?.let { deviceId ->
-            withContext(Dispatchers.IO) {
-                runCatching { getLinkedPlantByDeviceIdUseCase(deviceId) }.getOrNull()
-            }
+        val plant = withContext(Dispatchers.IO) {
+            runCatching { getLinkedPlantByDeviceIdUseCase(device.deviceId) }.getOrNull()
         }
 
         currentLinkedPlantId = plant?.plantId
@@ -157,21 +156,43 @@ class IoTDeviceDetailViewModel @Inject constructor(
     // ── One poll tick ─────────────────────────────────────────────────────
 
     private suspend fun refreshOnce(deviceId: String) {
+        val result = withContext(Dispatchers.IO) {
+            withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                fetchSensorsWithStatusUseCase(deviceId)
+            }
+        } ?: SensorFetchResult.Unreachable
 
-        val response = withContext(Dispatchers.IO) {
-            runCatching {
-                withTimeoutOrNull(FETCH_TIMEOUT_MS) {
-                    fetchSensorsUseCase(deviceId)
-                }
-            }.getOrNull()
+        when (result) {
+            is SensorFetchResult.Success -> onLiveReading(deviceId, result.response)
+            SensorFetchResult.Unreachable -> onOffline(deviceId)
+            SensorFetchResult.TokenRejected -> onTokenRejected(deviceId)
+        }
+    }
+
+    private suspend fun onTokenRejected(deviceId: String) {
+        val last = withContext(Dispatchers.IO) {
+            runCatching { ioTRepository.getLastDeviceSensorData(deviceId) }.getOrNull()
         }
 
-        if (response != null) {
+        val ago = last?.lastSeenAt?.let { timeAgo(it) }
 
-            onLiveReading(deviceId, response)
-        } else {
-
-            onOffline(deviceId)
+        _uiState.update {
+            it.copy(
+                status = DeviceConnectionStatus.NEEDS_REPAIRING,
+                sensors = if (last == null) emptyList() else buildSensorCells(
+                    moisture = last.lastSoilMoisture,
+                    soilTemp = last.lastSoilTemp,
+                    ph = last.lastSoilPh,
+                    nitrogen = last.lastNitrogen,
+                    phosphorus = last.lastPhosphorus,
+                    potassium = last.lastPotassium,
+                    ec = last.lastElectricalConductivity,
+                    airTemp = last.lastAirTemp,
+                    light = last.lastLightIntensity
+                ),
+                lastSeenText = ago?.let { t -> "Last seen $t" },
+                staleNote = "Device was reset · Tap to re-pair"
+            )
         }
     }
 

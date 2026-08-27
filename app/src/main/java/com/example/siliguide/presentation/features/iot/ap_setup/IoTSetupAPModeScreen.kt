@@ -217,22 +217,16 @@ fun IoTSetupAPModeScreen(
 
     // WIFI OFF MODAL
     if (showWifiModal) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-        )
-
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showWifiModal = false }
         ) {
             Card(
                 modifier = Modifier
                     .width(300.dp)
                     .wrapContentHeight(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = White)
+                colors = CardDefaults.cardColors(containerColor = White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),

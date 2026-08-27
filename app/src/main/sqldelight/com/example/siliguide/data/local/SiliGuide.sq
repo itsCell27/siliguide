@@ -164,7 +164,7 @@ getDeviceById:
 SELECT * FROM iot_devices WHERE device_id = ? AND is_deleted = 0;
 
 getDeviceByHardwareMac:
-SELECT * FROM iot_devices WHERE hardware_mac = ? AND is_deleted = 0;
+SELECT * FROM iot_devices WHERE hardware_mac = ? COLLATE NOCASE AND is_deleted = 0;
 
 getActiveDevicesByUser:
 SELECT * FROM iot_devices WHERE user_id = ? AND is_active = 1 AND is_deleted = 0;

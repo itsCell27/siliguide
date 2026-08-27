@@ -262,10 +262,12 @@ fun SiliGuideNavGraph(
 
             val devices by viewModel.visibleDevices.collectAsState()
             val query by viewModel.deviceQuery.collectAsState()
+            val isLoading by viewModel.isDevicesLoading.collectAsState()
 
             SeeAllDevicesScreen(
                 devices = devices,
                 query = query,
+                isLoading = isLoading,
                 onQueryChange = { viewModel.onDeviceQueryChange(it) },
                 onBack = { navController.popSafely(backStackEntry) },
                 onDeviceClick = { deviceId ->
@@ -301,10 +303,12 @@ fun SiliGuideNavGraph(
 
             val plants by viewModel.visiblePlants.collectAsState()
             val query by viewModel.plantQuery.collectAsState()
+            val isLoading by viewModel.isPlantsLoading.collectAsState()
 
             SeeAllPlantsScreen(
                 plants = plants,
                 query = query,
+                isLoading = isLoading,
                 onQueryChange = { viewModel.onPlantQueryChange(it) },
                 onBack = { navController.popSafely(backStackEntry) },
                 onPlantClick = { plantId ->
@@ -381,6 +385,15 @@ fun SiliGuideNavGraph(
                 },
                 onNavigateToDashboard = popToDashboard,
                 onRenameDevice = { viewModel.renameDevice(it)},
+                onRepairDevice = {
+                    Log.d("NavGraph", "Starting Bluetooth recovery for deviceId=$deviceId")
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.BluetoothSetupGraph.createRoute(deviceId = deviceId)
+                    ) {
+                        launchSingleTop = false
+                    }
+                },
                 onModeChangeConfirmed = { mode ->
                     when (mode) {
                         DetailConnectionMode.AP -> {
@@ -462,6 +475,21 @@ fun SiliGuideNavGraph(
                         backStackEntry,
                         Screen.SeeAllDevices.createRoute(plantId = plantId)
                     )
+                },
+                onNavigateToDeviceDetails = { deviceId ->
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.IoTDeviceDetail.createRoute(deviceId)
+                    )
+                },
+                onNavigateToRepairDevice = { deviceId ->
+                    Log.d("NavGraph", "Starting Bluetooth recovery from plant detail for deviceId=$deviceId")
+                    navController.navigateSafely(
+                        backStackEntry,
+                        Screen.BluetoothSetupGraph.createRoute(deviceId = deviceId)
+                    ) {
+                        launchSingleTop = false
+                    }
                 }
             )
         }
@@ -521,16 +549,13 @@ fun SiliGuideNavGraph(
 
             composable(Screen.IoTSetupBluetooth.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Bluetooth setup was interrupted before pairing started. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 // Trigger reconfigure state
-                val rawId = parentEntry.arguments?.getString("deviceId")
+                val rawId = parentEntry?.arguments?.getString("deviceId")
                 val deviceId = rawId?.takeIf { it != "{deviceId}" }
                 Log.d("NavGraph", "IoTSetupBluetooth switch ID: $deviceId")
 
@@ -558,18 +583,15 @@ fun SiliGuideNavGraph(
 
             composable(Screen.BluetoothConnectionScreen.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Bluetooth setup was interrupted while waiting for your device to pair. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
                 val uiState by viewModel.iotUiState.collectAsState()
 
                 // RE-SYNC every time this screen (re)compose — covers process death,
                 // where ViewModel reset but Nav args survive.
-                val rawId = parentEntry.arguments?.getString("deviceId")
+                val rawId = parentEntry?.arguments?.getString("deviceId")
                 val syncedDeviceId = rawId?.takeIf { it != "{deviceId}" }
                 LaunchedEffect(syncedDeviceId) {
                     if (syncedDeviceId != null) {
@@ -589,7 +611,7 @@ fun SiliGuideNavGraph(
                             viewModel.reconfigureBluetoothDirectly()
                         } else {
                             // NORMAL SETUP: Proceed to Selection Screen
-                            navController.navigate(Screen.BluetoothSelectionScreen.route)
+                            navController.navigateSafely(backStackEntry, Screen.BluetoothSelectionScreen.route)
                         }
                     }
                 }
@@ -615,13 +637,10 @@ fun SiliGuideNavGraph(
 
             composable(Screen.BluetoothSelectionScreen.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Bluetooth setup was interrupted while selecting your device. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
                 val context = LocalContext.current
                 val pairedDevices by viewModel.pairedDevices.collectAsState()
                 val uiState by viewModel.iotUiState.collectAsState()
@@ -642,7 +661,7 @@ fun SiliGuideNavGraph(
                             viewModel.finalizeBtModeSwitch()
                         } else {
                             // Normal Setup: Proceed to details screen
-                            navController.navigate(Screen.BluetoothDeviceDetailsScreen.route)
+                            navController.navigateSafely(backStackEntry, Screen.BluetoothDeviceDetailsScreen.route)
                         }
                     }
                 }
@@ -679,13 +698,10 @@ fun SiliGuideNavGraph(
 
             composable(Screen.BluetoothDeviceDetailsScreen.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Bluetooth setup was interrupted before the device could be saved. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.BluetoothSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 LaunchedEffect(Unit) {
                     viewModel.setupComplete.collect {
@@ -759,24 +775,21 @@ fun SiliGuideNavGraph(
                     defaultValue = null
                 }
             ),
-            startDestination = Screen.LanSetupMethod.route
+            startDestination = Screen.LanLocationPermission.route
         ) {
 
-            // ── Step 1 of 4 — Choose Setup Method ──────────────────────
+            // ── Step 1 of 4 — Choose Setup Method (Retained for future use) ───
             composable(Screen.LanSetupMethod.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Wi-Fi setup was interrupted before you chose a setup method. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 val methodState by viewModel.lanSetupMethodState.collectAsState()
 
                 // Trigger mode switch state
-                val rawId = parentEntry.arguments?.getString("deviceId")
+                val rawId = parentEntry?.arguments?.getString("deviceId")
                 val deviceId = rawId?.takeIf { it != "{deviceId}" }
 
                 LaunchedEffect(deviceId) {
@@ -811,32 +824,35 @@ fun SiliGuideNavGraph(
 
                     onSelectMethod = {
                         viewModel.selectLanProvisioningMethod(it)
-                        parentEntry.savedStateHandle["lan_method"] = it.name
+                        parentEntry?.savedStateHandle?.set("lan_method", it.name)
                     },
 
                     onContinue = { viewModel.continueFromLanSetupMethod() }
                 )
             }
 
-            // ── Step 2 of 4 — Location Permission ──────────────────────
+            // ── Step 2 of 4 — Location Permission (Primary Start for LAN Setup) ──
             composable(Screen.LanLocationPermission.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Wi-Fi setup was interrupted while checking permissions. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
+                }
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
+
+                // Default LAN provisioning method to Bluetooth
+                LaunchedEffect(Unit) {
+                    viewModel.selectLanProvisioningMethod(LanProvisioningMethod.BLUETOOTH)
+                    parentEntry?.savedStateHandle?.set("lan_method", LanProvisioningMethod.BLUETOOTH.name)
                 }
 
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
-
                 // For LAN switching
-                val parentDeviceId = parentEntry.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
+                val parentDeviceId = parentEntry?.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
                 LaunchedEffect(parentDeviceId) {
                     if (parentDeviceId != null) viewModel.startLanModeSwitch(parentDeviceId)
                 }
 
-                // Resync to save selected mode AP or BT
-                val savedMethod = parentEntry.savedStateHandle.get<String>("lan_method")
+                // Resync to save selected mode AP or BT if explicitly provided
+                val savedMethod = parentEntry?.savedStateHandle?.get<String>("lan_method")
                 LaunchedEffect(savedMethod) {
                     if (savedMethod != null &&
                         viewModel.lanProvisioningMethod.name != savedMethod
@@ -949,7 +965,7 @@ fun SiliGuideNavGraph(
                             LanPreflightAction.OPEN_LOCATION_SETTINGS -> "Open Location Settings"
                             LanPreflightAction.OPEN_WIFI_SETTINGS -> "Open WiFi Settings"
                             LanPreflightAction.OPEN_APP_SETTINGS -> "Open App Settings"
-                            else -> "OK"
+                            LanPreflightAction.REQUEST_PERMISSION -> "Continue"
                         },
 
                         dismissText = "Cancel",
@@ -974,7 +990,7 @@ fun SiliGuideNavGraph(
                                 LanPreflightAction.OPEN_APP_SETTINGS ->
                                     PermissionUtils.openAppSettings(context)
 
-                                else -> Unit
+                                LanPreflightAction.REQUEST_PERMISSION -> Unit
                             }
                         },
 
@@ -1007,24 +1023,21 @@ fun SiliGuideNavGraph(
                 )
             ) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "Wi-Fi setup was interrupted while selecting your network. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 val context = LocalContext.current
 
                 // separate from reconfigureDeviceId below
-                val parentDeviceId = parentEntry.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
+                val parentDeviceId = parentEntry?.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
                 LaunchedEffect(parentDeviceId) {
                     if (parentDeviceId != null) viewModel.startLanModeSwitch(parentDeviceId)
                 }
 
                 // Resync to save selected mode AP or BT
-                val savedMethod = parentEntry.savedStateHandle.get<String>("lan_method")
+                val savedMethod = parentEntry?.savedStateHandle?.get<String>("lan_method")
                 LaunchedEffect(savedMethod) {
                     if (savedMethod != null &&
                         viewModel.lanProvisioningMethod.name != savedMethod
@@ -1156,8 +1169,8 @@ fun SiliGuideNavGraph(
                         onContinue = {
                             viewModel.continueFromLanWifi()
                             // ADD — snapshot right after, values already set synchronously above
-                            parentEntry.savedStateHandle["lan_ssid"] = viewModel.lanSelectedSsid
-                            parentEntry.savedStateHandle["lan_password"] = viewModel.lanSelectedPassword
+                            parentEntry?.savedStateHandle?.set("lan_ssid", viewModel.lanSelectedSsid)
+                            parentEntry?.savedStateHandle?.set("lan_password", viewModel.lanSelectedPassword)
                         }
                     )
                 }
@@ -1225,37 +1238,56 @@ fun SiliGuideNavGraph(
                         title = dialog.title,
                         message = dialog.message,
                         confirmText = dialog.confirmText,
-                        onConfirm = { viewModel.dismissLanSaveDialog() }
+                        onConfirm = {
+                            val action = dialog.action
+                            val deviceId = viewModel.lanModeSwitchDeviceId ?: viewModel.connectedDeviceId
+
+                            viewModel.dismissLanSaveDialog()
+
+                            if (action == LanSaveAction.RECONFIGURE_WIFI && deviceId != null) {
+                                navController.navigate(
+                                    Screen.LanWifiSelection.createRoute(deviceId)
+                                )
+                            }
+                        }
                     )
+                }
+
+                if (viewModel.lanSaveDialog == null) {
+                    viewModel.validationDialog?.let { dialog ->
+                        MessageDialog(
+                            title = dialog.title,
+                            message = dialog.message,
+                            confirmText = "Got it",
+                            onConfirm = { viewModel.dismissValidationDialog() }
+                        )
+                    }
                 }
             }
 
             // ── Step 4 of 4 — Device Hotspot (AP) Provisioning Path ────
             composable(Screen.LanApProvisioning.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "LAN setup was interrupted while connecting to the device hotspot. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 LaunchedEffect(Unit) {
-                    val savedSsid = parentEntry.savedStateHandle.get<String>("lan_ssid")
-                    val savedPassword = parentEntry.savedStateHandle.get<String>("lan_password")
+                    val savedSsid = parentEntry?.savedStateHandle?.get<String>("lan_ssid")
+                    val savedPassword = parentEntry?.savedStateHandle?.get<String>("lan_password")
                     if (savedSsid != null || savedPassword != null) {
                         viewModel.restoreLanCredentials(savedSsid, savedPassword)
                     }
                 }
 
-                val parentDeviceId = parentEntry.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
+                val parentDeviceId = parentEntry?.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
                 LaunchedEffect(parentDeviceId) {
                     if (parentDeviceId != null) viewModel.startLanModeSwitch(parentDeviceId)
                 }
 
                 // Resync to save selected mode AP or BT
-                val savedMethod = parentEntry.savedStateHandle.get<String>("lan_method")
+                val savedMethod = parentEntry?.savedStateHandle?.get<String>("lan_method")
                 LaunchedEffect(savedMethod) {
                     if (savedMethod != null &&
                         viewModel.lanProvisioningMethod.name != savedMethod
@@ -1340,17 +1372,14 @@ fun SiliGuideNavGraph(
             // ── Step 4 of 4 — Bluetooth Provisioning Path ──────────────
             composable(Screen.LanBluetoothProvisioning.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
-                if (parentEntry == null) {
-                    HandleLostWizardState(navController, "LAN setup was interrupted while connecting to the device via Bluetooth. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 LaunchedEffect(Unit) {
-                    val savedSsid = parentEntry.savedStateHandle.get<String>("lan_ssid")
-                    val savedPassword = parentEntry.savedStateHandle.get<String>("lan_password")
+                    val savedSsid = parentEntry?.savedStateHandle?.get<String>("lan_ssid")
+                    val savedPassword = parentEntry?.savedStateHandle?.get<String>("lan_password")
                     if (savedSsid != null || savedPassword != null) {
                         viewModel.restoreLanCredentials(savedSsid, savedPassword)
                     }
@@ -1358,13 +1387,13 @@ fun SiliGuideNavGraph(
 
                 val context = LocalContext.current
 
-                val parentDeviceId = parentEntry.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
+                val parentDeviceId = parentEntry?.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
                 LaunchedEffect(parentDeviceId) {
                     if (parentDeviceId != null) viewModel.startLanModeSwitch(parentDeviceId)
                 }
 
                 // Resync to save selected mode AP or BT
-                val savedMethod = parentEntry.savedStateHandle.get<String>("lan_method")
+                val savedMethod = parentEntry?.savedStateHandle?.get<String>("lan_method")
                 LaunchedEffect(savedMethod) {
                     if (savedMethod != null &&
                         viewModel.lanProvisioningMethod.name != savedMethod
@@ -1410,25 +1439,11 @@ fun SiliGuideNavGraph(
                     }
                 }
 
-                // Pairing happens in Android Settings, so re-check on resume
-//                val lifecycleOwner = LocalLifecycleOwner.current
-//
-//                DisposableEffect(lifecycleOwner) {
-//
-//                    val observer = LifecycleEventObserver { _, event ->
-//                        if (event == Lifecycle.Event.ON_RESUME) {
-//                            viewModel.startLanBluetoothProvisioning(context)
-//                        }
-//                    }
-//
-//                    lifecycleOwner.lifecycle.addObserver(observer)
-//
-//                    onDispose {
-//                        lifecycleOwner.lifecycle.removeObserver(observer)
-//                    }
-//                }
-
-
+                // Start mirroring bluetoothManager state onto the wizard state
+                DisposableEffect(Unit) {
+                    viewModel.startLanBluetoothProvisioning(context)
+                    onDispose { viewModel.stopLanBluetoothProvisioning() }
+                }
 
                 LoadingOverlay(
                     isLoading = iotUiState.isLoading,
@@ -1445,9 +1460,7 @@ fun SiliGuideNavGraph(
                         },
 
                         onOpenBluetoothSettings = {
-                            btSettingsLauncher.launch(
-                                Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                            )
+                            btSettingsLauncher.launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                         },
 
                         onSelectDevice = { viewModel.selectLanBluetoothDevice(it) },
@@ -1471,19 +1484,15 @@ fun SiliGuideNavGraph(
                     )
                 }
 
-                // Bluetooth off, permission denied, already registered / claimed
+                // Bluetooth off, permission denied, wrong device —
+                // all raised by verifyLanBluetoothDevice
                 viewModel.validationDialog?.let { dialog ->
                     PermissionDialog(
                         title = dialog.title,
                         message = dialog.message,
-                        confirmText = "Open Bluetooth Settings",
+                        confirmText = "OK",
                         dismissText = "Close",
-                        onConfirm = {
-                            viewModel.dismissValidationDialog()
-                            btSettingsLauncher.launch(
-                                Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                            )
-                        },
+                        onConfirm = { viewModel.dismissValidationDialog() },
                         onDismiss = { viewModel.dismissValidationDialog() }
                     )
                 }
@@ -1493,17 +1502,14 @@ fun SiliGuideNavGraph(
             // ── Success — reached from either provisioning path ─────────
             composable(Screen.LanSetupSuccess.route) { backStackEntry ->
 
-                val parentEntry = navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
-                if (parentEntry == null) {
-//                    HandleLostWizardState(navController, "Wi-Fi setup was interrupted before the device could be saved. Please try again.")
-                    return@composable
+                val parentEntry = remember(backStackEntry) {
+                    navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 }
-
-                val viewModel: IoTViewModel = hiltViewModel(parentEntry)
+                val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
 
                 LaunchedEffect(Unit) {
-                    val savedSsid = parentEntry.savedStateHandle.get<String>("lan_ssid")
-                    val savedPassword = parentEntry.savedStateHandle.get<String>("lan_password")
+                    val savedSsid = parentEntry?.savedStateHandle?.get<String>("lan_ssid")
+                    val savedPassword = parentEntry?.savedStateHandle?.get<String>("lan_password")
                     if (savedSsid != null || savedPassword != null) {
                         viewModel.restoreLanCredentials(savedSsid, savedPassword)
                     }
@@ -1511,13 +1517,13 @@ fun SiliGuideNavGraph(
 
                 val context = LocalContext.current
 
-                val parentDeviceId = parentEntry.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
+                val parentDeviceId = parentEntry?.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
                 LaunchedEffect(parentDeviceId) {
                     if (parentDeviceId != null) viewModel.startLanModeSwitch(parentDeviceId)
                 }
 
                 // Resync to save selected mode AP or BT
-                val savedMethod = parentEntry.savedStateHandle.get<String>("lan_method")
+                val savedMethod = parentEntry?.savedStateHandle?.get<String>("lan_method")
                 LaunchedEffect(savedMethod) {
                     if (savedMethod != null &&
                         viewModel.lanProvisioningMethod.name != savedMethod
@@ -2110,14 +2116,3 @@ private fun NavHostController.popSafely(from: NavBackStackEntry) {
 
 private fun NavHostController.tryGetBackStackEntry(route: String): NavBackStackEntry? =
     runCatching { getBackStackEntry(route) }.getOrNull()
-
-@Composable
-private fun HandleLostWizardState(navController: NavHostController, message: String) {
-    val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-        navController.navigate(Screen.Dashboard.route) {
-            popUpTo(Screen.Dashboard.route) { inclusive = true }
-        }
-    }
-}

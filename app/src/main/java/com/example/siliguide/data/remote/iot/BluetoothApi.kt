@@ -87,8 +87,12 @@ class BluetoothApi @Inject constructor(
             "Password cannot contain quotes or backslashes"
         }
 
-        // decrypt token from SQLDelight DB first
-        val plainToken = pairingTokenCrypto.decrypt(token)
+        // decrypt token from SQLDelight DB if encrypted, or use directly if raw 64-hex chars
+        val plainToken = if (token.length == 64 && token.all { it in "0123456789ABCDEFabcdef" }) {
+            token
+        } else {
+            pairingTokenCrypto.decrypt(token)
+        }
 
         // Field names must stay "ssid" and "pass" — firmware looks for exactly these
         val plainPayload = """{"ssid":"$ssid","pass":"$password"}"""
@@ -117,6 +121,31 @@ class BluetoothApi @Inject constructor(
 
         Log.d("BluetoothApi", "Claim Response: $response")
         return json.decodeFromString(response)
+    }
+
+    /**
+     * Finds a specific paired device, opens a connection if needed, executes CLAIM,
+     * and cleanly disconnects.
+     */
+    suspend fun claimSpecificDevice(hardwareMac: String, token: String): ClaimResponseDto {
+        if (!bluetoothManager.isBluetoothOn()) {
+            return ClaimResponseDto(status = "error", error = "Bluetooth is turned off.")
+        }
+        val device = bluetoothDiscoveryManager.getSpecificPairedDevice(hardwareMac)
+            ?: return ClaimResponseDto(
+                status = "error",
+                error = "Device not found in paired Bluetooth devices. Please pair it in Android Bluetooth settings."
+            )
+
+        return try {
+            bluetoothManager.connect(device)
+            claimDevice(token)
+        } catch (e: Exception) {
+            Log.e("BluetoothApi", "Failed to claim specific device over Bluetooth", e)
+            ClaimResponseDto(status = "error", error = e.message ?: "Failed to claim device.")
+        } finally {
+            bluetoothManager.disconnect()
+        }
     }
 
     /**
@@ -184,8 +213,10 @@ class BluetoothApi @Inject constructor(
         return try {
             bluetoothManager.connect(device)
             getSensorData(token)
+        } catch (e: SecurityException) {
+            throw e   // decrypt/token failure — let it propagate, don't collapse to null
         } catch (e: Exception) {
-            null
+            null      // everything else (real connection failures) unchanged
         } finally {
             bluetoothManager.disconnect()
         }

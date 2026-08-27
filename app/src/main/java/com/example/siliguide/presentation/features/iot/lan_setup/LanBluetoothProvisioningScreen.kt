@@ -178,7 +178,7 @@ fun LanBluetoothProvisioningScreen(
                 state.devices.forEach { device ->
                     WizardActionRow(
                         title = device.name,
-                        subtitle = "Device ID: ${device.deviceId}",
+                        //subtitle = "Device ID: ${device.deviceId}",
                         tileColor = InfoBlue,
                         onClick = { onSelectDevice(device) }
                     ) { BluetoothGlyphIcon(color = Info) }

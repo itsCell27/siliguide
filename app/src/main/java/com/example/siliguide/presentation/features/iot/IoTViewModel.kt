@@ -158,19 +158,19 @@ class IoTViewModel @Inject constructor(
     private val _pairedDevices = MutableStateFlow<List<PairedSiliGuideDevice>>(emptyList())
     val pairedDevices: StateFlow<List<PairedSiliGuideDevice>> = _pairedDevices.asStateFlow()
 
-    private val _navigateToDeviceSelection = MutableSharedFlow<Unit>()
+    private val _navigateToDeviceSelection = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val navigateToDeviceSelection: SharedFlow<Unit> = _navigateToDeviceSelection.asSharedFlow()
 
 
     // SharedFlow to trigger navigation when saving is done
-    private val _setupComplete = MutableSharedFlow<Unit>()
+    private val _setupComplete = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val setupComplete: SharedFlow<Unit> = _setupComplete.asSharedFlow()
 
     // NEW: A reference to hold our polling loop so we can cancel it
     private var pollingJob: Job? = null
 
     // Bluetooth SharedFlow
-    private val _bluetoothVerified = MutableSharedFlow<Unit>()
+    private val _bluetoothVerified = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val bluetoothVerified = _bluetoothVerified.asSharedFlow()
 
     // ========================================================================
@@ -358,12 +358,10 @@ class IoTViewModel @Inject constructor(
                         getDeviceByHardwareMacUseCase(info.hardwareMac)
 
                     if (existingDevice != null) {
-
                         showValidationDialog(
                             title = "Device Already Registered",
-                            message = "This SiliGuide device is already registered in your account."
+                            message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
                         )
-
                         _apConnectionState.value = "FAILED"
                         return@withContext
                     }
@@ -385,7 +383,6 @@ class IoTViewModel @Inject constructor(
                     // ----------------------------------------------------
                     // Passed every validation
                     // ----------------------------------------------------
-//                    val generate
 //                    connectedDeviceId = info.deviceId
                     pairingToken = info.token
                     hardwareMac = info.hardwareMac
@@ -402,8 +399,10 @@ class IoTViewModel @Inject constructor(
                 return@withContext
             }
 
-            result.onFailure { exception ->
-                Log.d("AP_DEBUG", "Ping attempt ${attempt + 1} failed: ${exception.message}")
+            result.onFailure {
+                Log.d("AP_DEBUG", "Ping attempt #${attempt + 1} failed: ${it.message}")
+                _apConnectionState.value = "FAILED"
+                error = "Could not reach SiliGuide device. Check connection and retry."
             }
 
             delay(500)
@@ -446,25 +445,19 @@ class IoTViewModel @Inject constructor(
             val mac = hardwareMac ?: return@launch
             Log.d("IoTViewModel", "hardwareMac = $mac")
 
-            // Check if exists
-//            Log.d("IoTViewModel", "Checking existing device...")
-//            val existingDevice = getIoTDeviceByIdUseCase(id)
-//            if (existingDevice != null) {
-//                if (existingDevice.userId == userId) {
-//                    // Scenario A: Device already belongs to this user
-//                    // Maybe just update the name?
-//                    Log.d("IoTViewModel", "Device already registered to this user. Updating name.")
-//                } else {
-//                    // Scenario B: Device belongs to someone else (Security check)
-//                    error = "This device is already registered to another account."
-//                    return@launch
-//                }
-//            }
-//            Log.d("IoTViewModel", "existingDevice = $existingDevice")
+            if (connectedDeviceId == null) {
+                val existingDevice = getDeviceByHardwareMacUseCase(mac)
+                if (existingDevice != null) {
+                    showValidationDialog(
+                        title = "Device Already Registered",
+                        message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
+                    )
+                    return@launch
+                }
+            }
 
-            // Update generate device ID
-            val id = UUID.randomUUID().toString()
-            Log.d("IoTViewModel", "connectedDeviceId = $id")
+            val id = connectedDeviceId ?: UUID.randomUUID().toString()
+            Log.d("IoTViewModel", "resolved deviceId = $id")
 
             // encrypt pairingToken first before saving to SQLDelight DB
             val encryptedToken = pairingTokenCrypto.encrypt(token)
@@ -673,7 +666,7 @@ class IoTViewModel @Inject constructor(
                         if (existingDevice != null) {
                             showValidationDialog(
                                 title = "Device Already Registered",
-                                message = "This SiliGuide device is already registered in your account."
+                                message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
                             )
                             setBluetoothUnsupported("Device already exists in your records.")
                             bluetoothManager.disconnect()
@@ -766,10 +759,11 @@ class IoTViewModel @Inject constructor(
                         return@withContext
                     }
 
-                    _iotUiState.update { it.copy(
-                        loadingMessage = "Checking paired devices...",
-                        isBluetoothOn = true
-                        )
+                    withContext(Dispatchers.Main) {
+                        _iotUiState.update { it.copy(
+                            loadingMessage = "Checking paired devices...",
+                            isBluetoothOn = true
+                        ) }
                     }
 
                     val startTime = System.currentTimeMillis()
@@ -793,10 +787,11 @@ class IoTViewModel @Inject constructor(
                         return@withContext
                     }
 
-                    _iotUiState.update { it.copy(
-                        loadingMessage = "Verifying active devices...",
-                        hasPairedDevices = true
-                        )
+                    withContext(Dispatchers.Main) {
+                        _iotUiState.update { it.copy(
+                            loadingMessage = "Verifying active devices...",
+                            hasPairedDevices = true
+                        ) }
                     }
 
                     val mapped = pairedDevices.mapNotNull { device ->
@@ -848,10 +843,12 @@ class IoTViewModel @Inject constructor(
                         resetBluetoothSetup()
                     }
                 } finally {
-                    _iotUiState.update { currentState ->
-                        currentState.copy(
-                            isLoading = false
-                        )
+                    withContext(Dispatchers.Main) {
+                        _iotUiState.update { currentState ->
+                            currentState.copy(
+                                isLoading = false
+                            )
+                        }
                     }
                 }
             }
@@ -860,12 +857,23 @@ class IoTViewModel @Inject constructor(
 
     fun finalizeBluetoothSetup(customName: String) {
         viewModelScope.launch {
-            // Update generate deviceId
-            val id = UUID.randomUUID().toString()
             val token = pairingToken ?: ""
             val firmware = firmwareVersion ?: ""
             val userId = authRepository.getUserId() ?: return@launch
             val hardwareMac = hardwareMac ?: return@launch
+
+            if (connectedDeviceId == null) {
+                val existingDevice = getDeviceByHardwareMacUseCase(hardwareMac)
+                if (existingDevice != null) {
+                    showValidationDialog(
+                        title = "Device Already Registered",
+                        message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
+                    )
+                    return@launch
+                }
+            }
+
+            val id = connectedDeviceId ?: UUID.randomUUID().toString()
 
             try {
                 isClaiming = true
@@ -1617,8 +1625,6 @@ class IoTViewModel @Inject constructor(
             )
         }
 
-        // Update generate deviceId
-        val deviceId = UUID.randomUUID().toString()
         val token = pairingToken
         val ssid = lanSelectedSsid
         val name = deviceName.trim()
@@ -1702,6 +1708,16 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
 
+                val existingDevice = getDeviceByHardwareMacUseCase(mac)
+                if (connectedDeviceId == null && existingDevice != null) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Device Already Registered",
+                        message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
+                    )
+                    return@launch
+                }
+                val deviceId = connectedDeviceId ?: UUID.randomUUID().toString()
+
                 // ---- 1. Claim -------------------------------------------
                 val claimed = runCatching {
                     claimIoTDeviceUseCase(host = DEFAULT_AP_IP, token = token)
@@ -1736,7 +1752,7 @@ class IoTViewModel @Inject constructor(
                             // Set to AP for now since device is not yet connected to LAN
                             connectionMode = ConnectionMode.AP,
                             firmware = firmwareVersion,
-                            dateAdded = System.currentTimeMillis(),
+                            dateAdded = existingDevice?.dateAdded ?: System.currentTimeMillis(),
                             updatedAt = System.currentTimeMillis()
                         )
                     )
@@ -2315,14 +2331,15 @@ class IoTViewModel @Inject constructor(
                     return
                 }
 
-                if (getDeviceByHardwareMacUseCase(info.hardwareMac) != null) {
+                val existingDevice = getDeviceByHardwareMacUseCase(info.hardwareMac)
+                if (existingDevice != null) {
                     withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
 
                     _lanBluetoothState.value = lanBluetoothFallbackState()
 
                     showValidationDialog(
                         title = "Device Already Registered",
-                        message = "This SiliGuide device is already registered in your account."
+                        message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
                     )
                     return
                 }
@@ -2362,27 +2379,7 @@ class IoTViewModel @Inject constructor(
                 return
             }
 
-            // Nothing answered. With several devices bonded, drop back to the
-            // list so the user can try a different one.
-            val bonded = withContext(Dispatchers.IO) {
-                runCatching { bluetoothDiscoveryManager.getPairedSiliGuideDevices() }
-                    .getOrElse { emptyList() }
-            }
-
-            _lanBluetoothState.value =
-                if (bonded.size > 1) {
-                    LanBluetoothProvisioningUiState.SelectDevice(
-                        devices = bonded.map { device ->
-                            PairedSiliGuideDevice(
-                                name = device.safeName(),
-                                deviceId = device.address,
-                                device = device
-                            )
-                        }
-                    )
-                } else {
-                    LanBluetoothProvisioningUiState.Error
-                }
+            _lanBluetoothState.value = lanBluetoothFallbackState()
 
             showValidationDialog(
                 title = "Couldn't Reach the Device",
@@ -2392,9 +2389,11 @@ class IoTViewModel @Inject constructor(
 
         } finally {
             _iotUiState.update { it.copy(isLoading = false) }
+            isVerifyingLanBluetooth = false
         }
     }
 
+    /** Re-runs verification on whatever is bonded / previously selected. */
     fun retryLanBluetoothProvisioning(context: Context) {
         dismissValidationDialog()
         _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
@@ -2438,8 +2437,6 @@ class IoTViewModel @Inject constructor(
      */
     fun finalizeLanBluetoothMode() {
 
-        // Update generate deviceId
-        val deviceId = UUID.randomUUID().toString()
         val firmware = firmwareVersion
         val token = pairingToken
         val ssid = lanSelectedSsid
@@ -2500,6 +2497,16 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
 
+                val existingDevice = getDeviceByHardwareMacUseCase(mac)
+                if (connectedDeviceId == null && existingDevice != null) {
+                    lanSaveDialog = LanSaveDialogState(
+                        title = "Device Already Registered",
+                        message = "This SiliGuide device is already registered in your account. Please re-pair it from its device screen or delete the existing record before adding it again."
+                    )
+                    return@launch
+                }
+                val deviceId = connectedDeviceId ?: UUID.randomUUID().toString()
+
                 if (!ensureLanBluetoothConnected()) {
                     lanSaveDialog = LanSaveDialogState(
                         title = "Bluetooth Disconnected",
@@ -2510,25 +2517,35 @@ class IoTViewModel @Inject constructor(
                 }
 
                 // ---- 1. Claim over SPP -----------------------------------
-                val claim = withContext(Dispatchers.IO) {
-                    runCatching { bluetoothApi.claimDevice(token) }
+                var tokenToUse = token
+                if (token != "LOCKED_BY_OWNER") {
+                    val claim = withContext(Dispatchers.IO) {
+                        runCatching { bluetoothApi.claimDevice(token) }
+                    }
+
+                    val claimResult = claim.getOrNull()
+
+                    if (claim.isFailure || (!claimResult?.error.isNullOrBlank() && claimResult?.error != "device_already_claimed")) {
+                        Log.e("IoTViewModel", "BT claim failed", claim.exceptionOrNull())
+
+                        lanSaveDialog = LanSaveDialogState(
+                            title = "Couldn't Claim Device",
+                            message = claimResult?.error
+                                ?: "The device rejected the pairing request. Try again."
+                        )
+                        return@launch
+                    }
+                } else {
+                    val dbDevice = existingDevice ?: getIoTDeviceByIdUseCase(deviceId)
+                    tokenToUse = dbDevice?.pairingToken ?: token
                 }
 
-                val claimResult = claim.getOrNull()
-
-                if (claim.isFailure || !claimResult?.error.isNullOrBlank()) {
-                    Log.e("IoTViewModel", "BT claim failed", claim.exceptionOrNull())
-
-                    lanSaveDialog = LanSaveDialogState(
-                        title = "Couldn't Claim Device",
-                        message = claimResult?.error
-                            ?: "The device rejected the pairing request. Try again."
-                    )
-                    return@launch
+                // encrypt pairingToken if not already encrypted
+                val encryptedToken = if (tokenToUse.length == 64 && tokenToUse.all { it in "0123456789ABCDEFabcdef" }) {
+                    pairingTokenCrypto.encrypt(tokenToUse)
+                } else {
+                    tokenToUse
                 }
-
-                // encrypt pairingToken first before saving to SQLDelight DB
-                val encryptedToken = pairingTokenCrypto.encrypt(token)
 
                 // ---- 2. Save locally ------------------------------------
                 val saved = runCatching {
@@ -2544,7 +2561,7 @@ class IoTViewModel @Inject constructor(
                             lastKnownIp = "",
                             connectionMode = ConnectionMode.LAN,
                             firmware = firmware,
-                            dateAdded = System.currentTimeMillis(),
+                            dateAdded = existingDevice?.dateAdded ?: System.currentTimeMillis(),
                             updatedAt = System.currentTimeMillis()
                         )
                     )
@@ -2754,12 +2771,27 @@ class IoTViewModel @Inject constructor(
     fun finalizeApModeSwitch() {
         viewModelScope.launch {
             val deviceId = apReconfigureDeviceId ?: return@launch
+            val rawToken = pairingToken
 
             _iotUiState.update {
                 it.copy(isLoading = true, loadingMessage = "Switching mode...")
             }
 
             try {
+                // A real token (not the masked placeholder) means the device
+                // is currently unclaimed — it was reset. Re-claim before
+                // anything else; the old stored token is dead.
+                if (!rawToken.isNullOrBlank() && rawToken != "LOCKED_BY_OWNER") {
+                    claimIoTDeviceUseCase(host = DEFAULT_AP_IP, token = rawToken)
+
+                    val device = getIoTDeviceByIdUseCase(deviceId)
+                    if (device != null) {
+                        saveIoTDeviceUseCase(
+                            device.copy(pairingToken = pairingTokenCrypto.encrypt(rawToken))
+                        )
+                    }
+                }
+
                 // Update connection mode to AP
                 updateDeviceConnectionModeUseCase(ConnectionMode.AP, deviceId)
                 // Ensure the IP points to the default AP IP
@@ -2794,12 +2826,33 @@ class IoTViewModel @Inject constructor(
     fun finalizeBtModeSwitch() {
         viewModelScope.launch {
             val deviceId = btReconfigureDeviceId ?: return@launch
+            val rawToken = pairingToken
 
             _iotUiState.update {
                 it.copy(isLoading = true, loadingMessage = "Switching mode...")
             }
 
             try {
+                if (!rawToken.isNullOrBlank() && rawToken != "LOCKED_BY_OWNER") {
+                    val device = getIoTDeviceByIdUseCase(deviceId)
+                    if (device != null) {
+                        val claimResult = withContext(Dispatchers.IO) {
+                            bluetoothApi.claimSpecificDevice(device.hardwareMac, rawToken)
+                        }
+                        if (!claimResult.error.isNullOrBlank()) {
+                            showValidationDialog(
+                                title = "Claim Rejected",
+                                message = claimResult.error ?: "The device rejected the claim request."
+                            )
+                            return@launch
+                        }
+
+                        saveIoTDeviceUseCase(
+                            device.copy(pairingToken = pairingTokenCrypto.encrypt(rawToken))
+                        )
+                    }
+                }
+
                 // Update connection mode to BLUETOOTH
                 updateDeviceConnectionModeUseCase(ConnectionMode.BLUETOOTH, deviceId)
 
@@ -2862,6 +2915,28 @@ class IoTViewModel @Inject constructor(
                     return@withContext
                 }
 
+                val rawToken = info.token
+                // If unclaimed (was reset), re-claim with fresh token
+                if (!info.claimed && !rawToken.isNullOrBlank() && rawToken != "LOCKED_BY_OWNER") {
+                    val claimResult = withContext(Dispatchers.IO) {
+                        bluetoothApi.claimSpecificDevice(device.hardwareMac, rawToken)
+                    }
+                    if (!claimResult.error.isNullOrBlank()) {
+                        _iotUiState.update { it.copy(isLoading = false) }
+                        showValidationDialog(
+                            title = "Claim Rejected",
+                            message = claimResult.error ?: "The device rejected the claim request."
+                        )
+                        return@withContext
+                    }
+
+                    if (device != null) {
+                        saveIoTDeviceUseCase(
+                            device.copy(pairingToken = pairingTokenCrypto.encrypt(rawToken))
+                        )
+                    }
+                }
+
                 // Success! Switch the mode in the local SQLDelight database
                 try {
                     _iotUiState.update { it.copy(loadingMessage = "Switching mode...") }
@@ -2902,10 +2977,10 @@ class IoTViewModel @Inject constructor(
      */
     fun finalizeLanModeSwitchAP() {
         val deviceId = connectedDeviceId
-        val token = pairingToken
+        val rawToken = pairingToken
         val ssid = lanSelectedSsid
 
-        if (deviceId == null || token.isNullOrBlank()) {
+        if (deviceId == null || rawToken.isNullOrBlank()) {
             lanSaveDialog = LanSaveDialogState(
                 title = "Device Not Reachable",
                 message = "The device is no longer reachable. Go back and reconnect."
@@ -2933,13 +3008,29 @@ class IoTViewModel @Inject constructor(
             _iotUiState.update { it.copy(isLoading = true, loadingMessage = "Switching mode...") }
 
             try {
-
                 val device = getIoTDeviceByIdUseCase(deviceId)
+
+                val tokenToUse = if (rawToken != "LOCKED_BY_OWNER") {
+                    val claimed = runCatching { claimIoTDeviceUseCase(host = DEFAULT_AP_IP, token = rawToken) }
+                    if (claimed.isFailure) {
+                        lanSaveDialog = LanSaveDialogState(
+                            title = "Couldn't Claim Device",
+                            message = "The device rejected the pairing request. Try again."
+                        )
+                        return@launch
+                    }
+                    val freshEncrypted = pairingTokenCrypto.encrypt(rawToken)
+                    device?.let { saveIoTDeviceUseCase(it.copy(pairingToken = freshEncrypted)) }
+                    freshEncrypted
+                } else {
+                    device?.pairingToken ?: rawToken
+                }
+
                 // provisionSavedDevice already handles updateDeviceIpUseCase
                 // and updateDeviceConnectionModeUseCase(ConnectionMode.LAN).
                 provisionSavedDevice(
                     deviceId = deviceId,
-                    token = device?.pairingToken ?: token,
+                    token = tokenToUse,
                     ssid = ssid ?: "",
                     password = password
                 )
@@ -2956,12 +3047,12 @@ class IoTViewModel @Inject constructor(
      */
     fun finalizeLanModeSwitchBluetooth() {
         val deviceId = connectedDeviceId
-        val token = pairingToken
+        val rawToken = pairingToken
         val ssid = lanSelectedSsid
 
-        Log.d("finalizeLanModeSwitchBluetooth", "token: $token")
+        Log.d("finalizeLanModeSwitchBluetooth", "token: $rawToken")
 
-        if (deviceId == null || token.isNullOrBlank()) {
+        if (deviceId == null || rawToken.isNullOrBlank()) {
             lanSaveDialog = LanSaveDialogState(
                 title = "Device Not Reachable",
                 message = "Lost the Bluetooth link to the device. Go back and reconnect."
@@ -2988,7 +3079,6 @@ class IoTViewModel @Inject constructor(
             _iotUiState.update { it.copy(isLoading = true, loadingMessage = "Switching mode...") }
 
             try {
-
                 val device = getIoTDeviceByIdUseCase(deviceId)
 
                 if (!ensureLanBluetoothConnected()) {
@@ -2999,9 +3089,27 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
 
+                val tokenToUse = if (rawToken != "LOCKED_BY_OWNER") {
+                    val claimResult = withContext(Dispatchers.IO) {
+                        bluetoothApi.claimDevice(rawToken)
+                    }
+                    if (!claimResult.error.isNullOrBlank() && claimResult.error != "device_already_claimed") {
+                        lanSaveDialog = LanSaveDialogState(
+                            title = "Couldn't Claim Device",
+                            message = claimResult.error ?: "The device rejected the claim request."
+                        )
+                        return@launch
+                    }
+                    val freshEncrypted = pairingTokenCrypto.encrypt(rawToken)
+                    device?.let { saveIoTDeviceUseCase(it.copy(pairingToken = freshEncrypted)) }
+                    freshEncrypted
+                } else {
+                    device?.pairingToken ?: rawToken
+                }
+
                 provisionSavedDeviceViaBluetooth(
                     deviceId = deviceId,
-                    token = device?.pairingToken ?: token,
+                    token = tokenToUse,
                     ssid = ssid ?: "",
                     password = password
                 )

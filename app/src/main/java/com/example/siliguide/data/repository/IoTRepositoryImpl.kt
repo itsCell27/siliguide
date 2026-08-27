@@ -23,6 +23,7 @@ import com.example.siliguide.data.remote.iot.WifiProvisioningManager
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
 import com.example.siliguide.data.local.mapper.toDomain
 import com.example.siliguide.domain.model.IoTDevice
+import com.example.siliguide.domain.model.SensorFetchResult
 import com.example.siliguide.domain.model.SensorResponse
 import com.example.siliguide.domain.repository.IoTRepository
 import javax.inject.Inject
@@ -64,7 +65,7 @@ class IoTRepositoryImpl @Inject constructor(
     private val database = SiliGuideDatabase(driver)
     private val queries = database.siliGuideQueries
 
-    override suspend fun getSensors(deviceId: String?): SensorResponse {
+    override suspend fun getSensors(deviceId: String?): SensorFetchResult = withContext(Dispatchers.IO) {
 
         // Retrieve the saved IoT device configuration from the local database.
         // If no deviceId is provided, we'll assume the app is communicating
@@ -76,10 +77,8 @@ class IoTRepositoryImpl @Inject constructor(
         Log.d("IoTRepositoryImpl", "Mode: ${device?.connectionMode}")
         Log.d("IoTRepositoryImpl", "lastKnowIp: ${device?.lastKnownIp}")
 
-        // Select the communication transport based on how this IoT device
-        // was originally registered.
-        return withContext(Dispatchers.IO) {
-            when (device?.connectionMode) {
+        try {
+            val response = when (device?.connectionMode) {
                 // ------------------------------------------------------------
                 // BLUETOOTH MODE
                 // ------------------------------------------------------------
@@ -89,7 +88,7 @@ class IoTRepositoryImpl @Inject constructor(
                     val responseDto = bluetoothApi.getSpecificDeviceSensorData(
                         hardwareMac = device.hardwareMac,
                         token = device.pairingToken
-                    ) ?: throw IllegalStateException("Failed to fetch sensor data via Bluetooth")
+                    ) ?: return@withContext SensorFetchResult.Unreachable
 
                     responseDto.toDomain()
                 }
@@ -102,8 +101,19 @@ class IoTRepositoryImpl @Inject constructor(
                 ConnectionMode.LAN -> {
                     val ip = device.lastKnownIp
 
-                    api.getSensorData(host = ip, token = device.pairingToken)
-                        .toDomain()
+                    try {
+                        api.getSensorData(host = ip, token = device.pairingToken)
+                            .toDomain()
+                    } catch (e: SecurityException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // If LAN connection fails, check if the device was factory-reset
+                        val btInfo = bluetoothApi.getSpecificDeviceInfo(device.hardwareMac)
+                        if (btInfo != null && !btInfo.claimed) {
+                            return@withContext SensorFetchResult.TokenRejected
+                        }
+                        throw e
+                    }
                 }
 
                 // ------------------------------------------------------------
@@ -114,10 +124,33 @@ class IoTRepositoryImpl @Inject constructor(
                 // ESP32 always uses the default gateway IP 192.168.4.1 in AP mode.
                 ConnectionMode.AP,
                 null -> {
-                    api.getSensorData(host = DEFAULT_AP_IP, token = device?.pairingToken)
-                        .toDomain()
+                    try {
+                        api.getSensorData(host = DEFAULT_AP_IP, token = device?.pairingToken)
+                            .toDomain()
+                    } catch (e: SecurityException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // If AP HTTP fails, check paired Bluetooth to see if device was reset
+                        if (device != null) {
+                            val btInfo = bluetoothApi.getSpecificDeviceInfo(device.hardwareMac)
+                            if (btInfo != null && !btInfo.claimed) {
+                                return@withContext SensorFetchResult.TokenRejected
+                            }
+                        }
+                        throw e
+                    }
                 }
             }
+            SensorFetchResult.Success(response)
+        } catch (e: SecurityException) {
+            Log.w("IoTRepositoryImpl", "SecurityException during sensor fetch: pairing token rejected", e)
+            SensorFetchResult.TokenRejected
+        } catch (e: java.security.GeneralSecurityException) {
+            Log.w("IoTRepositoryImpl", "GeneralSecurityException during sensor fetch: pairing token rejected", e)
+            SensorFetchResult.TokenRejected
+        } catch (e: Exception) {
+            Log.w("IoTRepositoryImpl", "Exception during sensor fetch: unreachable", e)
+            SensorFetchResult.Unreachable
         }
     }
 
@@ -158,7 +191,8 @@ class IoTRepositoryImpl @Inject constructor(
             }
             Log.d("IoTRepositoryImpl", "Checking if device is online... ${info?.hardwareMac}")
 
-            info?.hardwareMac == savedDevice.hardwareMac
+            val matchesMac = info?.hardwareMac?.replace(":", "")?.equals(savedDevice.hardwareMac.replace(":", ""), ignoreCase = true) == true
+            matchesMac && info?.claimed == true
         } catch (_: Exception) {
             false
         }

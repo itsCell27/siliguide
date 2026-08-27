@@ -1,5 +1,6 @@
 package com.example.siliguide.presentation.features.analysis
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -84,6 +85,7 @@ fun AnalysisResultScreen(
     isHistoryMode: Boolean = false
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showUnsavedDialog by remember { mutableStateOf(false) }
     val result = viewModel.analysisUiState.ruleResult
     val predictionLabel = viewModel.analysisUiState.predictionLabel
     val confidence = viewModel.analysisUiState.predictionConfidence
@@ -101,8 +103,6 @@ fun AnalysisResultScreen(
         }
     }
 
-
-
     if (isLoading) {
         LoadingScreen(
             message = ""
@@ -112,12 +112,24 @@ fun AnalysisResultScreen(
         val confidencePct = (confidence * 100).toInt()
         val isOutOfScope = result == null || confidencePct < 50
 
+        val handleBack = {
+            if (!isHistoryMode && !isOutOfScope) {
+                showUnsavedDialog = true
+            } else {
+                onNavigateBack()
+            }
+        }
+
+        BackHandler(enabled = !isHistoryMode && !isOutOfScope) {
+            showUnsavedDialog = true
+        }
+
         Scaffold(
             topBar = {
                 ResultTopBar(
                     isOutOfScope = isOutOfScope,
                     sessionTimestamp = sessionTimestamp,
-                    onBack = onNavigateBack,
+                    onBack = handleBack,
                     onDeleteClick = if (isHistoryMode && sessionId != null) {
                         { showDeleteDialog = true }
                     } else null
@@ -167,6 +179,49 @@ fun AnalysisResultScreen(
                 }
             }
         }
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            icon = {
+                Icon(
+                    Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = Warning
+                )
+            },
+            title = {
+                Text(
+                    "Discard Analysis?",
+                    fontFamily = Fraunces,
+                    fontWeight = FontWeight.Bold,
+                    color = Black
+                )
+            },
+            text = {
+                Text(
+                    "Are you sure you don't want to save this analysis? Any unsaved results will be lost.",
+                    color = GrayBody
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUnsavedDialog = false
+                        onNavigateBack()
+                    }
+                ) {
+                    Text("Discard", color = Danger, fontWeight = FontWeight.Medium)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text("Cancel", color = GrayBody)
+                }
+            },
+            containerColor = White
+        )
     }
 
     if (showDeleteDialog) {

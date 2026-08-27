@@ -74,7 +74,7 @@ import com.example.siliguide.domain.model.ConnectionMode
  * next to the title (e.g. a connection-mode chip) — this component only
  * owns the status shell and the readings grid.
  */
-enum class MonitoringStatus { CONNECTED, OFFLINE, RECONNECTING }
+enum class MonitoringStatus { CONNECTED, OFFLINE, RECONNECTING, NEEDS_REPAIRING }
 
 data class MonitoringReading(
     val label: String,
@@ -94,10 +94,11 @@ fun MonitoringCard(
     staleNote: String? = null,
     offlineNote: String = "Device not reachable. Make sure it is powered on and your phone is on the same network.",
     onReconnect: () -> Unit = {},
+    onRepair: (() -> Unit)? = null,
     connectionMode: ConnectionMode
 ) {
 
-    val isOffline = status == MonitoringStatus.OFFLINE
+    val isOffline = status == MonitoringStatus.OFFLINE || status == MonitoringStatus.NEEDS_REPAIRING
 
     val bg = if (isOffline) WarningBg else GreenBgLight
     val bd = if (isOffline) WarningBorder else GreenLight
@@ -150,6 +151,7 @@ fun MonitoringCard(
             when (status) {
                 MonitoringStatus.CONNECTED -> ConnectedPill()
                 MonitoringStatus.OFFLINE -> OfflinePill()
+                MonitoringStatus.NEEDS_REPAIRING -> NeedsRepairPill()
                 MonitoringStatus.RECONNECTING -> Unit
             }
         }
@@ -165,10 +167,20 @@ fun MonitoringCard(
             )
         }
 
-        if (isOffline && connectionMode == ConnectionMode.LAN) {
+        val modeOfflineNote = when (connectionMode) {
+            ConnectionMode.AP -> "Phone is not connected to the sensor's Wi-Fi hotspot (192.168.4.1)."
+            ConnectionMode.LAN -> offlineNote
+            ConnectionMode.BLUETOOTH -> "Bluetooth sensor is disconnected or out of range."
+        }
 
+        if (status == MonitoringStatus.NEEDS_REPAIRING) {
             MonitoringWarningNote(
-                text = offlineNote,
+                text = "This device may have been reset and is broadcasting a new pairing code. Re-pair it to reconnect.",
+                background = White.copy(alpha = 0.6f)
+            )
+        } else if (isOffline) {
+            MonitoringWarningNote(
+                text = modeOfflineNote,
                 background = White.copy(alpha = 0.6f)
             )
         }
@@ -191,6 +203,7 @@ fun MonitoringCard(
 
         when (status) {
             MonitoringStatus.OFFLINE -> MonitoringReconnectButton(onClick = onReconnect)
+            MonitoringStatus.NEEDS_REPAIRING -> MonitoringRepairButton(onClick = onRepair ?: onReconnect)
             MonitoringStatus.RECONNECTING -> MonitoringReconnectingButton()
             MonitoringStatus.CONNECTED -> Unit
         }
@@ -283,6 +296,21 @@ private fun OfflinePill() {
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(GrayLight)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    )
+}
+
+@Composable
+private fun NeedsRepairPill() {
+
+    Text(
+        text = "Needs Re-pairing",
+        style = BadgeLabelStyle,
+        color = Warning,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(White)
+            .border(1.dp, WarningBorder, RoundedCornerShape(999.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
 }
@@ -440,6 +468,44 @@ private fun MonitoringReconnectButton(onClick: () -> Unit) {
             text = "Try to Reconnect",
             style = SheetButtonStyleFallback,
             color = GreenPrimary
+        )
+    }
+}
+
+@Composable
+private fun MonitoringRepairButton(onClick: () -> Unit) {
+
+    val interaction = remember { MutableInteractionSource() }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(11.dp))
+            .background(GreenPrimary)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+
+        Canvas(modifier = Modifier.size(14.dp)) {
+
+            drawMonitoringRefreshGlyph(
+                color = White,
+                strokeWidthPx = 1.4.dp.toPx()
+            )
+        }
+
+        Spacer(modifier = Modifier.width(7.dp))
+
+        Text(
+            text = "Re-pair Device",
+            style = SheetButtonStyleFallback,
+            color = White
         )
     }
 }
