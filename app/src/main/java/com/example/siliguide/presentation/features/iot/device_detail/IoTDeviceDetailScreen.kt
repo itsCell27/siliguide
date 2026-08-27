@@ -1283,9 +1283,9 @@ private fun RemoveDeviceDialog(
 
             Text(
                 text = if (linkedPlantName != null)
-                    "This device will be unlinked from $linkedPlantName and removed from your account. Past sensor history won't be deleted."
+                    "This device will be unlinked from $linkedPlantName and removed from your account."
                 else
-                    "This device will be removed from your account. Past sensor history won't be deleted.",
+                    "This device will be removed from your account.",
                 style = WizardBodyStyle,
                 color = GrayBody,
                 textAlign = TextAlign.Center

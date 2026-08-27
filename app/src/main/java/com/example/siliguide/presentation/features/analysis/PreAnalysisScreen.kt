@@ -23,18 +23,16 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.siliguide.R
 import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.ui.components.LoadingOverlay
 import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.core.ui.components.SiliGuideBackButton
 import com.example.siliguide.core.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -105,7 +103,6 @@ fun PreAnalysisScreen(
 
     // BUG FIX: Smart Auto-Selection that doesn't overwrite user choices
     LaunchedEffect(state) {
-        // If the user explicitly chose "Image Only", leave them alone!
         if (imageOnlySelected) return@LaunchedEffect
 
         val currentAvailableList = when (state) {
@@ -114,10 +111,8 @@ fun PreAnalysisScreen(
             else -> emptyList()
         }
 
-        // Check if their previously selected device still exists in the refreshed list
         val selectionStillExists = currentAvailableList.any { it.deviceId == selectedOnTheGoId }
 
-        // Only overwrite the selection if they haven't picked one, or their picked device went offline
         if (!selectionStillExists) {
             selectedOnTheGoId = currentAvailableList.firstOrNull()?.deviceId
         }
@@ -139,7 +134,7 @@ fun PreAnalysisScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 22.dp, vertical = 18.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 when (state) {
@@ -213,40 +208,18 @@ private fun TopBar(onBack: () -> Unit) {
                 .fillMaxWidth()
                 .background(White)
                 .statusBarsPadding()
-                .padding(horizontal = 22.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(OffWhite)
-                    .border(1.dp, Border, CircleShape)
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center
-            ) {
-                Canvas(modifier = Modifier.size(14.dp)) {
-                    val p = Path().apply {
-                        moveTo(size.width * 0.65f, size.height * 0.18f)
-                        lineTo(size.width * 0.35f, size.height * 0.50f)
-                        lineTo(size.width * 0.65f, size.height * 0.82f)
-                    }
-                    drawPath(
-                        path = p,
-                        color = GrayBody,
-                        style = Stroke(
-                            width = 1.5.dp.toPx(),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                    )
-                }
-            }
+            SiliGuideBackButton(onClick = onBack)
+
             Text(
                 text  = "Before You Analyze",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Black
+                color = Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         HorizontalDivider(thickness = 1.dp, color = Border)
@@ -265,16 +238,6 @@ private fun LinkedConnectedContent(state: PreAnalysisState.LinkedConnected) {
     StatusCard(variant = StatusCardVariant.Green) {
         DeviceStatusRow(deviceName = state.deviceName, deviceMeta = state.deviceMeta, isConnected = true)
     }
-//    GroupLabel("Live sensor preview")
-//    SensorGrid(sensors = state.sensors)
-//
-//    val updateText = buildAnnotatedString {
-//        append("Receiving data · last update ")
-//        withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = GreenDark)) {
-//            append("${state.sensors.lastUpdateSec} sec ago")
-//        }
-//    }
-//    Text(text = updateText, style = MaterialTheme.typography.bodySmall, color = GrayHint, lineHeight = 16.sp)
 }
 
 @Composable
@@ -304,7 +267,11 @@ private fun LinkedDisconnectedContent(
         }
         OrDivider()
     }
-    InfoBanner(isAmber = false, titleText = "Skip — analyze with image only", bodyText  = "Without sensor data, only visual symptoms and possible causes will be shown (partial analysis).")
+    InfoBanner(
+        isAmber = false,
+        titleText = "Skip — analyze with image only",
+        bodyText  = "Without sensor data, only visual symptoms and possible causes will be shown (partial analysis)."
+    )
 }
 
 @Composable
@@ -321,9 +288,19 @@ private fun NoDeviceContent(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             DeviceIconTile(variant = StatusCardVariant.Gray)
-            Column {
-                Text(text = "No IoT Device Linked", style = MaterialTheme.typography.titleMedium, color = GrayBody)
-                Text(text = "This plant isn't assigned to an IoT device.", style = MaterialTheme.typography.bodySmall, color = GrayHint)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "No IoT Device Linked",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = GrayBody,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "This plant isn't assigned to an IoT device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = GrayHint
+                )
             }
         }
     }
@@ -355,16 +332,12 @@ private fun NoDeviceContent(
         )
 
         GroupLabel("What you'll get")
-        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CheckRow(text = "Visual symptom prediction with confidence score", checked = true)
             CheckRow(text = "List of possible plant conditions", checked = true)
             CheckRow(text = "No specific care recommendations", checked = false)
         }
     }
-
-
-
-
 }
 
 @Composable
@@ -388,11 +361,11 @@ private fun PinnedButtons(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 22.dp)
-                .padding(top = 10.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 20.dp)
+                .padding(top = 10.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            HorizontalDivider(thickness = 1.dp, color = Border, modifier = Modifier.padding(bottom = 10.dp))
+            HorizontalDivider(thickness = 1.dp, color = Border, modifier = Modifier.padding(bottom = 6.dp))
 
             when (state) {
                 is PreAnalysisState.LinkedConnected -> {
@@ -503,16 +476,25 @@ private fun DeviceStatusRow(deviceName: String, deviceMeta: String, isConnected:
         DeviceIconTile(variant = if (isConnected) StatusCardVariant.Green else StatusCardVariant.Amber)
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = deviceName, style = MaterialTheme.typography.titleMedium, color = Black)
+            Text(
+                text = deviceName,
+                style = MaterialTheme.typography.titleMedium,
+                color = Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Text(
                 text  = deviceMeta,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isConnected) GrayMedium else Warning
+                color = if (isConnected) GrayMedium else Warning,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
         Row(
             modifier = Modifier
+                .wrapContentWidth()
                 .background(
                     color = if (isConnected) GreenPrimary else White,
                     shape = RoundedCornerShape(999.dp)
@@ -533,60 +515,9 @@ private fun DeviceStatusRow(deviceName: String, deviceMeta: String, isConnected:
                 fontSize   = 10.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = DMSans,
-                color      = if (isConnected) White else Warning
+                color      = if (isConnected) White else Warning,
+                maxLines   = 1
             )
-        }
-    }
-}
-
-@Composable
-private fun SensorGrid(sensors: SensorPreviewData) {
-    val items = listOf(
-        "Soil Moisture" to sensors.soilMoisture,
-        "Soil Temp"     to sensors.soilTemp,
-        "Soil pH"       to sensors.soilPh,
-        "Soil N"        to sensors.soilN,
-        "Soil P"        to sensors.soilP,
-        "Soil K"        to sensors.soilK,
-        "Soil EC"       to sensors.soilEc,
-        "Air Temp"      to sensors.airTemp,
-        "Light"         to sensors.light
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items.chunked(3).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                row.forEach { (name, value) ->
-                    SensorMiniCard(name = name, value = value, modifier = Modifier.weight(1f))
-                }
-                repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SensorMiniCard(name: String, value: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(White, RoundedCornerShape(10.dp))
-            .border(1.dp, GreenLight, RoundedCornerShape(10.dp))
-            .padding(horizontal = 8.dp, vertical = 7.dp)
-    ) {
-        Column {
-            Text(
-                text      = name.uppercase(),
-                fontSize  = 8.5.sp,
-                fontFamily = DMSans,
-                fontWeight = FontWeight.Medium,
-                color     = GrayMedium,
-                letterSpacing = 0.3.sp,
-                maxLines  = 1
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(text = value, fontSize = 11.5.sp, fontFamily = DMSans, fontWeight = FontWeight.Medium, color = Black)
         }
     }
 }
@@ -613,21 +544,52 @@ private fun OnTheGoDeviceOption(device: OnTheGoDevice, isSelected: Boolean, onCl
                 .border(1.dp, GreenLight, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(painter = painterResource(R.drawable.ic_iot_device), contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(14.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_iot_device),
+                contentDescription = null,
+                tint = GreenPrimary,
+                modifier = Modifier.size(14.dp)
+            )
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = device.name, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = Black)
-            Text(text = device.meta, fontSize = 10.sp, fontFamily = DMSans, color = GrayMedium)
+            Text(
+                text = device.name,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = device.meta,
+                fontSize = 10.sp,
+                fontFamily = DMSans,
+                color = GrayMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         Box(
             modifier = Modifier
-                .size(16.dp)
-                .border(if (isSelected) 2.dp else 1.5.dp, if (isSelected) GreenPrimary else GrayLight, CircleShape),
+                .size(18.dp)
+                .border(
+                    width = if (isSelected) 2.dp else 1.5.dp,
+                    color = if (isSelected) GreenPrimary else GrayLight,
+                    shape = CircleShape
+                ),
             contentAlignment = Alignment.Center
         ) {
-            if (isSelected) Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(GreenPrimary))
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(GreenPrimary)
+                )
+            }
         }
     }
 }
@@ -635,7 +597,7 @@ private fun OnTheGoDeviceOption(device: OnTheGoDevice, isSelected: Boolean, onCl
 @Composable
 private fun SelectableInfoBanner(
     selected: Boolean,
-    enabled: Boolean = true, // NEW: Added enabled parameter
+    enabled: Boolean = true,
     onClick: () -> Unit,
     title: String,
     description: String
@@ -648,9 +610,9 @@ private fun SelectableInfoBanner(
             .fillMaxWidth()
             .background(bgColor, RoundedCornerShape(12.dp))
             .border(if (selected) 2.dp else 1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp)) // Prevents click ripple from going outside borders
+            .clip(RoundedCornerShape(12.dp))
             .clickable(
-                enabled = enabled, // NEW: Disables clicking if false
+                enabled = enabled,
                 onClick = onClick
             )
             .padding(14.dp),
@@ -659,11 +621,22 @@ private fun SelectableInfoBanner(
     ) {
         Box(
             modifier = Modifier
-                .size(16.dp)
-                .border(if (selected) 2.dp else 1.5.dp, if (selected) GreenPrimary else GrayLight, CircleShape),
+                .size(18.dp)
+                .border(
+                    width = if (selected) 2.dp else 1.5.dp,
+                    color = if (selected) GreenPrimary else GrayLight,
+                    shape = CircleShape
+                ),
             contentAlignment = Alignment.Center
         ) {
-            if (selected) Box(modifier = Modifier.size(7.dp).background(GreenPrimary, CircleShape))
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(GreenPrimary)
+                )
+            }
         }
 
         Column(modifier = Modifier.weight(1f)) {
@@ -687,7 +660,13 @@ private fun OrDivider() {
 }
 
 @Composable
-private fun InfoBanner(isAmber: Boolean, useGreenIcon: Boolean = false, titleText: String, bodyText: String) {
+private fun InfoBanner(
+    isAmber: Boolean,
+    useGreenIcon: Boolean = false,
+    titleText: String,
+    bodyText: String,
+    modifier: Modifier = Modifier
+) {
     val bg = if (isAmber) WarningBg else OffWhite
     val border = if (isAmber) WarningBorder else Border
     val titleColor = if (isAmber) Warning else Black
@@ -699,52 +678,167 @@ private fun InfoBanner(isAmber: Boolean, useGreenIcon: Boolean = false, titleTex
     }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(12.dp))
             .border(1.dp, border, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 11.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Canvas(modifier = Modifier.size(14.dp).padding(top = 1.dp)) {
-            val r = size.minDimension / 2f
-            drawCircle(color = iconTint, radius = r, style = Stroke(width = 1.2.dp.toPx()))
-            drawLine(iconTint, start = Offset(r, r * 0.6f), end = Offset(r, r * 1.3f), strokeWidth = 1.2.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(color = iconTint, radius = 0.7.dp.toPx(), center = Offset(r, r * 1.65f))
+        Box(
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .size(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(14.dp)) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val strokeW = 1.2.dp.toPx()
+                val r = (size.minDimension - strokeW) / 2f
+
+                // Outer circle perfectly centered at (cx, cy)
+                drawCircle(
+                    color = iconTint,
+                    radius = r,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = strokeW)
+                )
+
+                // Exclamation stem (centered at cx, extending from cy - 0.45r to cy + 0.12r)
+                drawLine(
+                    color = iconTint,
+                    start = Offset(cx, cy - r * 0.45f),
+                    end = Offset(cx, cy + r * 0.12f),
+                    strokeWidth = strokeW,
+                    cap = StrokeCap.Round
+                )
+
+                // Exclamation dot (centered at cx, located at cy + 0.50r)
+                drawCircle(
+                    color = iconTint,
+                    radius = strokeW * 0.65f,
+                    center = Offset(cx, cy + r * 0.50f)
+                )
+            }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = titleText, fontSize = 11.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = titleColor)
-            Text(text = bodyText, fontSize = 11.sp, fontFamily = DMSans, color = bodyColor, lineHeight = 16.sp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = titleText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = DMSans,
+                color = titleColor
+            )
+            Text(
+                text = bodyText,
+                fontSize = 11.sp,
+                fontFamily = DMSans,
+                color = bodyColor,
+                lineHeight = 16.sp
+            )
         }
     }
 }
 
 @Composable
-private fun CheckRow(text: String, checked: Boolean) {
+private fun CheckRow(
+    text: String,
+    checked: Boolean,
+    modifier: Modifier = Modifier
+) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Canvas(modifier = Modifier.size(14.dp).padding(top = 2.dp)) {
-            val r = size.minDimension / 2f
-            if (checked) {
-                drawCircle(color = GreenBgLight, radius = r)
-                drawCircle(color = GreenLight, radius = r, style = Stroke(1.dp.toPx()))
-                val path = Path().apply {
-                    moveTo(r * 0.55f, r)
-                    lineTo(r * 0.85f, r * 1.35f)
-                    lineTo(r * 1.45f, r * 0.65f)
+        Box(
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(14.dp)) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val strokeW = 1.2.dp.toPx()
+                val r = (size.minDimension - strokeW) / 2f
+
+                if (checked) {
+                    drawCircle(
+                        color = GreenBgLight,
+                        radius = r,
+                        center = Offset(cx, cy)
+                    )
+                    drawCircle(
+                        color = GreenLight,
+                        radius = r,
+                        center = Offset(cx, cy),
+                        style = Stroke(strokeW)
+                    )
+
+                    // Checkmark centered at (cx, cy)
+                    val path = Path().apply {
+                        moveTo(cx - r * 0.42f, cy - r * 0.02f)
+                        lineTo(cx - r * 0.12f, cy + r * 0.30f)
+                        lineTo(cx + r * 0.44f, cy - r * 0.32f)
+                    }
+                    drawPath(
+                        path = path,
+                        color = GreenPrimary,
+                        style = Stroke(
+                            width = 1.3.dp.toPx(),
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                } else {
+                    drawCircle(
+                        color = OffWhite,
+                        radius = r,
+                        center = Offset(cx, cy)
+                    )
+                    drawCircle(
+                        color = GrayLight,
+                        radius = r,
+                        center = Offset(cx, cy),
+                        style = Stroke(strokeW)
+                    )
+
+                    // X mark centered at (cx, cy)
+                    val offset = r * 0.36f
+                    val xStroke = 1.3.dp.toPx()
+                    drawLine(
+                        color = GrayHint,
+                        start = Offset(cx - offset, cy - offset),
+                        end = Offset(cx + offset, cy + offset),
+                        strokeWidth = xStroke,
+                        cap = StrokeCap.Round
+                    )
+                    drawLine(
+                        color = GrayHint,
+                        start = Offset(cx + offset, cy - offset),
+                        end = Offset(cx - offset, cy + offset),
+                        strokeWidth = xStroke,
+                        cap = StrokeCap.Round
+                    )
                 }
-                drawPath(path, color = GreenPrimary, style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-            } else {
-                drawCircle(color = OffWhite, radius = r)
-                drawCircle(color = GrayLight, radius = r, style = Stroke(1.dp.toPx()))
-                drawLine(GrayHint, start = Offset(r * 0.6f, r * 0.6f), end = Offset(r * 1.4f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
-                drawLine(GrayHint, start = Offset(r * 1.4f, r * 0.6f), end = Offset(r * 0.6f, r * 1.4f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
             }
         }
-        Text(text = text, fontSize = 12.sp, fontFamily = DMSans, color = if (checked) GrayBody else GrayHint, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontFamily = DMSans,
+            color = if (checked) GrayBody else GrayHint,
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -752,7 +846,7 @@ private fun CheckRow(text: String, checked: Boolean) {
 private fun GroupLabel(text: String) {
     Text(
         text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium, // BUG FIX: Swapped undefined 'SectionLabelStyle' for standard Compose style
+        style = MaterialTheme.typography.labelMedium,
         color = GrayMedium,
         modifier = Modifier.padding(top = 4.dp)
     )
@@ -766,10 +860,16 @@ private fun PrimaryButton(label: String, onClick: () -> Unit) {
             .clip(RoundedCornerShape(12.dp))
             .background(GreenPrimary)
             .clickable { onClick() }
-            .padding(vertical = 15.dp),
+            .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = label, fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFamily = DMSans, color = White)
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = DMSans,
+            color = White
+        )
     }
 }
 
@@ -779,7 +879,7 @@ private fun TextLinkButton(label: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 12.dp),
+            .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(

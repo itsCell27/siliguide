@@ -456,12 +456,12 @@ class IoTDeviceDetailViewModel @Inject constructor(
         )
         e.message?.contains("unreachable") == true -> RemoveDeviceDialogUi(
             title = "Device Removed",
-            message = "Removed from your account, but the ESP32 could not be reached to reset. It may need a manual reset later.",
+            message = "Removed from your account, but the ESP32 could not be reached. Please manually reset it by holding the reset button for 5 seconds.",
             shouldNavigateOnDismiss = true  // cloud + soft-delete already done
         )
         else -> RemoveDeviceDialogUi(
             title = "Reset Failed",
-            message = "Device was removed from your account, but resetting the physical ESP32 failed. Try again if it's still reachable.",
+            message = "Device was removed from your account, but resetting the physical ESP32 failed. You can manually reset it by holding the reset button for 5 seconds.",
             shouldNavigateOnDismiss = true  // soft-delete already done, reset just failed
         )
     }
