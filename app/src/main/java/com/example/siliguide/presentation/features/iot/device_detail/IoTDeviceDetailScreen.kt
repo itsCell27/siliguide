@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.window.Dialog
 import com.example.siliguide.core.ui.components.MessageDialog
+import com.example.siliguide.core.ui.components.SiliGuideBackButton
 import com.example.siliguide.core.ui.components.monitoring.MonitoringCard
 import com.example.siliguide.core.ui.components.monitoring.MonitoringReading
 import com.example.siliguide.core.ui.components.monitoring.MonitoringStatus
@@ -332,22 +333,7 @@ private fun DetailTopBar(
         ) {
 
             // Back button
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(OffWhite)
-                    .border(1.dp, Border, CircleShape)
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
-                    contentDescription = "Back",
-                    tint = GrayBody,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            SiliGuideBackButton(onClick = onBack)
 
             Spacer(modifier = Modifier.width(12.dp))
 

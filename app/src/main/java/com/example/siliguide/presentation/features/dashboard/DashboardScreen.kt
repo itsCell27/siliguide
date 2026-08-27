@@ -767,13 +767,13 @@ fun PlantCard(plant: PlantItem, onNavigateToDetail: () -> Unit, compact: Boolean
                         .size(thumbSize)
                         .clip(RoundedCornerShape(thumbRadius))
                         .background(GreenBgLight)
-                        .border(1.dp, GreenLight, RoundedCornerShape(10.dp)),
+                        .border(1.dp, GreenLight, RoundedCornerShape(13.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.foundation.Image(
                         painter = painterResource(R.drawable.ic_leaf),
                         contentDescription = "Leaf",
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }

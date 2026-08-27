@@ -35,6 +35,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.core.ui.components.SiliGuideBackButton
 import com.example.siliguide.core.ui.components.monitoring.MonitoringCard
 import com.example.siliguide.core.ui.components.monitoring.MonitoringReading
 import com.example.siliguide.core.ui.components.monitoring.MonitoringStatus
@@ -322,22 +323,7 @@ fun PlantDetailTopBar(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Back button
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(OffWhite)
-                    .border(1.dp, Border, CircleShape)
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
-                    contentDescription = "Back",
-                    tint = GrayBody,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            SiliGuideBackButton(onClick = onBack)
 
             Text(
                 text       = plantName,

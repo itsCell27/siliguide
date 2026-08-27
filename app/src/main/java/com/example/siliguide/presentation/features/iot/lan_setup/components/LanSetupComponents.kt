@@ -55,6 +55,7 @@ import com.example.siliguide.core.ui.theme.GreenLight
 import com.example.siliguide.core.ui.theme.GreenPrimary
 import com.example.siliguide.core.ui.theme.OffWhite
 import com.example.siliguide.core.ui.theme.White
+import com.example.siliguide.core.ui.components.SiliGuideBackButton
 import com.example.siliguide.core.ui.theme.WizardBodyStyle
 import com.example.siliguide.core.ui.theme.WizardCaptionStyle
 import com.example.siliguide.core.ui.theme.WizardMicroLabelStyle
@@ -99,20 +100,13 @@ fun LanWizardScaffold(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (showBack) {
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(OffWhite)
-                            .border(1.dp, Border, RoundedCornerShape(50))
-                            .clickable(onClick = onBack, enabled = enableBack),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        BackChevronIcon(
-                            size = 16.dp,
-                            color = if (enableBack) GrayBody else GrayHint
-                        )
-                    }
+                    SiliGuideBackButton(
+                        onClick = onBack,
+                        enabled = enableBack,
+                        size = 30.dp,
+                        iconSize = 16.dp,
+                        tint = if (enableBack) GrayBody else GrayHint
+                    )
 
                     Spacer(Modifier.width(10.dp))
                 }

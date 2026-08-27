@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import com.example.siliguide.R
+import com.example.siliguide.core.ui.components.SiliGuideBackButton
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.domain.model.ConnectionMode
 
@@ -153,26 +154,11 @@ private fun ModeSelectTopBar(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(OffWhite)
-                    .border(1.dp, Border, CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onBack
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.chevron_left),
-                    contentDescription = "Back",
-                    tint = GrayBody,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            SiliGuideBackButton(
+                onClick = onBack,
+                size = 30.dp,
+                iconSize = 20.dp
+            )
 
             Spacer(modifier = Modifier.width(10.dp))
 
