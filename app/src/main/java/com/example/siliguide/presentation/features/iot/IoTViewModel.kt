@@ -639,7 +639,7 @@ class IoTViewModel @Inject constructor(
                         var reconfigDevice: IoTDevice?
                         if (reconfigId != null) {
                             reconfigDevice = getIoTDeviceByIdUseCase(reconfigId)
-                            if (info.hardwareMac != reconfigDevice?.hardwareMac) {
+                            if (!isMacMatching(info.hardwareMac, reconfigDevice?.hardwareMac)) {
                                 showValidationDialog(
                                     title = "Wrong Device",
                                     message = "You connected to a different SiliGuide device. Please connect to the correct device."
@@ -787,42 +787,19 @@ class IoTViewModel @Inject constructor(
                         return@withContext
                     }
 
-                    withContext(Dispatchers.Main) {
-                        _iotUiState.update { it.copy(
-                            loadingMessage = "Verifying active devices...",
-                            hasPairedDevices = true
-                        ) }
-                    }
-
-                    val mapped = pairedDevices.mapNotNull { device ->
-
-                        val isOnline = try {
-                            withTimeoutOrNull(500) {
-                                bluetoothManager.connect(device)
-                                bluetoothApi.ping()
-                            } ?: false
-                        } catch (e: Exception) {
-                            Log.d("BluetoothSetup", "Ping failed for ${device.name}: ${e.message}")
-                            false
-                        } finally {
-                            bluetoothManager.disconnect()
-                        }
-
-                        if (isOnline) {
-                            PairedSiliGuideDevice(
-                                name = device.name ?: "Unknown Device",
-                                deviceId = device.address,
-                                device = device
-                            )
-                        } else {
-                            null
-                        }
+                    val mapped = pairedDevices.map { device ->
+                        PairedSiliGuideDevice(
+                            name = device.safeName(),
+                            deviceId = device.address,
+                            device = device
+                        )
                     }
 
                     val duration = System.currentTimeMillis() - startTime
                     Log.d("PerformanceLog", "Getting paired Bluetooth devices took: ${duration}ms")
 
                     withContext(Dispatchers.Main) {
+                        _iotUiState.update { it.copy(hasPairedDevices = true) }
                         _pairedDevices.value = mapped
                         _navigateToDeviceSelection.emit(Unit)
                     }
@@ -2129,10 +2106,34 @@ class IoTViewModel @Inject constructor(
      */
     private fun BluetoothDevice.safeName(): String =
         try {
-            name ?: "SiliGuide device"
+            name?.takeIf { it.isNotBlank() } ?: "SiliGuide device"
         } catch (_: SecurityException) {
             "SiliGuide device"
         }
+
+    /**
+     * Resilient MAC address comparison that handles:
+     * 1. Colon vs. raw format ("AA:BB:CC:DD:EE:FF" vs. "AABBCCDDEEFF")
+     * 2. Case differences
+     * 3. Suffix / partial matches (last 4 or 6 hex digits)
+     * 4. ESP32 factory offset tolerance between Wi-Fi and Bluetooth (+/- 2 on the last byte)
+     */
+    private fun isMacMatching(mac1: String?, mac2: String?): Boolean {
+        if (mac1.isNullOrBlank() || mac2.isNullOrBlank()) return false
+        val clean1 = mac1.replace(":", "").trim().uppercase()
+        val clean2 = mac2.replace(":", "").trim().uppercase()
+        if (clean1 == clean2) return true
+        if (clean1.endsWith(clean2.takeLast(6)) || clean2.endsWith(clean1.takeLast(6))) return true
+        if (clean1.endsWith(clean2.takeLast(4)) || clean2.endsWith(clean1.takeLast(4))) return true
+        if (clean1.length == 12 && clean2.length == 12 && clean1.dropLast(2) == clean2.dropLast(2)) {
+            val byte1 = clean1.takeLast(2).toIntOrNull(16)
+            val byte2 = clean2.takeLast(2).toIntOrNull(16)
+            if (byte1 != null && byte2 != null && kotlin.math.abs(byte1 - byte2) <= 2) {
+                return true
+            }
+        }
+        return false
+    }
 
     /**
      * Entry point for Step 4b.
@@ -2309,7 +2310,7 @@ class IoTViewModel @Inject constructor(
                 var targetDevice: IoTDevice?
                 if (targetId != null) {
                     targetDevice = getIoTDeviceByIdUseCase(targetId)
-                    if (info.hardwareMac != targetDevice?.hardwareMac) {
+                    if (!isMacMatching(info.hardwareMac, targetDevice?.hardwareMac)) {
                         withContext(Dispatchers.IO) { bluetoothManager.disconnect() }
                         continue
                     }
@@ -2885,15 +2886,20 @@ class IoTViewModel @Inject constructor(
             }
 
             val device = getIoTDeviceByIdUseCase(deviceId)
-
-            // Call your new API function
-            var info: DeviceInfoDto? = null
-            if (device != null) {
-                info = withContext(Dispatchers.IO) {
-                    bluetoothApi.getSpecificDeviceInfo(device.hardwareMac)
+            if (device == null) {
+                withContext(Dispatchers.Main) {
+                    _iotUiState.update { it.copy(isLoading = false) }
+                    showValidationDialog(
+                        title = "Device Not Found",
+                        message = "Could not find the saved device record."
+                    )
                 }
+                return@launch
             }
 
+            val info = withContext(Dispatchers.IO) {
+                bluetoothApi.getSpecificDeviceInfo(device.hardwareMac)
+            }
 
             withContext(Dispatchers.Main) {
                 if (info == null) {
@@ -2906,7 +2912,7 @@ class IoTViewModel @Inject constructor(
                 }
 
                 // Security Check: Verify it is the exact device we want
-                if (info.device != "SiliGuide" || info.hardwareMac != device?.hardwareMac) {
+                if (info.device != "SiliGuide" || !isMacMatching(info.hardwareMac, device.hardwareMac)) {
                     _iotUiState.update { it.copy(isLoading = false) }
                     showValidationDialog(
                         title = "Wrong Device",
@@ -2930,11 +2936,9 @@ class IoTViewModel @Inject constructor(
                         return@withContext
                     }
 
-                    if (device != null) {
-                        saveIoTDeviceUseCase(
-                            device.copy(pairingToken = pairingTokenCrypto.encrypt(rawToken))
-                        )
-                    }
+                    saveIoTDeviceUseCase(
+                        device.copy(pairingToken = pairingTokenCrypto.encrypt(rawToken))
+                    )
                 }
 
                 // Success! Switch the mode in the local SQLDelight database
