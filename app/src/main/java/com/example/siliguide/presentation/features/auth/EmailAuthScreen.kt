@@ -1,6 +1,7 @@
 package com.example.siliguide.presentation.features.auth
 
 import android.util.Patterns
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,6 +73,8 @@ fun EmailAuthScreen(
         }
     }
 
+    BackHandler(enabled = isLoading) { /* consume back press while loading */ }
+
     SiliGuideTheme {
         Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
             Column(
@@ -86,11 +89,12 @@ fun EmailAuthScreen(
                     Box(
                         modifier = Modifier
                             .size(34.dp)
-                            .background(OffWhite, CircleShape)
-                            .border(1.dp, Border, CircleShape)
+                            .background(if (isLoading) OffWhite.copy(alpha = 0.5f) else OffWhite, CircleShape)
+                            .border(1.dp, if (isLoading) Border.copy(alpha = 0.5f) else Border, CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
-                                indication = null
+                                indication = null,
+                                enabled = !isLoading
                             ) {
                                 // Mockup rule: back from OTP step returns to email entry,
                                 // only email entry step actually leaves the screen.
@@ -105,7 +109,10 @@ fun EmailAuthScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        BackArrowIcon(modifier = Modifier.size(16.dp))
+                        BackArrowIcon(
+                            modifier = Modifier.size(16.dp),
+                            color = if (isLoading) GrayHint else GrayBody
+                        )
                     }
                 }
 
@@ -445,7 +452,10 @@ private fun OtpInputField(
 
 // ── Small Canvas icons (per icon convention: no drawable XML) ────────────────
 @Composable
-private fun BackArrowIcon(modifier: Modifier = Modifier) {
+private fun BackArrowIcon(
+    modifier: Modifier = Modifier,
+    color: Color = GrayBody
+) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -456,7 +466,7 @@ private fun BackArrowIcon(modifier: Modifier = Modifier) {
         }
         drawPath(
             path = path,
-            color = GrayBody,
+            color = color,
             style = Stroke(width = w * 0.11f, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
         )
     }
