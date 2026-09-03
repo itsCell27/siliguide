@@ -986,93 +986,93 @@ fun PredictionResultCard(
             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
         )
 
-        // Confidence row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "Confidence",
-                fontSize = 11.sp,
-                color = GrayMedium,
-                letterSpacing = 0.4.sp
-            )
-            Text(
-                "$pct%",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = Black
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Progress bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(OffWhite)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(confidence)
-                    .fillMaxHeight()
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(barColor.copy(alpha = 0.7f), barColor)
-                        ),
-                        RoundedCornerShape(4.dp)
-                    )
-            )
-        }
-
-        // Confidence badge
-        Box(
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .background(badgeBg, RoundedCornerShape(6.dp))
-                .border(1.dp, badgeBd, RoundedCornerShape(6.dp))
-                .padding(horizontal = 8.dp, vertical = 3.dp)
-        ) {
-            Text(
-                badgeLabel,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = badgeTx,
-                letterSpacing = 0.4.sp
-            )
-        }
-
-        // Moderate confidence warning
-        if (isModerate) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .background(WarningBg, RoundedCornerShape(10.dp))
-                    .border(1.dp, WarningBorder, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(
-                    Icons.Rounded.Info,
-                    null,
-                    tint = Warning,
-                    modifier = Modifier
-                        .size(14.dp)
-                        .padding(top = 1.dp)
-                )
-                Text(
-                    "Consider retaking with better lighting and a clearer view of the leaf for higher confidence.",
-                    fontSize = 11.sp,
-                    color = Warning,
-                    lineHeight = 16.sp
-                )
-            }
-        }
+//        // Confidence row
+//        Row(
+//            modifier = Modifier.fillMaxWidth(),
+//            horizontalArrangement = Arrangement.SpaceBetween
+//        ) {
+//            Text(
+//                "Confidence",
+//                fontSize = 11.sp,
+//                color = GrayMedium,
+//                letterSpacing = 0.4.sp
+//            )
+//            Text(
+//                "$pct%",
+//                fontSize = 13.sp,
+//                fontWeight = FontWeight.Medium,
+//                color = Black
+//            )
+//        }
+//
+//        Spacer(modifier = Modifier.height(4.dp))
+//
+//        // Progress bar
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .height(8.dp)
+//                .clip(RoundedCornerShape(4.dp))
+//                .background(OffWhite)
+//        ) {
+//            Box(
+//                modifier = Modifier
+//                    .fillMaxWidth(confidence)
+//                    .fillMaxHeight()
+//                    .background(
+//                        Brush.horizontalGradient(
+//                            listOf(barColor.copy(alpha = 0.7f), barColor)
+//                        ),
+//                        RoundedCornerShape(4.dp)
+//                    )
+//            )
+//        }
+//
+//        // Confidence badge
+//        Box(
+//            modifier = Modifier
+//                .padding(top = 6.dp)
+//                .background(badgeBg, RoundedCornerShape(6.dp))
+//                .border(1.dp, badgeBd, RoundedCornerShape(6.dp))
+//                .padding(horizontal = 8.dp, vertical = 3.dp)
+//        ) {
+//            Text(
+//                badgeLabel,
+//                fontSize = 10.sp,
+//                fontWeight = FontWeight.Medium,
+//                color = badgeTx,
+//                letterSpacing = 0.4.sp
+//            )
+//        }
+//
+//        // Moderate confidence warning
+//        if (isModerate) {
+//            Row(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(top = 8.dp)
+//                    .background(WarningBg, RoundedCornerShape(10.dp))
+//                    .border(1.dp, WarningBorder, RoundedCornerShape(10.dp))
+//                    .padding(horizontal = 12.dp, vertical = 10.dp),
+//                horizontalArrangement = Arrangement.spacedBy(8.dp),
+//                verticalAlignment = Alignment.Top
+//            ) {
+//                Icon(
+//                    Icons.Rounded.Info,
+//                    null,
+//                    tint = Warning,
+//                    modifier = Modifier
+//                        .size(14.dp)
+//                        .padding(top = 1.dp)
+//                )
+//                Text(
+//                    "Consider retaking with better lighting and a clearer view of the leaf for higher confidence.",
+//                    fontSize = 11.sp,
+//                    color = Warning,
+//                    lineHeight = 16.sp
+//                )
+//            }
+//        }
     }
 }
 
