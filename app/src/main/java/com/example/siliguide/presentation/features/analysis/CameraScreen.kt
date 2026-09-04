@@ -5,6 +5,9 @@ import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
@@ -143,7 +146,10 @@ fun CameraScreen(
 
             AndroidView(
                 factory = { ctx ->
-                    val previewView = PreviewView(ctx)
+                    val previewView = PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                        implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+                    }
                     var cameraRef: Camera? = null // Reference to control focus
 
                     ProcessCameraProvider.getInstance(ctx).apply {
@@ -151,11 +157,25 @@ fun CameraScreen(
                             val provider = get()
                             cameraProvider = provider
 
-                            val preview = Preview.Builder().build().also {
-                                it.surfaceProvider = previewView.surfaceProvider
-                            }
+                            val previewResolutionSelector = ResolutionSelector.Builder()
+                                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                                .build()
+
+                            val preview = Preview.Builder()
+                                .setResolutionSelector(previewResolutionSelector)
+                                .build().also {
+                                    it.surfaceProvider = previewView.surfaceProvider
+                                }
+
+                            val imageCaptureResolutionSelector = ResolutionSelector.Builder()
+                                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                                .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                                .build()
+
                             val imageCapture = ImageCapture.Builder()
-                                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                                .setJpegQuality(100)
+                                .setResolutionSelector(imageCaptureResolutionSelector)
                                 .setFlashMode(cameraUiState.flashMode)
                                 .build()
 
@@ -175,7 +195,7 @@ fun CameraScreen(
                         }, ContextCompat.getMainExecutor(ctx))
                     }
 
-                    // --- TAP TO FOCUS IMPLEMENTATION ---
+                    // --- TAP TO FOCUS & METERING IMPLEMENTATION ---
                     previewView.setOnTouchListener { view, event ->
                         if (event.action == MotionEvent.ACTION_UP) {
                             // Convert screen tap coordinates to camera sensor coordinates
@@ -189,8 +209,14 @@ fun CameraScreen(
                                 )
                             )
 
-                            // Create the action and execute it
-                            val action = FocusMeteringAction.Builder(point).build()
+                            // Meter both Auto-Focus AND Auto-Exposure onto the tapped leaf
+                            val action = FocusMeteringAction.Builder(
+                                point,
+                                FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
+                            )
+                            .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+
                             val result = cameraRef?.cameraControl?.startFocusAndMetering(action)
 
                             // Listen for focus completion
@@ -235,6 +261,18 @@ fun CameraScreen(
                         )
                         return@CameraCaptureOverlay
                     }
+
+                    // Ensure captured image orientation precisely matches device rotation
+                    val display = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        context.display
+                    } else {
+                        @Suppress("DEPRECATION")
+                        (context.getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager)?.defaultDisplay
+                    }
+                    display?.let {
+                        imageCapture.targetRotation = it.rotation
+                    }
+
                     val file = File.createTempFile("raw_capture_", ".jpg", context.cacheDir)
                     val outputFileOptions = ImageCapture.OutputFileOptions.Builder(file).build()
 
