@@ -68,9 +68,9 @@ fun CameraOverlay(
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val boxSide = minOf(size.width, size.height) * 0.75f
+            val boxSide = minOf(size.width, size.height) * 0.90f
             val left = (size.width - boxSide) / 2
-            val top = (size.height - boxSide) / 2
+            val top = (size.height - boxSide) / 2 - 40.dp.toPx()
             val lineLength = 80f
             val right = left + boxSide
             val bottom = top + boxSide

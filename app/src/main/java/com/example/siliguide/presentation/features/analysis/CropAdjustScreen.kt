@@ -93,8 +93,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import com.example.siliguide.R
 
-/** Crop box = 75% of the smaller container dimension. */
-private const val CROP_BOX_FRACTION = 0.75f
+/** Crop box = 90% of the smaller container dimension (extends near left/right edges with space). */
+private const val CROP_BOX_FRACTION = 0.90f
 
 @Composable
 fun CropAdjustScreen(

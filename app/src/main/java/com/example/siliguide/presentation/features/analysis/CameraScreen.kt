@@ -77,8 +77,11 @@ import com.example.siliguide.core.ui.theme.CameraTipNumberStyle
 import com.example.siliguide.core.ui.theme.CameraTipTextStyle
 import com.example.siliguide.core.ui.theme.GreenBgLight
 
-/** Framing box = 75% of the smaller viewport dimension (per mockup notes). */
-private const val CAMERA_BOX_FRACTION = 0.75f
+/** Framing box = 90% of the smaller viewport dimension (extends near left/right edges with space). */
+private const val CAMERA_BOX_FRACTION = 0.90f
+
+/** Vertical offset to position the framing box a bit higher above the bottom controls bar. */
+private val CAMERA_BOX_VERTICAL_OFFSET = 40.dp
 
 @Composable
 fun CameraScreen(
@@ -360,9 +363,10 @@ private fun CameraCaptureOverlay(
                 )
         ) {
 
+            val verticalOffsetPx = CAMERA_BOX_VERTICAL_OFFSET.toPx()
             val boxPx = size.minDimension * CAMERA_BOX_FRACTION
             val left = (size.width - boxPx) / 2f
-            val top = (size.height - boxPx) / 2f
+            val top = (size.height - boxPx) / 2f - verticalOffsetPx
 
             drawRect(color = CameraScrim)
 
@@ -378,8 +382,15 @@ private fun CameraCaptureOverlay(
         // Corner brackets only — no full border
         Canvas(modifier = Modifier.fillMaxSize()) {
 
+            val verticalOffsetPx = CAMERA_BOX_VERTICAL_OFFSET.toPx()
+            val boxPx = size.minDimension * CAMERA_BOX_FRACTION
+            val left = (size.width - boxPx) / 2f
+            val top = (size.height - boxPx) / 2f - verticalOffsetPx
+
             drawCornerBrackets(
-                boxPx = size.minDimension * CAMERA_BOX_FRACTION,
+                boxPx = boxPx,
+                left = left,
+                top = top,
                 color = bracketColor,
                 strokeWidthPx = 3.dp.toPx(),
                 armPx = 30.dp.toPx(),
@@ -547,7 +558,7 @@ private fun CameraCaptureOverlay(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 175.dp)
+                .padding(bottom = 185.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(CameraChipBg)
                 .border(
@@ -593,7 +604,7 @@ private fun CameraCaptureOverlay(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 210.dp)
+                    .padding(bottom = 225.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(CameraHintBg)
                     .border(
@@ -850,14 +861,14 @@ private fun ShutterButton(
 
 private fun DrawScope.drawCornerBrackets(
     boxPx: Float,
+    left: Float = (size.width - boxPx) / 2f,
+    top: Float = (size.height - boxPx) / 2f,
     color: Color,
     strokeWidthPx: Float,
     armPx: Float,
     radiusPx: Float
 ) {
 
-    val left = (size.width - boxPx) / 2f
-    val top = (size.height - boxPx) / 2f
     val right = left + boxPx
     val bottom = top + boxPx
 
