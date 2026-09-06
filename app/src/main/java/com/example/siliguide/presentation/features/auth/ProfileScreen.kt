@@ -36,6 +36,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.siliguide.BuildConfig
 import com.example.siliguide.R
 import com.example.siliguide.core.ui.theme.*
 import com.example.siliguide.core.ui.components.ErrorDialog
@@ -67,7 +68,7 @@ fun ProfileContent(
     displayName: String,
     email: String?,
     authProvider: ProfileAuthProvider,
-    appVersion: String = "v1.0.0",
+    appVersion: String = "v${BuildConfig.VERSION_NAME}",
     isLoading: Boolean = false,
     errorMessage: String? = null,
     onSaveDisplayName: (String) -> Unit = {},
