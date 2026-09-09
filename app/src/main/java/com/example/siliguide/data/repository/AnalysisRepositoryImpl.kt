@@ -18,36 +18,43 @@ class AnalysisRepositoryImpl @Inject constructor(
 
     override suspend fun saveSession(session: AnalysisSession) {
         withContext(Dispatchers.IO) {
-            queries.insertSession(
-                session_id = session.sessionId,
-                plant_id = session.plantId,
-                device_id = session.deviceId,
-                user_id = session.userId,
-                session_timestamp = session.sessionTimestamp,
-                image_path = session.imagePath,
+            queries.transaction {
+                queries.insertSession(
+                    session_id = session.sessionId,
+                    plant_id = session.plantId,
+                    device_id = session.deviceId,
+                    user_id = session.userId,
+                    session_timestamp = session.sessionTimestamp,
+                    image_path = session.imagePath,
 
-                predicted_class = session.predictedClass,
-                confidence = session.confidence,
+                    predicted_class = session.predictedClass,
+                    confidence = session.confidence,
 
-                segmentation_result = JsonMapper.encodeSegmentationResult(session.segmentationResult),
+                    segmentation_result = JsonMapper.encodeSegmentationResult(session.segmentationResult),
 
-                plant_condition = session.plantCondition,
-                plant_condition_description = session.plantConditionDescription,
-                possible_causes = session.possibleCauses,
-                characteristics = session.characteristics,
-                recommended_actions = session.recommendedActions,
-                is_partial = if (session.isPartial) 1L else 0L,
-                soil_moisture = session.soilMoisture,
-                soil_ph = session.soilPh,
-                soil_temp = session.soilTemp,
-                electrical_conductivity = session.electricalConductivity?.toLong(),
-                nitrogen = session.nitrogen?.toLong(),
-                phosphorus = session.phosphorus?.toLong(),
-                potassium = session.potassium?.toLong(),
-                light_intensity = session.lightIntensity?.toLong(),
-                air_temp = session.airTemp,
-                updated_at = session.updatedAt
-            )
+                    plant_condition = session.plantCondition,
+                    plant_condition_description = session.plantConditionDescription,
+                    possible_causes = session.possibleCauses,
+                    characteristics = session.characteristics,
+                    recommended_actions = session.recommendedActions,
+                    is_partial = if (session.isPartial) 1L else 0L,
+                    soil_moisture = session.soilMoisture,
+                    soil_ph = session.soilPh,
+                    soil_temp = session.soilTemp,
+                    electrical_conductivity = session.electricalConductivity?.toLong(),
+                    nitrogen = session.nitrogen?.toLong(),
+                    phosphorus = session.phosphorus?.toLong(),
+                    potassium = session.potassium?.toLong(),
+                    light_intensity = session.lightIntensity?.toLong(),
+                    air_temp = session.airTemp,
+                    updated_at = session.updatedAt
+                )
+                queries.updateLastAnalyzedAt(
+                    last_analyzed_at = session.sessionTimestamp,
+                    updated_at = session.updatedAt,
+                    plant_id = session.plantId
+                )
+            }
         }
     }
 

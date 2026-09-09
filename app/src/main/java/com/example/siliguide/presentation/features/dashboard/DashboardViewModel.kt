@@ -40,14 +40,12 @@ class DashboardViewModel @Inject constructor(
     private val syncRepository: SyncRepository
 ) : ViewModel() {
 
-    private val refreshTrigger = MutableStateFlow(0L)
+    private val reloadSessionsTrigger = MutableStateFlow(0L)
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val _deviceOnline = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    private val _latestSessions = MutableStateFlow<Map<String, AnalysisSession?>>(emptyMap())
-    private val _isInitialLoading = MutableStateFlow(true)
 
     private var pingJob: Job? = null
     private var currentDevices: List<IoTDevice> = emptyList()
@@ -58,7 +56,6 @@ class DashboardViewModel @Inject constructor(
     }
 
     private var lastPushedDevices: List<IoTDevice>? = null
-    private var lastPushedPlants: List<Plant>? = null
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<DashboardUiState> =
@@ -66,38 +63,37 @@ class DashboardViewModel @Inject constructor(
             .flatMapLatest { userId ->
                 if (userId == null) {
                     _isRefreshing.value = false
-                    _isInitialLoading.value = false
                     flowOf(DashboardUiState(error = "No user logged in", isLoading = false))
                 } else {
-                    combine(
+                    val plantsWithSessionsFlow = combine(
                         getPlantsUseCase(userId),
-                        getIoTDevicesUseCase(userId),
-                        _deviceOnline,
-                        _latestSessions,
-                        _isInitialLoading
-                    ) { plants, devices, onlineMap, sessions, isInitialLoading ->
-                        if (devices != lastPushedDevices) {
-                            lastPushedDevices = devices
-                            currentDevices = devices
-                            _isInitialLoading.value = false
-                            triggerDevicePing(devices.take(DEVICE_LIMIT))
+                        reloadSessionsTrigger
+                    ) { plants, _ -> plants }
+                        .mapLatest { plants ->
+                            val sessions = loadLatestSessions(plants.take(PLANT_LIMIT))
+                            plants to sessions
                         }
 
-                        if (plants != lastPushedPlants) {
-                            lastPushedPlants = plants
-                            _isInitialLoading.value = false
-                            viewModelScope.launch(Dispatchers.IO) {
-                                val loadedSessions = loadLatestSessions(plants.take(PLANT_LIMIT))
-                                _latestSessions.value = loadedSessions
+                    val devicesFlow = getIoTDevicesUseCase(userId)
+                        .onEach { devices ->
+                            if (devices != lastPushedDevices) {
+                                lastPushedDevices = devices
+                                currentDevices = devices
+                                triggerDevicePing(devices.take(DEVICE_LIMIT))
                             }
                         }
 
+                    combine(
+                        plantsWithSessionsFlow,
+                        devicesFlow,
+                        _deviceOnline
+                    ) { (plants, sessions), devices, onlineMap ->
                         DashboardUiState(
                             plants = plants,
                             devices = devices,
                             deviceOnline = onlineMap,
                             latestSessions = sessions,
-                            isLoading = isInitialLoading
+                            isLoading = false
                         )
                     }
                 }
@@ -109,10 +105,15 @@ class DashboardViewModel @Inject constructor(
                 initialValue = DashboardUiState(isLoading = true)
             )
 
+    /** Triggers an immediate re-fetch of the latest analysis sessions for current plants. */
+    fun reloadSessions() {
+        reloadSessionsTrigger.value = System.currentTimeMillis()
+    }
+
     /** Pull-to-refresh. Re-pings every device, re-reads the latest sessions, and triggers cloud sync. */
     fun refresh() {
         _isRefreshing.value = true
-        refreshTrigger.value = System.currentTimeMillis()
+        reloadSessions()
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 syncRepository.syncNow()
