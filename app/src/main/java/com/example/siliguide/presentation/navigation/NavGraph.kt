@@ -1982,6 +1982,7 @@ fun SiliGuideNavGraph(
             AnalysisResultScreen(
                 imageUri = decodedUri,
                 plantId = plantId, // Pass ID if needed for UI or saving
+                viewModel = viewModel,
                 onNavigateBack = {
                     if (!backStackEntry.lifecycleIsResumed()) return@AnalysisResultScreen
 
@@ -2070,6 +2071,7 @@ fun SiliGuideNavGraph(
                 imageUri = "",
                 plantId = null,
                 sessionId = sessionId,
+                viewModel = viewModel,
 
                 onNavigateBack = { navController.popSafely(backStackEntry) },
                 onSaveAsNote = { },
