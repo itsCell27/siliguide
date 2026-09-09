@@ -143,11 +143,15 @@ class IoTRepositoryImpl @Inject constructor(
             }
             SensorFetchResult.Success(response)
         } catch (e: SecurityException) {
-            Log.w("IoTRepositoryImpl", "SecurityException during sensor fetch: pairing token rejected", e)
-            SensorFetchResult.TokenRejected
+            Log.w("IoTRepositoryImpl", "SecurityException during sensor fetch: ${e.message}", e)
+            if (e.message?.contains("not claimed", ignoreCase = true) == true) {
+                SensorFetchResult.TokenRejected
+            } else {
+                SensorFetchResult.DecryptionFailed
+            }
         } catch (e: java.security.GeneralSecurityException) {
-            Log.w("IoTRepositoryImpl", "GeneralSecurityException during sensor fetch: pairing token rejected", e)
-            SensorFetchResult.TokenRejected
+            Log.w("IoTRepositoryImpl", "GeneralSecurityException during sensor fetch: decryption failed", e)
+            SensorFetchResult.DecryptionFailed
         } catch (e: Exception) {
             Log.w("IoTRepositoryImpl", "Exception during sensor fetch: unreachable", e)
             SensorFetchResult.Unreachable

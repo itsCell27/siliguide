@@ -161,23 +161,53 @@ class BluetoothApi @Inject constructor(
 
         Log.d("BluetoothApi", "Sensor Response received")
 
-        // 1. Setup Mode (Unclaimed): Parse the raw JSON directly
+        val rawResponse = response.trim()
+
+        if (rawResponse.isBlank()) {
+            throw java.io.IOException("Empty response received from IoT device over Bluetooth")
+        }
+
+        if (rawResponse.startsWith("{\"error\"")) {
+            throw java.io.IOException("IoT device returned Bluetooth error: $rawResponse")
+        }
+
+        // 1. If a token IS provided, attempt to decrypt the Base64 AES-GCM payload locally
+        if (token != null) {
+            val plainToken = pairingTokenCrypto.decrypt(token)
+            val decryptedJson = crypto.decrypt(rawResponse, plainToken)
+            if (decryptedJson != null) {
+                return json.decodeFromString(decryptedJson)
+            }
+        }
+
+        // 2. If decryption failed or no token was provided, check if the response
+        //    contains unencrypted raw sensor data. If so, the device is not claimed.
+        val isRawSensorData = runCatching {
+            json.decodeFromString<SensorResponseDto>(rawResponse)
+        }.isSuccess
+
+        if (isRawSensorData) {
+            Log.d("BluetoothApi", "IoT device is not claimed.")
+            throw SecurityException("IoT device is not claimed.")
+        }
+
         if (token == null) {
-            return json.decodeFromString(response.trim())
+            throw SecurityException("Pairing token is required to decrypt sensor data.")
         }
 
-        // decrypt token from SQLDelight DB first
-        val plainToken = pairingTokenCrypto.decrypt(token)
+        // 3. Verify if the payload is a complete, well-formed Base64 payload.
+        // A genuine encrypted sensor payload consists of IV(12) + ~230B JSON + Tag(16) -> Base64 >= 200 chars.
+        // If truncated by connection loss or RF noise, treat as a transmission error (IOException).
+        val isValidBase64Format = rawResponse.length >= 200 && runCatching {
+            android.util.Base64.decode(rawResponse, android.util.Base64.NO_WRAP)
+        }.isSuccess
 
-        // 2. Secure Mode (Claimed): Decrypt the Base64 AES-GCM payload locally
-        val decryptedJson = crypto.decrypt(response.trim(), plainToken)
-
-        // 3. Fail-Safe: Catch bit-flipping attacks or incorrect tokens
-        if (decryptedJson == null) {
-            throw SecurityException("Failed to decrypt Bluetooth payload. Invalid token or tampered data.")
+        if (!isValidBase64Format) {
+            throw java.io.IOException("Incomplete or corrupted Bluetooth payload received (${rawResponse.length} chars)")
         }
 
-        return json.decodeFromString(decryptedJson)
+        // 4. Intact Base64 payload failed AES-GCM authentication (token mismatch or tampered data)
+        throw SecurityException("Failed to decrypt sensor payload. Invalid token or tampered data.")
     }
 
     /**

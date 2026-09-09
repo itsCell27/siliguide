@@ -91,7 +91,7 @@ enum class DetailConnectionMode(
     )
 }
 
-enum class DeviceConnectionStatus { CONNECTED, OFFLINE, RECONNECTING, NEEDS_REPAIRING }
+enum class DeviceConnectionStatus { CONNECTED, OFFLINE, RECONNECTING, NEEDS_REPAIRING, NEEDS_RESET }
 
 data class SensorReadingUi(
     val label: String,
@@ -136,6 +136,7 @@ fun IoTDeviceDetailScreen(
     onRemoveDevice: () -> Unit = {},
     onModeChangeConfirmed: (DetailConnectionMode) -> Unit = {},
     onRepairDevice: () -> Unit = {},
+    onResetDevice: () -> Unit = onReconnect,
     onNavigateToDashboard: () -> Unit = {}
 ) {
 
@@ -191,7 +192,8 @@ fun IoTDeviceDetailScreen(
                 StatusCard(
                     state = state,
                     onReconnect = onReconnect,
-                    onRepair = onRepairDevice
+                    onRepair = onRepairDevice,
+                    onReset = onResetDevice
                 )
 
                 SectionHeading("Linked plant")
@@ -511,10 +513,13 @@ private fun SectionHeading(text: String) {
 private fun StatusCard(
     state: IoTDeviceDetailUiState,
     onReconnect: () -> Unit,
-    onRepair: () -> Unit
+    onRepair: () -> Unit,
+    onReset: () -> Unit
 ) {
 
-    val isOffline = state.status == DeviceConnectionStatus.OFFLINE || state.status == DeviceConnectionStatus.NEEDS_REPAIRING
+    val isOffline = state.status == DeviceConnectionStatus.OFFLINE ||
+            state.status == DeviceConnectionStatus.NEEDS_REPAIRING ||
+            state.status == DeviceConnectionStatus.NEEDS_RESET
 
     MonitoringCard(
         title = state.deviceName,
@@ -537,6 +542,7 @@ private fun StatusCard(
         offlineNote = state.offlineNote,
         onReconnect = onReconnect,
         onRepair = onRepair,
+        onReset = onReset,
         connectionMode = state.connectionMode
     )
 }
@@ -546,6 +552,7 @@ private fun DeviceConnectionStatus.toMonitoringStatus(): MonitoringStatus = when
     DeviceConnectionStatus.OFFLINE -> MonitoringStatus.OFFLINE
     DeviceConnectionStatus.RECONNECTING -> MonitoringStatus.RECONNECTING
     DeviceConnectionStatus.NEEDS_REPAIRING -> MonitoringStatus.NEEDS_REPAIRING
+    DeviceConnectionStatus.NEEDS_RESET -> MonitoringStatus.NEEDS_RESET
 }
 
 @Composable

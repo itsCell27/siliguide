@@ -60,6 +60,7 @@ class IoTDeviceDetailViewModel @Inject constructor(
     private var pollJob: Job? = null
     private var deviceId: String? = null
     private var currentLinkedPlantId: String? = null
+    private var consecutiveDecryptionFailures = 0
 
     // --- REMOVE DEVICE RESULT DIALOG ---
     data class RemoveDeviceDialogUi(
@@ -101,6 +102,7 @@ class IoTDeviceDetailViewModel @Inject constructor(
     private fun restartPolling(deviceId: String) {
 
         pollJob?.cancel()
+        consecutiveDecryptionFailures = 0
 
         _uiState.update {
             it.copy(status = DeviceConnectionStatus.RECONNECTING)
@@ -163,9 +165,51 @@ class IoTDeviceDetailViewModel @Inject constructor(
         } ?: SensorFetchResult.Unreachable
 
         when (result) {
-            is SensorFetchResult.Success -> onLiveReading(deviceId, result.response)
+            is SensorFetchResult.Success -> {
+                consecutiveDecryptionFailures = 0
+                onLiveReading(deviceId, result.response)
+            }
             SensorFetchResult.Unreachable -> onOffline(deviceId)
-            SensorFetchResult.TokenRejected -> onTokenRejected(deviceId)
+            SensorFetchResult.TokenRejected -> {
+                consecutiveDecryptionFailures = 0
+                onTokenRejected(deviceId)
+            }
+            SensorFetchResult.DecryptionFailed -> {
+                consecutiveDecryptionFailures++
+                if (consecutiveDecryptionFailures >= 2) {
+                    onDecryptionFailed(deviceId)
+                } else {
+                    Log.w("IoTDeviceDetailViewModel", "Single decryption failure for $deviceId; retrying before declaring NEEDS_RESET")
+                    onOffline(deviceId)
+                }
+            }
+        }
+    }
+
+    private suspend fun onDecryptionFailed(deviceId: String) {
+        val last = withContext(Dispatchers.IO) {
+            runCatching { ioTRepository.getLastDeviceSensorData(deviceId) }.getOrNull()
+        }
+
+        val ago = last?.lastSeenAt?.let { timeAgo(it) }
+
+        _uiState.update {
+            it.copy(
+                status = DeviceConnectionStatus.NEEDS_RESET,
+                sensors = if (last == null) emptyList() else buildSensorCells(
+                    moisture = last.lastSoilMoisture,
+                    soilTemp = last.lastSoilTemp,
+                    ph = last.lastSoilPh,
+                    nitrogen = last.lastNitrogen,
+                    phosphorus = last.lastPhosphorus,
+                    potassium = last.lastPotassium,
+                    ec = last.lastElectricalConductivity,
+                    airTemp = last.lastAirTemp,
+                    light = last.lastLightIntensity
+                ),
+                lastSeenText = ago?.let { t -> "Last seen $t" },
+                staleNote = "Invalid token · Tap to reset"
+            )
         }
     }
 

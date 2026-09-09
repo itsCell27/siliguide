@@ -1,5 +1,6 @@
 package com.example.siliguide.data.remote.iot
 
+import android.util.Log
 import com.example.siliguide.core.security.AesGcmCrypto
 import com.example.siliguide.core.security.PairingTokenCrypto
 import com.example.siliguide.data.remote.iot.dto.DeviceInfoDto
@@ -61,28 +62,59 @@ class Esp32Api @Inject constructor(
     // The App decrypts it locally; the token never traverses the network.
     suspend fun getSensorData(host: String, token: String? = null): SensorResponseDto {
         // 1. Fetch the payload. We do NOT pass the token in the request.
-        val rawResponse: String = client.get("http://$host/data").body()
+        val httpResponse = client.get("http://$host/data")
+        if (httpResponse.status.value !in 200..299) {
+            throw java.io.IOException("ESP32 HTTP returned status ${httpResponse.status.value}")
+        }
+        val rawResponse: String = httpResponse.body<String>().trim()
 
-        // 2. If no token is provided by the repository, assume we are in Setup Mode
-        //    and parse the raw JSON directly.
+        if (rawResponse.isBlank()) {
+            throw java.io.IOException("Empty response received from ESP32")
+        }
+
+        if (rawResponse.startsWith("{\"error\"")) {
+            throw java.io.IOException("ESP32 returned error: $rawResponse")
+        }
+
+        // 2. If a token IS provided, attempt to decrypt the Base64 AES-GCM payload locally.
+        if (token != null) {
+            val plainToken = pairingTokenCrypto.decrypt(token)
+            val decryptedJson = crypto.decrypt(rawResponse, plainToken)
+            if (decryptedJson != null) {
+                return json.decodeFromString(decryptedJson)
+            }
+        }
+
+        // 3. If decryption failed or no token was provided, check if the response
+        //    contains unencrypted raw sensor data. If it can be parsed as SensorResponseDto
+        //    without a token, the IoT device is NOT claimed (e.g. factory reset or in setup mode).
+        val isRawSensorData = runCatching {
+            json.decodeFromString<SensorResponseDto>(rawResponse)
+        }.isSuccess
+
+        if (isRawSensorData) {
+            Log.d("Esp32Api", "IoT device is not claimed.")
+            throw SecurityException("IoT device is not claimed.")
+        }
+
+        // 4. If no token was provided and the payload is encrypted
         if (token == null) {
-            return json.decodeFromString(rawResponse)
+            throw SecurityException("Pairing token is required to decrypt sensor data.")
         }
 
-        // decrypt token from SQLDelight DB first
-        val plainToken = pairingTokenCrypto.decrypt(token)
+        // 5. Verify if the payload is a complete, well-formed Base64 payload.
+        // A genuine encrypted sensor payload consists of IV(12) + ~230B JSON + Tag(16) -> Base64 >= 200 chars.
+        // If truncated by socket reset or timeout, treat as a transmission error (IOException).
+        val isValidBase64Format = rawResponse.length >= 200 && runCatching {
+            android.util.Base64.decode(rawResponse, android.util.Base64.NO_WRAP)
+        }.isSuccess
 
-        // 3. If a token IS provided, we assume the payload is Base64 AES-GCM encrypted.
-        //    Attempt to decrypt it locally.
-        val decryptedJson = crypto.decrypt(rawResponse, plainToken)
-
-        // 4. Fallback check: If decryption fails (e.g., wrong token, tampered data),
-        //    throw an exception so the Repository can catch it and show an "Offline" state.
-        if (decryptedJson == null) {
-            throw SecurityException("Failed to decrypt sensor payload. Invalid token or tampered data.")
+        if (!isValidBase64Format) {
+            throw java.io.IOException("Incomplete or corrupted HTTP payload received (${rawResponse.length} chars)")
         }
 
-        return json.decodeFromString(decryptedJson)
+        // 6. Intact Base64 payload failed AES-GCM authentication (token mismatch or tampered data)
+        throw SecurityException("Failed to decrypt sensor payload. Invalid token or tampered data.")
     }
 
     // Send WiFi credentials to IoT Device securely via AES-GCM

@@ -185,6 +185,8 @@ class PlantViewModel @Inject constructor(
     private var monitorJob: Job? = null
     private var monitoredDeviceId: String? = null
 
+    private var consecutiveDecryptionFailures = 0
+
     /** Call when the screen has a linked deviceId to watch. Safe to call every recomposition. */
     fun startLiveMonitoring(deviceId: String) {
 
@@ -192,6 +194,7 @@ class PlantViewModel @Inject constructor(
 
         monitoredDeviceId = deviceId
         monitorJob?.cancel()
+        consecutiveDecryptionFailures = 0
 
         _liveMonitoring.value = LiveMonitoringUiState(status = MonitoringStatus.RECONNECTING)
 
@@ -226,6 +229,7 @@ class PlantViewModel @Inject constructor(
         val id = monitoredDeviceId ?: return
 
         monitorJob?.cancel()
+        consecutiveDecryptionFailures = 0
 
         _liveMonitoring.value = LiveMonitoringUiState(status = MonitoringStatus.RECONNECTING)
 
@@ -252,15 +256,50 @@ class PlantViewModel @Inject constructor(
 
         when (result) {
             is SensorFetchResult.Success -> {
+                consecutiveDecryptionFailures = 0
                 onLiveDeviceReading(deviceId, result.response)
             }
             is SensorFetchResult.TokenRejected -> {
+                consecutiveDecryptionFailures = 0
                 onDeviceNeedsRepairing(deviceId)
+            }
+            is SensorFetchResult.DecryptionFailed -> {
+                consecutiveDecryptionFailures++
+                if (consecutiveDecryptionFailures >= 2) {
+                    onDeviceNeedsReset(deviceId)
+                } else {
+                    onDeviceOffline(deviceId)
+                }
             }
             is SensorFetchResult.Unreachable, null -> {
                 onDeviceOffline(deviceId)
             }
         }
+    }
+
+    private suspend fun onDeviceNeedsReset(deviceId: String) {
+        val last = withContext(Dispatchers.IO) {
+            runCatching { ioTRepository.getLastDeviceSensorData(deviceId) }.getOrNull()
+        }
+
+        val ago = last?.lastSeenAt?.let { monitorTimeAgo(it) }
+
+        _liveMonitoring.value = LiveMonitoringUiState(
+            status = MonitoringStatus.NEEDS_RESET,
+            readings = if (last == null) emptyList() else buildMonitoringReadings(
+                moisture = last.lastSoilMoisture,
+                soilTemp = last.lastSoilTemp,
+                ph = last.lastSoilPh,
+                nitrogen = last.lastNitrogen,
+                phosphorus = last.lastPhosphorus,
+                potassium = last.lastPotassium,
+                ec = last.lastElectricalConductivity,
+                airTemp = last.lastAirTemp,
+                light = last.lastLightIntensity
+            ),
+            lastSeenText = ago?.let { "Last seen $it" },
+            staleNote = "Invalid token · Tap to reset"
+        )
     }
 
     private suspend fun onDeviceNeedsRepairing(deviceId: String) {

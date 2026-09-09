@@ -17,11 +17,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +48,7 @@ import com.example.siliguide.core.ui.theme.Border
 import com.example.siliguide.core.ui.theme.DMSans
 import com.example.siliguide.core.ui.theme.DangerBg
 import com.example.siliguide.core.ui.theme.Danger
+import com.example.siliguide.core.ui.theme.DangerBorder
 import com.example.siliguide.core.ui.theme.BadgeLabelStyle
 import com.example.siliguide.core.ui.theme.DeviceNameStyle
 import com.example.siliguide.core.ui.theme.GrayBody
@@ -74,7 +80,7 @@ import com.example.siliguide.domain.model.ConnectionMode
  * next to the title (e.g. a connection-mode chip) — this component only
  * owns the status shell and the readings grid.
  */
-enum class MonitoringStatus { CONNECTED, OFFLINE, RECONNECTING, NEEDS_REPAIRING }
+enum class MonitoringStatus { CONNECTED, OFFLINE, RECONNECTING, NEEDS_REPAIRING, NEEDS_RESET }
 
 data class MonitoringReading(
     val label: String,
@@ -95,10 +101,25 @@ fun MonitoringCard(
     offlineNote: String = "Device not reachable. Make sure it is powered on and your phone is on the same network.",
     onReconnect: () -> Unit = {},
     onRepair: (() -> Unit)? = null,
+    onReset: (() -> Unit)? = null,
     connectionMode: ConnectionMode
 ) {
 
-    val isOffline = status == MonitoringStatus.OFFLINE || status == MonitoringStatus.NEEDS_REPAIRING
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    if (showResetDialog) {
+        ResetDeviceDialog(
+            onDismiss = { showResetDialog = false },
+            onConfirm = {
+                showResetDialog = false
+                onReset?.invoke()
+            }
+        )
+    }
+
+    val isOffline = status == MonitoringStatus.OFFLINE ||
+            status == MonitoringStatus.NEEDS_REPAIRING ||
+            status == MonitoringStatus.NEEDS_RESET
 
     val bg = if (isOffline) WarningBg else GreenBgLight
     val bd = if (isOffline) WarningBorder else GreenLight
@@ -152,6 +173,7 @@ fun MonitoringCard(
                 MonitoringStatus.CONNECTED -> ConnectedPill()
                 MonitoringStatus.OFFLINE -> OfflinePill()
                 MonitoringStatus.NEEDS_REPAIRING -> NeedsRepairPill()
+                MonitoringStatus.NEEDS_RESET -> NeedsResetPill()
                 MonitoringStatus.RECONNECTING -> Unit
             }
         }
@@ -176,6 +198,11 @@ fun MonitoringCard(
         if (status == MonitoringStatus.NEEDS_REPAIRING) {
             MonitoringWarningNote(
                 text = "This device may have been reset and is broadcasting a new pairing code. Re-pair it to reconnect.",
+                background = White.copy(alpha = 0.6f)
+            )
+        } else if (status == MonitoringStatus.NEEDS_RESET) {
+            MonitoringWarningNote(
+                text = "Failed to decrypt sensor payload. Invalid token or tampered data. Please reset the device.",
                 background = White.copy(alpha = 0.6f)
             )
         } else if (isOffline) {
@@ -204,6 +231,7 @@ fun MonitoringCard(
         when (status) {
             MonitoringStatus.OFFLINE -> MonitoringReconnectButton(onClick = onReconnect)
             MonitoringStatus.NEEDS_REPAIRING -> MonitoringRepairButton(onClick = onRepair ?: onReconnect)
+            MonitoringStatus.NEEDS_RESET -> MonitoringResetButton(onClick = { showResetDialog = true })
             MonitoringStatus.RECONNECTING -> MonitoringReconnectingButton()
             MonitoringStatus.CONNECTED -> Unit
         }
@@ -311,6 +339,21 @@ private fun NeedsRepairPill() {
             .clip(RoundedCornerShape(999.dp))
             .background(White)
             .border(1.dp, WarningBorder, RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    )
+}
+
+@Composable
+private fun NeedsResetPill() {
+
+    Text(
+        text = "Needs Reset",
+        style = BadgeLabelStyle,
+        color = Danger,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(White)
+            .border(1.dp, DangerBorder, RoundedCornerShape(999.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
 }
@@ -508,6 +551,75 @@ private fun MonitoringRepairButton(onClick: () -> Unit) {
             color = White
         )
     }
+}
+
+@Composable
+private fun MonitoringResetButton(onClick: () -> Unit) {
+
+    val interaction = remember { MutableInteractionSource() }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(11.dp))
+            .background(Danger)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+
+        Canvas(modifier = Modifier.size(14.dp)) {
+
+            drawMonitoringRefreshGlyph(
+                color = White,
+                strokeWidthPx = 1.4.dp.toPx()
+            )
+        }
+
+        Spacer(modifier = Modifier.width(7.dp))
+
+        Text(
+            text = "Reset Device",
+            style = SheetButtonStyleFallback,
+            color = White
+        )
+    }
+}
+
+@Composable
+private fun ResetDeviceDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Reset IoT Device",
+                fontWeight = FontWeight.Bold,
+                color = Black
+            )
+        },
+        text = {
+            Text(
+                text = "Please reset the IoT device manually by holding the reset button for 5 seconds.",
+                color = GrayBody,
+                fontSize = 14.sp
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Got It", color = GreenPrimary, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        containerColor = White,
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable

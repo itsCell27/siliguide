@@ -12,7 +12,8 @@ class FetchSensorsUseCase @Inject constructor(
         return when (val result = repository.getSensors(deviceId)) {
             is SensorFetchResult.Success -> result.response
             SensorFetchResult.Unreachable -> throw IllegalStateException("Device unreachable")
-            SensorFetchResult.TokenRejected -> throw SecurityException("Device rejected pairing token — may have been reset")
+            SensorFetchResult.TokenRejected -> throw SecurityException("IoT device is not claimed.")
+            SensorFetchResult.DecryptionFailed -> throw SecurityException("Failed to decrypt sensor payload. Invalid token or tampered data.")
         }
     }
 }

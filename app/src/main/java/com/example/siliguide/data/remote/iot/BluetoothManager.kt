@@ -167,6 +167,15 @@ class BluetoothManager @Inject constructor(
             "instance=${System.identityHashCode(this)} command=$command"
         )
 
+        // Drain any stale/unread bytes remaining in the stream before sending new command
+        input?.let { inStream ->
+            try {
+                while (inStream.available() > 0) {
+                    inStream.read()
+                }
+            } catch (_: Exception) {}
+        }
+
         sendCommand(command)
         return readResponse()
     }
@@ -181,17 +190,35 @@ class BluetoothManager @Inject constructor(
         val inputStream = input ?: throw IllegalStateException("Not connected")
 
         val builder = StringBuilder()
+        val startTime = System.currentTimeMillis()
+        val readTimeoutMs = 3500L
 
         while (true) {
-            val c = inputStream.read()
+            if (System.currentTimeMillis() - startTime > readTimeoutMs) {
+                throw java.io.IOException("Bluetooth read timed out waiting for complete response")
+            }
 
-            if (c == -1)
-                throw IllegalStateException("Bluetooth disconnected")
+            if (inputStream.available() > 0) {
+                val c = inputStream.read()
 
-            if (c.toChar() == '\n')
-                break
+                if (c == -1)
+                    throw IllegalStateException("Bluetooth disconnected")
 
-            builder.append(c.toChar())
+                if (c.toChar() == '\n')
+                    break
+
+                builder.append(c.toChar())
+
+                if (builder.length > 4096) {
+                    throw java.io.IOException("Bluetooth response exceeded maximum length")
+                }
+            } else {
+                try {
+                    Thread.sleep(10)
+                } catch (_: InterruptedException) {
+                    throw java.io.IOException("Bluetooth read interrupted")
+                }
+            }
         }
 
         return builder.toString()

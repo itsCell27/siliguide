@@ -218,6 +218,7 @@ fun PlantDetailScreen(
                         staleNote = liveMonitoring.staleNote,
                         onReconnect = { viewModel.retryReconnect() },
                         onRepair = { iotDevice?.deviceId?.let { onNavigateToRepairDevice(it) } },
+                        onReset = { viewModel.retryReconnect() },
                         connectionMode = iotDevice?.connectionMode ?: ConnectionMode.AP
                     )
                 }
