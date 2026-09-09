@@ -6,6 +6,7 @@ import com.example.siliguide.domain.engine.RuleResult
 data class AnalysisUiState(
 
     val isLoading: Boolean = false,
+    val loadingMessage: String = "Loading...",
 
     val imagePath: String? = null,
 

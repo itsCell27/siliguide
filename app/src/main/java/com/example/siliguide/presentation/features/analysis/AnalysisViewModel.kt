@@ -25,6 +25,7 @@ import com.example.siliguide.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -56,7 +57,14 @@ class AnalysisViewModel @Inject constructor(
 ) : ViewModel() {
 
     var analysisUiState by mutableStateOf(
-        AnalysisUiState()
+        AnalysisUiState(
+            isLoading = true,
+            loadingMessage = if (savedStateHandle.get<String>("sessionId") != null) {
+                "Loading saved analysis..."
+            } else {
+                "Analyzing leaf symptom..."
+            }
+        )
     )
         private set
 
@@ -65,6 +73,7 @@ class AnalysisViewModel @Inject constructor(
     // Retrieve the ID from the navigation arguments
     private val deviceId: String? = savedStateHandle["deviceId"]
     private val plantId: String? = savedStateHandle["plantId"]
+    private val sessionId: String? = savedStateHandle["sessionId"]
 
     // Map your YOLO class IDs to String labels (Ensure this matches your model's training order)
     private val classNames = listOf("curling", "healthy", "spots", "yellowing")
@@ -153,6 +162,7 @@ class AnalysisViewModel @Inject constructor(
         } else {
             analysisUiState = analysisUiState.copy(
                 isLoading = false,
+                loadingMessage = "",
                 analysisError = "Failed to load image."
             )
         }
@@ -164,6 +174,7 @@ class AnalysisViewModel @Inject constructor(
         currentDetections = emptyList()
         analysisUiState = AnalysisUiState(
             isLoading = true,
+            loadingMessage = "Analyzing leaf symptom...",
             sessionTimestamp = System.currentTimeMillis()
         )
         analysisUiState = analysisUiState.copy(
@@ -204,7 +215,8 @@ class AnalysisViewModel @Inject constructor(
                         analysisUiState = analysisUiState.copy(
                             bitmap = bitmap,
                             analysisError = errorMessage,
-                            isLoading = false
+                            isLoading = false,
+                            loadingMessage = ""
                         )
 
 
@@ -315,6 +327,11 @@ class AnalysisViewModel @Inject constructor(
 
                 // 3. Try to get Sensor Data
                 val sensorData = if (deviceId != null) {
+                    withContext(Dispatchers.Main) {
+                        analysisUiState = analysisUiState.copy(
+                            loadingMessage = "Getting sensor data..."
+                        )
+                    }
                     try {
                         val data = fetchSensorsUseCase(deviceId)
                         Log.d("AnalysisViewModel", "Sensor Data Received: $data")
@@ -337,20 +354,29 @@ class AnalysisViewModel @Inject constructor(
 
                 // 4. Update UI State
                 withContext(Dispatchers.Main) {
-
-                    // Pass results to Rule Engine using the most confident detection
-                    val newRuleResult = analyzePlantUseCase(
-                        finalLabel,
-                        sensorData
+                    analysisUiState = analysisUiState.copy(
+                        loadingMessage = "Analyzing plant condition..."
                     )
+                }
 
-                    // Map the raw data into UI State
-                    val newSensorUiState =
-                        sensorData?.let(::buildSensorUiState) ?: emptyList()
+                // Pass results to Rule Engine using the most confident detection
+                val newRuleResult = analyzePlantUseCase(
+                    finalLabel,
+                    sensorData
+                )
 
+                // Map the raw data into UI State
+                val newSensorUiState =
+                    sensorData?.let(::buildSensorUiState) ?: emptyList()
+
+                // Brief pause so the transition to "Analyzing plant condition" is perceptible
+                delay(400)
+
+                withContext(Dispatchers.Main) {
                     applyUiState(
                         state = AnalysisUiState(
                             isLoading = false,
+                            loadingMessage = "",
                             predictionLabel = finalLabel,
                             predictionName = formatPrediction(finalLabel),
                             predictionConfidence = finalConfidence,
@@ -397,7 +423,8 @@ class AnalysisViewModel @Inject constructor(
                 withContext(Dispatchers.Main) {
                     analysisUiState = analysisUiState.copy(
                         analysisError = "Analysis failed: ${e.localizedMessage}",
-                        isLoading = false
+                        isLoading = false,
+                        loadingMessage = ""
                     )
 
                 }
@@ -636,6 +663,7 @@ class AnalysisViewModel @Inject constructor(
 
         return AnalysisUiState(
             isLoading = false,
+            loadingMessage = "",
             imagePath = session.imagePath,
             predictionLabel = predictionLabel,
             predictionName = predictionName,
@@ -661,7 +689,8 @@ class AnalysisViewModel @Inject constructor(
         viewModelScope.launch {
 
             analysisUiState = analysisUiState.copy(
-                isLoading = true
+                isLoading = true,
+                loadingMessage = "Loading saved analysis..."
             )
 
             val t0 = System.currentTimeMillis()
@@ -673,6 +702,7 @@ class AnalysisViewModel @Inject constructor(
             if (session == null) {
                 analysisUiState = analysisUiState.copy(
                     isLoading = false,
+                    loadingMessage = "",
                     analysisError = "Analysis session not found."
                 )
                 return@launch

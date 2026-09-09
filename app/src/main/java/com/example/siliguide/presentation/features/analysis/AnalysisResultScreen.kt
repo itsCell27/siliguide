@@ -90,6 +90,7 @@ fun AnalysisResultScreen(
     val predictionLabel = viewModel.analysisUiState.predictionLabel
     val confidence = viewModel.analysisUiState.predictionConfidence
     val isLoading = viewModel.analysisUiState.isLoading
+    val loadingMessage = viewModel.analysisUiState.loadingMessage
     val segmentOverlay = viewModel.analysisUiState.segmentationOverlay
     val bitmap = viewModel.analysisUiState.bitmap
     val sensorUiState = viewModel.analysisUiState.sensorUiState
@@ -105,7 +106,7 @@ fun AnalysisResultScreen(
 
     if (isLoading) {
         LoadingScreen(
-            message = ""
+            message = loadingMessage.ifBlank { "Loading..." }
         )
     } else {
 
