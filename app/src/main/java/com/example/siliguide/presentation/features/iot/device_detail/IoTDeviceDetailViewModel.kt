@@ -500,7 +500,7 @@ class IoTDeviceDetailViewModel @Inject constructor(
 
 
     private companion object {
-        const val POLL_INTERVAL_MS = 1_000L
+        const val POLL_INTERVAL_MS = 3_000L
         const val FETCH_TIMEOUT_MS = 5_000L
         const val DASH = "—"
     }
