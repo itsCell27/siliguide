@@ -278,7 +278,7 @@ fun DashboardContent(
         .calculateBottomPadding()
     val scrollBodyBottomPadding = BottomNavHeight + systemNavBarInset
 
-    val initialName = initialsOf(profileDisplayName)
+    val initialName = initialsOf(profileDisplayName).take(1)
 
     Box(
         modifier = Modifier
@@ -440,7 +440,7 @@ fun TopBarSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = userInitial,
+                    text = userInitial.take(1),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = DMSans,
