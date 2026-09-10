@@ -165,7 +165,7 @@ fun APStep2Content(
             Icon(Icons.Rounded.Wifi, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "In AP Mode your phone must stay connected to the IoT device's hotspot to receive live readings.",
+                text = "In AP Mode your phone must stay connected to your unique SiliGuide_IoT network to receive live sensor readings.",
                 fontSize = 12.sp,
                 color = GrayBody,
                 lineHeight = 16.sp

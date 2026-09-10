@@ -78,19 +78,22 @@ class SyncEngine @Inject constructor(
             }
 
             // =========================================================================
-            // PUSH PHASE (Local -> Supabase)
-            // Foreign-Key Enforced Order: Users -> IoT Devices -> Plants -> Analysis Sessions
+            // 1. USER PROFILE SYNC (Bi-directional timestamp conflict resolution)
             // =========================================================================
-            pushUser(userId)
+            syncUser(userId)
+
+            // =========================================================================
+            // 2. PUSH PHASE (Local -> Supabase)
+            // Foreign-Key Enforced Order: IoT Devices -> Plants -> Analysis Sessions
+            // =========================================================================
             pushDevices(userId)
             pushPlants(userId)
             pushAnalysisSessions(userId)
 
             // =========================================================================
-            // PULL PHASE (Supabase -> Local)
-            // Foreign-Key Enforced Order: Users -> IoT Devices -> Plants -> Analysis Sessions
+            // 3. PULL PHASE (Supabase -> Local)
+            // Foreign-Key Enforced Order: IoT Devices -> Plants -> Analysis Sessions
             // =========================================================================
-            pullUser(userId)
             pullDevices(userId)
             pullPlants(userId)
             pullAnalysisSessions(userId)
@@ -103,19 +106,65 @@ class SyncEngine @Inject constructor(
         }
     }
 
-    // --- PUSH IMPLEMENTATIONS ---
+    // --- USER SYNC IMPLEMENTATION ---
 
-    private suspend fun pushUser(userId: String) {
+    private suspend fun syncUser(userId: String) {
+        val remoteUser = try {
+            userRemoteSource.fetchUserById(userId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch remote user profile for $userId: ${e.message}")
+            null
+        } ?: return
+
         val localUser = dbManager.queries.getUserById(userId).executeAsOneOrNull()
-        if (localUser != null && localUser.is_guest == 0L) {
-            Log.d(TAG, "Pushing user profile for $userId to Supabase (display_name=${localUser.display_name})")
-            userRemoteSource.updateDisplayName(
-                userId = userId,
-                displayName = localUser.display_name,
-                updatedAt = java.time.Instant.ofEpochMilli(localUser.updated_at).toString()
+
+        val remoteUpdatedAt = try {
+            remoteUser.updatedAt?.let { java.time.Instant.parse(it).toEpochMilli() } ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+
+        if (localUser == null) {
+            val remoteCreatedAt = try {
+                remoteUser.createdAt?.let { java.time.Instant.parse(it).toEpochMilli() } ?: remoteUpdatedAt
+            } catch (e: Exception) {
+                remoteUpdatedAt
+            }
+            dbManager.queries.insertUser(
+                user_id = remoteUser.id,
+                display_name = remoteUser.displayName,
+                email = remoteUser.email,
+                is_guest = 0L,
+                created_at = remoteCreatedAt,
+                updated_at = remoteUpdatedAt
             )
+            Log.d(TAG, "Inserted user profile from Supabase: display_name=${remoteUser.displayName}")
+        } else if (localUser.is_guest == 0L) {
+            if (localUser.display_name != remoteUser.displayName) {
+                if (localUser.updated_at > remoteUpdatedAt) {
+                    Log.d(TAG, "Local user is newer (${localUser.updated_at} > $remoteUpdatedAt). Pushing to Supabase: display_name=${localUser.display_name}")
+                    try {
+                        userRemoteSource.updateDisplayName(
+                            userId = userId,
+                            displayName = localUser.display_name,
+                            updatedAt = java.time.Instant.ofEpochMilli(localUser.updated_at).toString()
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to push updated user profile to Supabase", e)
+                    }
+                } else {
+                    Log.d(TAG, "Remote user is newer ($remoteUpdatedAt >= ${localUser.updated_at}). Pulling from Supabase: display_name=${remoteUser.displayName}")
+                    dbManager.queries.updateDisplayName(
+                        display_name = remoteUser.displayName,
+                        updated_at = remoteUpdatedAt,
+                        user_id = userId
+                    )
+                }
+            }
         }
     }
+
+    // --- PUSH IMPLEMENTATIONS ---
 
     private suspend fun pushDevices(userId: String) {
         val unsyncedDevices = ioTRepository.getUnsyncedDevices(userId)
@@ -234,31 +283,6 @@ class SyncEngine @Inject constructor(
     }
 
     // --- PULL IMPLEMENTATIONS ---
-
-    private suspend fun pullUser(userId: String) {
-        val remoteUser = userRemoteSource.fetchUserById(userId)
-        if (remoteUser != null) {
-            Log.d(TAG, "Pulled user profile from Supabase: display_name=${remoteUser.displayName}")
-            val localUser = dbManager.queries.getUserById(userId).executeAsOneOrNull()
-            val now = System.currentTimeMillis()
-            if (localUser == null) {
-                dbManager.queries.insertUser(
-                    user_id = remoteUser.id,
-                    display_name = remoteUser.displayName,
-                    email = remoteUser.email,
-                    is_guest = 0L,
-                    created_at = now,
-                    updated_at = now
-                )
-            } else if (localUser.display_name != remoteUser.displayName) {
-                dbManager.queries.updateDisplayName(
-                    display_name = remoteUser.displayName,
-                    updated_at = now,
-                    user_id = userId
-                )
-            }
-        }
-    }
 
     private suspend fun pullDevices(userId: String) {
         val remoteDeviceDtos = ioTRemoteSource.fetchDevicesByUser(userId)

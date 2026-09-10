@@ -20,6 +20,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +32,9 @@ import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
+
+private const val TAG = "AuthRepositoryImpl"
+private const val REMOTE_SIGNOUT_TIMEOUT_MS = 3000L
 
 class AuthRepositoryImpl @Inject constructor(
     private val dbManagerProvider: dagger.Lazy<SiliGuideDatabaseManager>,
@@ -108,7 +112,7 @@ class AuthRepositoryImpl @Inject constructor(
         val displayName = session.user?.userMetadata?.get("full_name")?.toString()?.trim('"')
             ?: session.user?.email?.substringBefore("@")
             ?: "User"
-        handlePostSignIn(realUserId = realUserId, email = session.user?.email, displayName = displayName)
+        handlePostSignIn(realUserId = realUserId, email = session.user?.email, defaultDisplayName = displayName)
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(e.toFriendlyAuthError()))
@@ -144,21 +148,38 @@ class AuthRepositoryImpl @Inject constructor(
         }
 
     override suspend fun signOut() {
-        supabase.auth.signOut()
-        userPreferences.clearSession()
+        try {
+            withTimeoutOrNull(REMOTE_SIGNOUT_TIMEOUT_MS) {
+                supabase.auth.signOut()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Remote signOut failed (network/offline error): ${e.message}")
+        } finally {
+            try {
+                supabase.auth.clearSession()
+            } catch (clearEx: Exception) {
+                Log.w(TAG, "Failed to clear Supabase local session", clearEx)
+            }
+            userPreferences.clearSession()
+        }
     }
 
     override suspend fun deleteGuestSession() {
-        val current = userPreferences.sessionFlow.first()
-        if (current != null && current.isGuest) {
-            dbManager.queries.deleteUser(current.userId)
+        try {
+            val current = userPreferences.sessionFlow.first()
+            if (current != null && current.isGuest) {
+                dbManager.queries.deleteUser(current.userId)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting guest database records: ${e.message}")
+        } finally {
+            userPreferences.clearSession()
         }
-        userPreferences.clearSession()
     }
 
     // Handles the post-auth database logic: migrates data if the current
-    // local session is a guest, otherwise just inserts a fresh user row.
-    private suspend fun handlePostSignIn(realUserId: String, email: String?, displayName: String) {
+    // local session is a guest, otherwise inserts or preserves the user row.
+    private suspend fun handlePostSignIn(realUserId: String, email: String?, defaultDisplayName: String) {
         val current = userPreferences.sessionFlow.first()
         val now = System.currentTimeMillis()
 
@@ -181,7 +202,19 @@ class AuthRepositoryImpl @Inject constructor(
             // If they differ, this account already existed before this call.
 
             if (!isBrandNewAccount) {
-                supabase.auth.signOut()
+                try {
+                    withTimeoutOrNull(REMOTE_SIGNOUT_TIMEOUT_MS) {
+                        supabase.auth.signOut()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Sign out failed during brand new account validation: ${e.message}")
+                } finally {
+                    try {
+                        supabase.auth.clearSession()
+                    } catch (clearEx: Exception) {
+                        Log.w(TAG, "Failed to clear Supabase local session", clearEx)
+                    }
+                }
                 throw IllegalStateException(
                     "This email is already registered. Log in instead, or use a different email to create a new account."
                 )
@@ -190,20 +223,71 @@ class AuthRepositoryImpl @Inject constructor(
             dbManager.queries.transaction {
                 dbManager.queries.migrateGuestToAuthenticated(
                     newUserId = realUserId,
-                    newDisplayName = displayName,
+                    newDisplayName = defaultDisplayName,
                     newEmail = email,
                     updated_at = now,
                     oldGuestId = current.userId
                 )
             }
         } else {
+            // Check if user already exists in local SQLite
+            val existingLocalUser = dbManager.queries.getUserById(realUserId).executeAsOneOrNull()
+
+            // Best-effort fetch of existing profile from Supabase public.users (server source of truth)
+            val remoteUser = try {
+                userRemoteSource.fetchUserById(realUserId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not fetch remote user profile during handlePostSignIn: ${e.message}")
+                null
+            }
+
+            val remoteUpdatedAt = try {
+                remoteUser?.updatedAt?.let { Instant.parse(it).toEpochMilli() }
+            } catch (e: Exception) {
+                null
+            }
+
+            val remoteCreatedAt = try {
+                remoteUser?.createdAt?.let { Instant.parse(it).toEpochMilli() }
+            } catch (e: Exception) {
+                null
+            }
+
+            // Determine authoritative display_name, created_at, and updated_at.
+            // Never overwrite a custom display name with defaultDisplayName (Auth provider name).
+            val finalDisplayName: String
+            val finalCreatedAt: Long
+            val finalUpdatedAt: Long
+
+            if (remoteUser != null && remoteUser.displayName.isNotBlank()) {
+                if (existingLocalUser != null && existingLocalUser.updated_at > (remoteUpdatedAt ?: 0L)) {
+                    // Local user was updated more recently than remote
+                    finalDisplayName = existingLocalUser.display_name
+                    finalCreatedAt = existingLocalUser.created_at
+                    finalUpdatedAt = existingLocalUser.updated_at
+                } else {
+                    finalDisplayName = remoteUser.displayName
+                    finalCreatedAt = remoteCreatedAt ?: existingLocalUser?.created_at ?: now
+                    finalUpdatedAt = remoteUpdatedAt ?: existingLocalUser?.updated_at ?: now
+                }
+            } else if (existingLocalUser != null && existingLocalUser.display_name.isNotBlank()) {
+                finalDisplayName = existingLocalUser.display_name
+                finalCreatedAt = existingLocalUser.created_at
+                finalUpdatedAt = existingLocalUser.updated_at
+            } else {
+                // Truly brand new user with no profile on remote or local yet
+                finalDisplayName = defaultDisplayName
+                finalCreatedAt = now
+                finalUpdatedAt = now
+            }
+
             dbManager.queries.insertUser(
                 user_id = realUserId,
-                display_name = displayName,
-                email = email,
+                display_name = finalDisplayName,
+                email = email ?: remoteUser?.email ?: existingLocalUser?.email,
                 is_guest = 0L,
-                created_at = now,
-                updated_at = now
+                created_at = finalCreatedAt,
+                updated_at = finalUpdatedAt
             )
         }
         userPreferences.saveSession(UserSession(realUserId, isGuest = false))

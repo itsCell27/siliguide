@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.*
@@ -37,7 +36,7 @@ import com.example.siliguide.presentation.features.iot.IoTViewModel
 @Composable
 fun APStep1Content(
     viewModel: IoTViewModel,
-    onScanQrClick: () -> Unit,
+    onScanQrClick: () -> Unit = {},
     isChecking: Boolean = false,
     onManualRetry: () -> Unit = {},
 ) {
@@ -146,35 +145,6 @@ fun APStep1Content(
                             .background(OffWhite, RoundedCornerShape(5.dp))
                             .border(1.dp, Border, RoundedCornerShape(5.dp))
                             .padding(horizontal = 7.dp, vertical = 3.dp)
-                    )
-                }
-
-                HorizontalDivider(color = Border, modifier = Modifier.padding(vertical = 4.dp))
-
-                // QR Scan Button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .background(GreenBgLight, RoundedCornerShape(8.dp))
-                        .border(1.5.dp, GreenLight, RoundedCornerShape(8.dp))
-                        .clickable { onScanQrClick() }
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.QrCodeScanner,
-                        contentDescription = "Scan QR",
-                        tint = GreenDark,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Scan QR to Auto-Connect",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = GreenDark
                     )
                 }
             }
@@ -298,15 +268,16 @@ fun APStep1Content(
                 )
             } else {
                 Text(
-                    "Ready to detect device",
+                    "Waiting for connection…",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = Black
                 )
                 Text(
-                    "Connect your phone to the SiliGuide_IoT Wi-Fi network, then tap \"Retry Detection\" or scan the QR code.",
+                    "App detects you automatically",
                     fontSize = 11.sp,
-                    color = GrayMedium
+                    color = GrayMedium,
+                    textAlign = TextAlign.Center
                 )
 
                 // Manual retry button when checking

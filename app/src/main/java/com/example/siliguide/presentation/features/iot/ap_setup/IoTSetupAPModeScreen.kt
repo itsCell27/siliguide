@@ -163,7 +163,7 @@ fun IoTSetupAPModeScreen(
         qrResultFromNav?.let { result ->
             qrResult = result
             viewModel.connectToDeviceFromQr(result)
-            savedStateHandle?.remove<String>("qr_result")
+            savedStateHandle.remove<String>("qr_result")
         }
     }
 
@@ -184,11 +184,10 @@ fun IoTSetupAPModeScreen(
         }
     }
 
+    val currentOnSetupComplete by rememberUpdatedState(onSetupComplete)
     LaunchedEffect(Unit) {
         viewModel.setupComplete.collect {
-
-            onSetupComplete()
-
+            currentOnSetupComplete()
         }
     }
 
@@ -397,18 +396,20 @@ fun IoTSetupAPModeScreen(
                             .height(50.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = GreenPrimary,
-                            contentColor = White
+                            contentColor = White,
+                            disabledContainerColor = GreenLight,
+                            disabledContentColor = White
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = !isChecking && when (currentStep) {
-                            1 -> true // On step 1, it's enabled as long as we aren't checking
-                            2 -> isReconfiguring || deviceName.isNotBlank() // Skip name check if switching OR On step 2, name must not be blank
+                        enabled = when (currentStep) {
+                            1 -> false
+                            2 -> isReconfiguring || deviceName.isNotBlank()
                             else -> false
                         }
                     ) {
                         Text(
                             text = when (currentStep) {
-                                1 -> "Scan QR Code"
+                                1 -> if (isChecking) "Checking…" else "Waiting…"
                                 else -> if (isReconfiguring) "Finish Switch" else "Save Device"
                             },
                             fontSize = 15.sp,

@@ -1,6 +1,7 @@
 package com.example.siliguide.presentation.features.auth
 
 import android.content.Context
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -140,15 +141,25 @@ class AuthViewModel @Inject constructor(
 
     fun signOut(onSuccess: () -> Unit) {
         viewModelScope.launch {
-            signOutUseCase()
-            onSuccess()
+            try {
+                signOutUseCase()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during signOut: ${e.message}", e)
+            } finally {
+                onSuccess()
+            }
         }
     }
 
     fun guestLogOut(onSuccess: () -> Unit) {
         viewModelScope.launch {
-            guestLogOutUseCase()
-            onSuccess()
+            try {
+                guestLogOutUseCase()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during guestLogOut: ${e.message}", e)
+            } finally {
+                onSuccess()
+            }
         }
     }
 
@@ -165,3 +176,5 @@ class AuthViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 }
+
+private const val TAG = "AuthViewModel"
