@@ -24,13 +24,17 @@ class LeafSegmenter(
     companion object {
         private const val TAG = "LeafSegmenter"
 
-        private const val INPUT_SIZE = 640
+        const val DEFAULT_INPUT_SIZE = 640
 
         // Number of mask coefficients produced by YOLO
-        private const val NUM_MASK_COEFFS = 32
+        const val DEFAULT_NUM_MASK_COEFFS = 32
+
+        const val DEFAULT_NUM_DETECTIONS = 300
+        const val DEFAULT_DETECTION_DIM = 38
+        const val DEFAULT_PROTO_SIZE = 160
 
         // Detection confidence threshold
-        private const val CONF_THRESHOLD = 0.25f
+        private const val CONF_THRESHOLD = 0.60f
 
         // Only kept for future use if we need additional NMS
         private const val IOU_THRESHOLD = 0.45f
@@ -52,6 +56,19 @@ class LeafSegmenter(
 
     private val interpreter: Interpreter
 
+    val inputWidth: Int
+    val inputHeight: Int
+    val isNCHW: Boolean
+
+    val numDetections: Int
+    val detectionDim: Int
+    val numMaskCoeffs: Int
+    val protoHeight: Int
+    val protoWidth: Int
+
+    private val detectionTensorIndex: Int
+    private val protoTensorIndex: Int
+
     init {
 
         val options = Interpreter.Options().apply {
@@ -62,6 +79,63 @@ class LeafSegmenter(
             loadModelFile(context, modelPath),
             options
         )
+
+        // 1. Resolve Input Dimensions & Format (NCHW vs NHWC)
+        val inputShape = interpreter.getInputTensor(0).shape()
+        val nchw = inputShape.size == 4 && inputShape[1] == 3
+        isNCHW = nchw
+
+        inputHeight = when {
+            inputShape.size == 4 && nchw && inputShape[2] > 0 -> inputShape[2]
+            inputShape.size == 4 && !nchw && inputShape[1] > 0 -> inputShape[1]
+            else -> DEFAULT_INPUT_SIZE
+        }
+
+        inputWidth = when {
+            inputShape.size == 4 && nchw && inputShape[3] > 0 -> inputShape[3]
+            inputShape.size == 4 && !nchw && inputShape[2] > 0 -> inputShape[2]
+            else -> DEFAULT_INPUT_SIZE
+        }
+
+        // 2. Resolve Output Tensors (Detections vs Prototypes)
+        var detIdx = 0
+        var protoIdx = 1
+        var nDetections = DEFAULT_NUM_DETECTIONS
+        var detDim = DEFAULT_DETECTION_DIM
+        var nMaskCoeffs = DEFAULT_NUM_MASK_COEFFS
+        var pHeight = inputHeight / 4
+        var pWidth = inputWidth / 4
+
+        for (i in 0 until interpreter.outputTensorCount) {
+            val tensor = interpreter.getOutputTensor(i)
+            val shape = tensor.shape()
+            if (shape.size == 3) {
+                // Detections tensor: e.g. [1, 300, 38]
+                detIdx = i
+                if (shape[1] > 0) nDetections = shape[1]
+                if (shape[2] > 0) detDim = shape[2]
+            } else if (shape.size == 4) {
+                // Prototypes tensor: e.g. [1, 32, 160, 160] (NCHW) or [1, 160, 160, 32] (NHWC)
+                protoIdx = i
+                if (shape[1] in 1..64) {
+                    if (shape[1] > 0) nMaskCoeffs = shape[1]
+                    if (shape[2] > 0) pHeight = shape[2]
+                    if (shape[3] > 0) pWidth = shape[3]
+                } else {
+                    if (shape[1] > 0) pHeight = shape[1]
+                    if (shape[2] > 0) pWidth = shape[2]
+                    if (shape[3] > 0) nMaskCoeffs = shape[3]
+                }
+            }
+        }
+
+        detectionTensorIndex = detIdx
+        protoTensorIndex = protoIdx
+        numDetections = nDetections
+        detectionDim = detDim
+        numMaskCoeffs = nMaskCoeffs
+        protoHeight = pHeight
+        protoWidth = pWidth
 
         logModelInfo()
     }
@@ -120,6 +194,13 @@ class LeafSegmenter(
 
         Log.d(
             TAG,
+            "Configured dimensions: input=${inputWidth}x${inputHeight} (layout=${if (isNCHW) "NCHW" else "NHWC"}), " +
+                    "detections tensor=$detectionTensorIndex [1, $numDetections, $detectionDim], " +
+                    "proto tensor=$protoTensorIndex [1, $numMaskCoeffs, $protoHeight, $protoWidth]"
+        )
+
+        Log.d(
+            TAG,
             "Interpreter initialized successfully."
         )
     }
@@ -139,22 +220,20 @@ class LeafSegmenter(
         val inputBuffer =
             preprocess(bitmap)
 
-        // Output 0:
-        // [1,300,38]
-        val output0 =
+        // Output Detections: e.g. [1, 300, 38]
+        val outputDetections =
             Array(1) {
-                Array(300) {
-                    FloatArray(38)
+                Array(numDetections) {
+                    FloatArray(detectionDim)
                 }
             }
 
-        // Output 1:
-        // [1,32,160,160]
-        val output1 =
+        // Output Prototypes: e.g. [1, 32, 160, 160] or [1, 32, 176, 176]
+        val outputPrototypes =
             Array(1) {
-                Array(NUM_MASK_COEFFS) {
-                    Array(160) {
-                        FloatArray(160)
+                Array(numMaskCoeffs) {
+                    Array(protoHeight) {
+                        FloatArray(protoWidth)
                     }
                 }
             }
@@ -162,8 +241,8 @@ class LeafSegmenter(
         val outputs =
             HashMap<Int, Any>()
 
-        outputs[0] = output0
-        outputs[1] = output1
+        outputs[detectionTensorIndex] = outputDetections
+        outputs[protoTensorIndex] = outputPrototypes
 
         val start =
             System.currentTimeMillis()
@@ -182,19 +261,15 @@ class LeafSegmenter(
         )
 
         return postProcess(
-            output0[0],
-            output1[0],
+            outputDetections[0],
+            outputPrototypes[0],
             bitmap.width,
             bitmap.height
         )
     }
 
     /**
-     * Converts Bitmap to
-     * Float32
-     * NCHW
-     * RGB
-     * [1,3,640,640]
+     * Converts Bitmap to normalized Float32 Tensor Buffer.
      */
     private fun preprocess(
         bitmap: Bitmap
@@ -203,50 +278,60 @@ class LeafSegmenter(
         val resized =
             Bitmap.createScaledBitmap(
                 bitmap,
-                INPUT_SIZE,
-                INPUT_SIZE,
+                inputWidth,
+                inputHeight,
                 true
             )
 
         val buffer =
             ByteBuffer.allocateDirect(
-                4 * 3 * INPUT_SIZE * INPUT_SIZE
+                4 * 3 * inputWidth * inputHeight
             )
 
         buffer.order(ByteOrder.nativeOrder())
 
         val pixels =
-            IntArray(INPUT_SIZE * INPUT_SIZE)
+            IntArray(inputWidth * inputHeight)
 
         resized.getPixels(
             pixels,
             0,
-            INPUT_SIZE,
+            inputWidth,
             0,
             0,
-            INPUT_SIZE,
-            INPUT_SIZE
+            inputWidth,
+            inputHeight
         )
 
-        // ---------- R ----------
-        for (pixel in pixels) {
-            buffer.putFloat(
-                ((pixel shr 16) and 0xFF) / 255f
-            )
-        }
+        if (isNCHW) {
+            // Planar format: all R, then all G, then all B
+            // ---------- R ----------
+            for (pixel in pixels) {
+                buffer.putFloat(
+                    ((pixel shr 16) and 0xFF) / 255f
+                )
+            }
 
-        // ---------- G ----------
-        for (pixel in pixels) {
-            buffer.putFloat(
-                ((pixel shr 8) and 0xFF) / 255f
-            )
-        }
+            // ---------- G ----------
+            for (pixel in pixels) {
+                buffer.putFloat(
+                    ((pixel shr 8) and 0xFF) / 255f
+                )
+            }
 
-        // ---------- B ----------
-        for (pixel in pixels) {
-            buffer.putFloat(
-                (pixel and 0xFF) / 255f
-            )
+            // ---------- B ----------
+            for (pixel in pixels) {
+                buffer.putFloat(
+                    (pixel and 0xFF) / 255f
+                )
+            }
+        } else {
+            // Interleaved format: R, G, B per pixel
+            for (pixel in pixels) {
+                buffer.putFloat(((pixel shr 16) and 0xFF) / 255f)
+                buffer.putFloat(((pixel shr 8) and 0xFF) / 255f)
+                buffer.putFloat((pixel and 0xFF) / 255f)
+            }
         }
 
         buffer.rewind()
@@ -302,15 +387,15 @@ class LeafSegmenter(
             }
 
             val box = RectF(
-                x1 * imgW / INPUT_SIZE,
-                y1 * imgH / INPUT_SIZE,
-                x2 * imgW / INPUT_SIZE,
-                y2 * imgH / INPUT_SIZE
+                x1 * imgW / inputWidth,
+                y1 * imgH / inputHeight,
+                x2 * imgW / inputWidth,
+                y2 * imgH / inputHeight
             )
 
             val coeffs = detection.copyOfRange(
                 6,
-                6 + NUM_MASK_COEFFS
+                6 + numMaskCoeffs
             )
 
 
@@ -415,7 +500,7 @@ class LeafSegmenter(
 
                 var value = 0f
 
-                for (c in 0 until NUM_MASK_COEFFS) {
+                for (c in 0 until numMaskCoeffs) {
                     value += coeffs[c] * protos[c][y][x]
                 }
 
