@@ -80,7 +80,7 @@ sealed interface LanBluetoothProvisioningUiState {
         val deviceName: String = "SiliGuide_89BC"
     ) : LanBluetoothProvisioningUiState
 
-    /** SPP link failed — offer retry or fall back to the AP path. */
+    /** SPP link failed — offer retry. */
     data object Error : LanBluetoothProvisioningUiState
 }
 
@@ -91,7 +91,7 @@ fun LanBluetoothProvisioningScreen(
     onOpenBluetoothSettings: () -> Unit,
     onSelectDevice: (PairedSiliGuideDevice) -> Unit,
     onRetry: () -> Unit,
-    onSwitchToDeviceHotspot: () -> Unit,
+    onSwitchToDeviceHotspot: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isEarlyStep = state is LanBluetoothProvisioningUiState.Pairing ||
@@ -126,13 +126,8 @@ fun LanBluetoothProvisioningScreen(
                 is LanBluetoothProvisioningUiState.SendingCredentials ->
                     WizardWaitingButton(text = "Please wait…")
 
-                LanBluetoothProvisioningUiState.Error -> {
+                LanBluetoothProvisioningUiState.Error ->
                     WizardPrimaryButton(text = "Retry Bluetooth", onClick = onRetry)
-                    WizardOutlinedButton(
-                        text = "Switch to Device Hotspot",
-                        onClick = onSwitchToDeviceHotspot
-                    )
-                }
             }
         }
     ) {

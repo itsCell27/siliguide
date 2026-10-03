@@ -1465,22 +1465,7 @@ fun SiliGuideNavGraph(
 
                         onSelectDevice = { viewModel.selectLanBluetoothDevice(it) },
 
-                        onRetry = { viewModel.retryLanBluetoothProvisioning(context) },
-
-                        onSwitchToDeviceHotspot = {
-                            if (backStackEntry.lifecycleIsResumed()) {
-                                viewModel.stopLanBluetoothProvisioning()
-                                viewModel.selectLanProvisioningMethod(
-                                    LanProvisioningMethod.ACCESS_POINT
-                                )
-                                navController.navigate(Screen.LanApProvisioning.route) {
-                                    launchSingleTop = true
-                                    popUpTo(Screen.LanBluetoothProvisioning.route) {
-                                        inclusive = true
-                                    }
-                                }
-                            }
-                        }
+                        onRetry = { viewModel.retryLanBluetoothProvisioning(context) }
                     )
                 }
 
