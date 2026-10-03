@@ -34,171 +34,71 @@ object RuleEngine {
 
             "curling", "leaf_curling" -> when {
 
-                // R-19: Nitrogen Toxicity "The Claw" — most dangerous, check first
+                // N = HIGH + EC = HIGH → Too Much Nitrogen
                 nitrogen == ThresholdLevel.HIGH && ec == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Severe Nitrogen Toxicity (\"The Claw\")",
-                    conditionDescription = "The excess nitrogen is causing rapid, unbalanced cellular growth, forcing leaves to \"claw\" downwards.",
+                    condition        = "Too Much Nitrogen",
+                    conditionDescription = "The plant is receiving too much nitrogen, which can cause excessive leafy growth and downward-curled leaves.",
                     recommendations  = listOf(
-                        "Flush the soil immediately",
-                        "Halt all nitrogen fertilizers.",
+                        "Stop using nitrogen-rich fertilizer for now.",
+                        "If the pot has good drainage, flush the soil with clean water and allow excess water to drain away."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-20: Suspected Bacterial Wilt
+                // Soil Moisture = HIGH + Air Temp = HIGH → Possible Bacterial Wilt
                 moisture == ThresholdLevel.HIGH && airTemp == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Suspected Bacterial Wilt",
-                    conditionDescription = "The plant is wilting despite wet soil.",
+                    condition        = "Possible Bacterial Wilt",
+                    conditionDescription = "The plant is wilting or curling even though the soil is already wet. A serious disease such as bacterial wilt may be possible.",
                     recommendations  = listOf(
-                        "Isolate the plant immediately. Do NOT water.",
-                        "Check if the plant recovers turgor overnight. If wilting persists by morning, destroy the plant to prevent soil contamination."
+                        "Isolate the affected plant from nearby chili plants and other susceptible plants.",
+                        "Stop watering the affected plant for now and avoid moving wet soil or plant material to other plants.",
+                        "If the plant continues to wilt or the condition worsens, consider removing it to help protect nearby plants."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-18: Cold Stress
+                // Air Temp = LOW + Soil Temp = LOW → Cold Stress
                 airTemp == ThresholdLevel.LOW && soilTemp == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "Cold Stress / Chilling Injury",
-                    conditionDescription = "Capsicum metabolic processes halt below 18°C, causing leaves to droop and curl.",
+                    condition        = "Cold Stress",
+                    conditionDescription = "The plant is being exposed to temperatures that are too cold for healthy growth.",
                     recommendations  = listOf(
-                        "Move potted plants indoors or to a warmer location.",
-                        "Cover outdoor plants with a thermal blanket at night.",
-                        "Avoid watering with cold water — use room-temperature water."
+                        "Move the plant to a warmer, sheltered area.",
+                        "Protect it from cold air at night and avoid leaving the pot on a very cold surface."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-02: Heat & Light Stress
+                // Air Temp = HIGH + Light = HIGH → Heat and Light Stress
                 airTemp == ThresholdLevel.HIGH && light == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Heat & Light Stress",
-                    conditionDescription = "High ambient temperature combined with intense light is causing excessive transpiration.",
+                    condition        = "Heat and Light Stress",
+                    conditionDescription = "High heat combined with strong sunlight is putting the plant under stress and causing excessive water loss.",
                     recommendations  = listOf(
-                        "Provide temporary shade using a 30–50% shade net.",
-                        "Move the plant away from direct midday sun.",
-                        "Ensure good airflow to lower the ambient temperature around the leaves."
+                        "Provide temporary shade during the hottest part of the day.",
+                        "Move the plant away from intense midday sunlight if possible and improve airflow around the leaves."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-01: Underwatering
+                // Soil Moisture = LOW → Not Enough Water
                 moisture == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "Underwatering / Drought Stress",
-                    conditionDescription = "Soil moisture has dropped below the optimal threshold, causing leaves to lose turgor pressure.",
+                    condition        = "Not Enough Water",
+                    conditionDescription = "The soil is too dry, causing the leaves to lose water and begin curling or drooping.",
                     recommendations  = listOf(
-                        "Water immediately, applying water gradually to the root zone.",
-                        "Continue until soil moisture returns to the 40%–70% range.",
-                        "Avoid flooding bone-dry soil instantly to prevent root shock.",
-                        "Apply mulch to the soil surface to retain moisture."
+                        "Water the plant thoroughly around the root area.",
+                        "If the soil is extremely dry, water gradually rather than flooding it all at once."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-12: All normal → Pest or Virus
+                // All sensors NORMAL → Possible Pest or Virus
                 allNormal -> RuleResult(
-                    condition        = "Pest or Viral Infestation",
-                    conditionDescription = "If the environment is perfect but leaves are curling, pests (Aphids/Thrips) or a virus (PepLCV) are attacking.",
+                    condition        = "Possible Pest or Virus",
+                    conditionDescription = "The plant is showing leaf curling even though the growing conditions look normal. Pests such as aphids or thrips, or a plant virus, may be involved.",
                     recommendations  = listOf(
-                        "Inspect for pests immediately.",
-                        "Apply Neem oil or insecticidal soap."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                else -> fallbackRuleWithSensor(prediction)
-            }
-
-            // ── YELLOWING ────────────────────────────────────────────────────
-
-            "yellowing", "yellowing_leaves" -> when {
-
-                // R-05: NPK all low — most severe deficiency, check before individual
-                nitrogen == ThresholdLevel.LOW && phosphorus == ThresholdLevel.LOW && potassium == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "General Nutrient Deficiency (NPK)",
-                    conditionDescription = "The soil lacks overall macronutrients, impacting the plant's metabolic processes.",
-                    recommendations  = listOf(
-                        "Apply balanced NPK fertilizer.",
-                        "Feed the plant with a complete, balanced fertilizer.",
-                        "Follow up with a liquid fertilizer for faster uptake."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-14: pH out of range with normal NPK → Lockout
-                ph != ThresholdLevel.NORMAL &&
-                        nitrogen == ThresholdLevel.NORMAL &&
-                        phosphorus == ThresholdLevel.NORMAL &&
-                        potassium == ThresholdLevel.NORMAL -> RuleResult(
-                    condition = "pH-Induced Nutrient Lockout",
-                    conditionDescription = "Nutrients are present but chemically locked.",
-                    recommendations = listOf(
-                        "Do NOT add more fertilizer — the problem is availability, not quantity.",
-                        "If pH is too low (<5.5): Apply agricultural lime.",
-                        "If pH is too high (>7.0): Apply elemental sulfur or acidic organic compost.",
-                        "Retest soil pH after 2 weeks to confirm correction."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-21: P high + pH normal → Iron/Zinc Lockout
-                phosphorus == ThresholdLevel.HIGH && ph == ThresholdLevel.NORMAL -> RuleResult(
-                    condition        = "Phosphorus-Induced Iron/Zinc Lockout",
-                    conditionDescription = "Excess Phosphorus in the soil chemically blocks the roots from absorbing Iron and Zinc, causing new leaves to yellow.",
-                    recommendations  = listOf(
-                        "Flush soil and apply foliar micronutrients."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-03: Overwatering
-                moisture == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Overwatering / Root Hypoxia",
-                    conditionDescription = "Excess water in the soil is suffocating the roots, preventing oxygen uptake.",
-                    recommendations  = listOf(
-                        "Stop watering immediately.",
-                        "Check that all drainage holes are clear and functional.",
-                        "Do not water again until soil moisture drops below 70%."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-04: Nitrogen deficiency
-                nitrogen == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "Nitrogen Deficiency",
-                    conditionDescription = "Mobile nitrogen is being diverted from older leaves to new growth, causing chlorosis.",
-                    recommendations  = listOf(
-                        "Apply a mild, balanced liquid fertilizer or compost tea.",
-                        "Avoid heavy synthetic nitrogen (like Urea) if the plant is currently flowering, as excess nitrogen causes blossom drop."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-11: Potassium deficiency
-                potassium == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "Potassium Deficiency",
-                    conditionDescription = "Potassium deficiency often presents as yellowing at the leaf edges.",
-                    recommendations  = listOf(
-                        "Apply a potassium-rich fertilizer (e.g., Muriate of Potash, 0-0-60)."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-22: Light bleaching
-                light == ThresholdLevel.HIGH && airTemp == ThresholdLevel.NORMAL -> RuleResult(
-                    condition        = "Light Bleaching (Phototoxicity)",
-                    conditionDescription = " The light intensity is so extreme that it is destroying chlorophyll faster than the plant can produce it, causing top leaves to turn pale or yellow.",
-                    recommendations  = listOf(
-                        "Provide partial shade."
-                    ),
-                    isUsingSensors   = true
-                )
-
-                // R-15: All normal → Micronutrient (Magnesium) deficiency
-                allNormal -> RuleResult(
-                    condition        = "Micronutrient Deficiency (Magnesium)",
-                    conditionDescription = "If NPK is fine but leaves are yellowing (often between the veins), it is a Magnesium deficiency.",
-                    recommendations  = listOf(
-                        "Apply Epsom salts.",
-                        "Apply a Magnesium Sulfate solution as a foliar spray or root drench."
+                        "Inspect the leaves and stems carefully for pests or unusual markings.",
+                        "If pests or a possible virus are found, isolate the affected plant from nearby chili plants and other susceptible plants.",
+                        "Treat pests with an appropriate product according to its label.",
+                        "Clean your hands and tools after handling the affected plant."
                     ),
                     isUsingSensors   = true
                 )
@@ -210,72 +110,171 @@ object RuleEngine {
 
             "spots", "leaf_spots" -> when {
 
-                // R-17: Edema — wet + dark, cells burst
+                // Soil Moisture = HIGH + Light = LOW → Water Stress / Edema
                 moisture == ThresholdLevel.HIGH && light == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "Edema (Cellular Rupture)",
-                    conditionDescription = "The plant is absorbing water faster than it can transpire it, causing cells to burst and form blister-like spots. Do NOT apply fungicide.",
+                    condition        = "Water Stress / Edema",
+                    conditionDescription = "The plant is taking up water faster than it can release it, which can cause small blister-like spots on the leaves.",
                     recommendations  = listOf(
-                        "Increase airflow and light around the plant.",
-                        "Reduce watering.",
+                        "Reduce watering and allow the soil to dry slightly.",
+                        "Improve airflow and provide adequate light.",
+                        "Do not treat this condition as a fungal disease unless other disease symptoms are present."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-06: Fungal infection — hot and wet
+                // Soil Moisture = HIGH + Air Temp = HIGH → High Risk of Fungal Disease
                 moisture == ThresholdLevel.HIGH && airTemp == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Fungal Infection Risk",
-                    conditionDescription = "High-moisture, high-temperature microclimates accelerate fungal pathogen proliferation.",
+                    condition        = "High Risk of Fungal Disease",
+                    conditionDescription = "Warm and wet conditions can encourage fungal diseases and make leaf spots more likely to spread.",
                     recommendations  = listOf(
-                        "Improve airflow and reduce moisture.",
-                        "Prune dense foliage and lower leaves.",
-                        "Stop overhead watering (keep leaves dry).",
-                        "Apply a copper-based fungicide or neem oil as a preventive measure."
+                        "Reduce excess moisture and improve airflow around the plant.",
+                        "Avoid overhead watering and keep the leaves dry.",
+                        "If disease symptoms are present, isolate the affected plant from nearby chili plants and other susceptible plants."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-16: Sunscald
+                // Light = HIGH + Air Temp = HIGH → Sun Damage
                 light == ThresholdLevel.HIGH && airTemp == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Sunscald / Severe Phototoxicity",
-                    conditionDescription = "The spots are papery and necrotic from extreme UV exposure.",
+                    condition        = "Sun Damage",
+                    conditionDescription = "The spots may be caused by intense sunlight and heat rather than a disease.",
                     recommendations  = listOf(
-                        "Install shade netting.",
-                        "Remove severely burnt leaves to prevent secondary fungal infections."
+                        "Provide partial shade during the hottest part of the day.",
+                        "Protect the plant from strong midday sunlight."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-23: Cool-Weather Fungal Blight
+                // Air Temp = LOW + Soil Moisture = HIGH → Cool and Wet Disease Risk
                 airTemp == ThresholdLevel.LOW && moisture == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Cool-Weather Fungal Blight",
-                    conditionDescription = "While many fungi like heat, blights (like Phytophthora) thrive in cool, damp conditions.",
+                    condition        = "Cool and Wet Disease Risk",
+                    conditionDescription = "Cool and wet conditions can encourage certain plant diseases and cause spotting or wilting.",
                     recommendations  = listOf(
-                        "Apply a systemic fungicide.",
-                        "Keep leaves dry.",
-                        "Remove spotted leaves immediately."
+                        "Reduce excess moisture and improve airflow.",
+                        "Avoid wetting the leaves when watering.",
+                        "If disease symptoms are present, isolate the affected plant from nearby chili plants and other susceptible plants.",
+                        "Remove severely affected plant parts and clean tools after handling the plant."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-07: Salt/Fertilizer burn
+                // EC = HIGH → Too Much Fertilizer
                 ec == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Salt / Fertilizer Burn",
-                    conditionDescription = "Elevated Electrical Conductivity (EC) indicates an excessive concentration of soluble salts in the growing medium, inducing osmotic stress.",
+                    condition        = "Too Much Fertilizer",
+                    conditionDescription = "There may be too much fertilizer or dissolved salt in the soil, which can stress the roots and cause leaf damage.",
                     recommendations  = listOf(
-                        "Flush the soil.",
-                        "Pour a heavy volume of clean, unfertilized water through the soil to leach out excess salts until the EC level drops.",
-                        "Halt all fertilization for 2 weeks."
+                        "Stop fertilizing for now.",
+                        "If the pot drains well, flush the soil with clean water to help remove excess fertilizer salts."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-13: All normal → Active pathogen
+                // All sensors NORMAL → Possible Bacterial or Fungal Disease
                 allNormal -> RuleResult(
-                    condition        = "Active Bacterial / Fungal Infection",
-                    conditionDescription = "Spots appearing when soil/climate sensors are perfect means a primary pathogen (like Cercospora) is present.",
+                    condition        = "Possible Bacterial or Fungal Disease",
+                    conditionDescription = "Leaf spots are appearing even though the growing conditions look normal, which may indicate a disease.",
                     recommendations  = listOf(
-                        "Apply fungicide.",
-                        "Apply copper-based fungicide and avoid wetting leaves."
+                        "Isolate the affected plant from nearby chili plants and other susceptible plants.",
+                        "Remove badly affected leaves and dispose of them away from healthy plants.",
+                        "Keep the leaves dry when watering and clean tools after handling the plant.",
+                        "If the spots continue to spread, seek a more specific diagnosis before applying treatment."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                else -> fallbackRuleWithSensor(prediction)
+            }
+
+            // ── YELLOWING ────────────────────────────────────────────────────
+
+            "yellowing", "yellowing_leaves" -> when {
+
+                // N = LOW + P = LOW + K = LOW → Not Enough Nutrients
+                nitrogen == ThresholdLevel.LOW && phosphorus == ThresholdLevel.LOW && potassium == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Not Enough Nutrients",
+                    conditionDescription = "The plant may be lacking several important nutrients needed for healthy growth.",
+                    recommendations  = listOf(
+                        "Apply a complete, balanced fertilizer according to the product instructions.",
+                        "If possible, check the soil pH as well, since an unsuitable pH can affect nutrient availability."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // pH = LOW or pH = HIGH + N, P, K = NORMAL → Soil pH Problem
+                (ph == ThresholdLevel.LOW || ph == ThresholdLevel.HIGH) &&
+                        nitrogen == ThresholdLevel.NORMAL &&
+                        phosphorus == ThresholdLevel.NORMAL &&
+                        potassium == ThresholdLevel.NORMAL -> RuleResult(
+                    condition        = "Soil pH Problem",
+                    conditionDescription = "The soil pH may be preventing the plant from using some nutrients properly, even though nutrients are present.",
+                    recommendations  = listOf(
+                        "Adjust the soil pH gradually using a suitable soil amendment.",
+                        "Follow the product instructions and avoid adding more fertilizer until the pH problem is addressed."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // P = HIGH + pH = NORMAL → Too Much Phosphorus
+                phosphorus == ThresholdLevel.HIGH && ph == ThresholdLevel.NORMAL -> RuleResult(
+                    condition        = "Too Much Phosphorus",
+                    conditionDescription = "Excess phosphorus may interfere with the plant's ability to absorb certain micronutrients such as iron and zinc.",
+                    recommendations  = listOf(
+                        "Stop adding phosphorus-rich fertilizer for now.",
+                        "Avoid adding more nutrients until the cause is confirmed, and consider checking the soil before applying micronutrients."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil Moisture = HIGH → Too Much Water
+                moisture == ThresholdLevel.HIGH -> RuleResult(
+                    condition        = "Too Much Water",
+                    conditionDescription = "The soil is staying too wet, which can reduce the oxygen available to the roots and cause yellowing.",
+                    recommendations  = listOf(
+                        "Stop watering for now and make sure excess water can drain from the pot.",
+                        "Allow the soil to dry slightly before watering again."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // N = LOW → Not Enough Nitrogen
+                nitrogen == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Not Enough Nitrogen",
+                    conditionDescription = "The plant may not have enough nitrogen to support healthy leaf growth, causing older leaves to turn yellow.",
+                    recommendations  = listOf(
+                        "Apply a balanced fertilizer according to the product instructions.",
+                        "Avoid applying excessive nitrogen, especially when the plant is flowering."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // K = LOW → Not Enough Potassium
+                potassium == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Not Enough Potassium",
+                    conditionDescription = "The plant may not have enough potassium, which can cause yellowing around the edges of older leaves and affect fruit development.",
+                    recommendations  = listOf(
+                        "Apply a balanced fertilizer that contains potassium according to the product instructions.",
+                        "Avoid adding large amounts of fertilizer at once."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Light = HIGH + Air Temp = NORMAL → Too Much Light
+                light == ThresholdLevel.HIGH && airTemp == ThresholdLevel.NORMAL -> RuleResult(
+                    condition        = "Too Much Light",
+                    conditionDescription = "Very strong light may be damaging the leaves and causing them to become pale or yellow.",
+                    recommendations  = listOf(
+                        "Provide partial shade, especially during periods of very strong sunlight."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // All sensors NORMAL → Possible Magnesium Deficiency
+                allNormal -> RuleResult(
+                    condition        = "Possible Magnesium Deficiency",
+                    conditionDescription = "The leaves may be yellowing because the plant does not have enough available magnesium, especially when the area between the veins becomes yellow.",
+                    recommendations  = listOf(
+                        "Consider a magnesium-containing fertilizer or supplement only after checking the plant's nutrient needs.",
+                        "Follow the product instructions and avoid adding unnecessary nutrients."
                     ),
                     isUsingSensors   = true
                 )
@@ -287,35 +286,144 @@ object RuleEngine {
 
             "healthy" -> when {
 
-                // R-09: N high + P low → Nitrogen Toxicity risk
+                // N = HIGH + P = LOW → Too Much Nitrogen
                 nitrogen == ThresholdLevel.HIGH && phosphorus == ThresholdLevel.LOW -> RuleResult(
-                    condition        = "Vegetative Shift Risk (Nitrogen Toxicity)",
-                    conditionDescription = "The plant looks great, but high nitrogen during flowering causes flowers to drop.",
+                    condition        = "Too Much Nitrogen",
+                    conditionDescription = "The plant may be receiving more nitrogen than it needs, which can encourage leafy growth and reduce flowering.",
                     recommendations  = listOf(
-                        "Halt all nitrogen-containing fertilizers immediately.",
-                        "Switch to a Phosphorus/Potassium bloom booster."
+                        "Reduce or stop nitrogen-rich fertilizer for now.",
+                        "Use a balanced fertilizer appropriate for the plant's growth stage rather than adding more nitrogen."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-10: Air temp high → Blossom drop risk
+                // Air Temp = HIGH → Heat Stress During Flowering
                 airTemp == ThresholdLevel.HIGH -> RuleResult(
-                    condition        = "Heat-Induced Blossom Drop Risk",
-                    conditionDescription = "The leaves look perfectly fine, but sustained heat above 35°C denatures chili pollen.",
+                    condition        = "Heat Stress During Flowering",
+                    conditionDescription = "The plant may look healthy, but prolonged high temperatures can interfere with flowering and cause flowers to drop.",
                     recommendations  = listOf(
-                        "Provide afternoon shade."
+                        "Provide afternoon shade and improve airflow around the plant.",
+                        "Keep the soil evenly moist during hot weather without overwatering."
                     ),
                     isUsingSensors   = true
                 )
 
-                // R-08: All normal → Truly healthy
-                allNormal -> RuleResult(
-                    condition        = "Plant is Healthy",
-                    conditionDescription = "Soil parameters are optimal, and no visual symptoms are detected.",
+                // Air Temperature — Low → Cold Stress
+                airTemp == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Cold Stress",
+                    conditionDescription = "The temperature around the plant is lower than ideal and may slow healthy growth.",
                     recommendations  = listOf(
-                        "Maintain current watering and feeding schedule.",
-                        "Continue standard monitoring — check soil moisture every 2 days.",
-                        "Inspect for early signs of pests weekly."
+                        "Move the plant to a warmer, sheltered area and protect it from cold air."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil Moisture — Low → Not Enough Water
+                moisture == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Not Enough Water",
+                    conditionDescription = "The soil is getting too dry, which can cause the plant to wilt and affect growth.",
+                    recommendations  = listOf(
+                        "Water the plant thoroughly around the roots. Check the soil before watering again."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil Moisture — High → Too Much Water
+                moisture == ThresholdLevel.HIGH -> RuleResult(
+                    condition        = "Too Much Water",
+                    conditionDescription = "The soil is staying too wet, which can reduce healthy root growth.",
+                    recommendations  = listOf(
+                        "Stop watering for now and let the soil dry slightly. Make sure excess water can drain from the pot."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil pH — Low → Soil Too Acidic
+                ph == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Soil Too Acidic",
+                    conditionDescription = "The soil is more acidic than the plant prefers, which can affect nutrient availability.",
+                    recommendations  = listOf(
+                        "Consider adding a suitable soil amendment to gradually raise the soil pH. Follow the product instructions."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil pH — High → Soil Too Alkaline
+                ph == ThresholdLevel.HIGH -> RuleResult(
+                    condition        = "Soil Too Alkaline",
+                    conditionDescription = "The soil is more alkaline than the plant prefers, which can make some nutrients harder for the plant to absorb.",
+                    recommendations  = listOf(
+                        "Consider using a suitable soil amendment to gradually lower the soil pH. Follow the product instructions."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil EC — High → Too Much Fertilizer
+                ec == ThresholdLevel.HIGH -> RuleResult(
+                    condition        = "Too Much Fertilizer",
+                    conditionDescription = "There may be too much fertilizer or dissolved salts in the soil, which can stress the roots.",
+                    recommendations  = listOf(
+                        "Stop fertilizing for now and flush the soil with clean water if the pot has good drainage."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil EC / NPK — Low → Not Enough Nutrients
+                ec == ThresholdLevel.LOW || nitrogen == ThresholdLevel.LOW || phosphorus == ThresholdLevel.LOW || potassium == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Not Enough Nutrients",
+                    conditionDescription = "The soil may not have enough available nutrients to support healthy growth.",
+                    recommendations  = listOf(
+                        "Apply a balanced fertilizer according to the product instructions."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Light Intensity — Low → Not Enough Light
+                light == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Not Enough Light",
+                    conditionDescription = "The plant is not receiving enough light for healthy growth.",
+                    recommendations  = listOf(
+                        "Move the plant to a brighter location where it can receive more sunlight."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Light Intensity — High → Too Much Light
+                light == ThresholdLevel.HIGH -> RuleResult(
+                    condition        = "Too Much Light",
+                    conditionDescription = "The plant may be receiving more intense sunlight than it can comfortably handle, especially during hot conditions.",
+                    recommendations  = listOf(
+                        "Provide partial shade during the hottest part of the day to protect the plant from strong sunlight."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil Temperature — Low → Soil Too Cold
+                soilTemp == ThresholdLevel.LOW -> RuleResult(
+                    condition        = "Soil Too Cold",
+                    conditionDescription = "The soil is colder than ideal, which can slow root activity and nutrient uptake.",
+                    recommendations  = listOf(
+                        "Move the plant to a warmer location and protect the soil from cold surfaces. Adding mulch can also help."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // Soil Temperature — High → Soil Too Hot
+                soilTemp == ThresholdLevel.HIGH -> RuleResult(
+                    condition        = "Soil Too Hot",
+                    conditionDescription = "The soil is getting too warm, which can increase water loss and stress the roots.",
+                    recommendations  = listOf(
+                        "Protect the soil from strong midday heat. Add mulch around the plant and keep the pot out of direct afternoon heat."
+                    ),
+                    isUsingSensors   = true
+                )
+
+                // All sensors NORMAL → Healthy Plant
+                allNormal -> RuleResult(
+                    condition        = "Healthy Plant",
+                    conditionDescription = "The plant currently shows no concerning visual symptoms and the sensor readings are within the expected range.",
+                    recommendations  = listOf(
+                        "Continue your normal watering, feeding, lighting, and monitoring routine."
                     ),
                     isUsingSensors   = true
                 )
