@@ -177,6 +177,14 @@ fun CropAdjustScreen(
         Rect(left, top, left + side, top + side)
     }
 
+    // Initial fit: make sure the image covers the crop box once layout is known
+    LaunchedEffect(containerSize, boxRect) {
+        if (containerSize == IntSize.Zero) return@LaunchedEffect
+        val (newScale, newOffset) = clampCropTransform(bitmap!!, containerSize, boxRect, scale, offset)
+        scale = newScale
+        offset = newOffset
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -194,12 +202,16 @@ fun CropAdjustScreen(
                     scaleX = scale, scaleY = scale,
                     translationX = offset.x, translationY = offset.y
                 )
-                .pointerInput(showBlurSheet) {
+                .pointerInput(showBlurSheet, containerSize, boxRect) {
                     if (showBlurSheet) return@pointerInput
                     detectTransformGestures { _, pan, zoom, _ ->
                         isGesturing = true
-                        scale = (scale * zoom).coerceIn(0.5f, 5f)
-                        offset += pan
+                        val (newScale, newOffset) = clampCropTransform(
+                            bitmap!!, containerSize, boxRect,
+                            scale * zoom, offset + pan
+                        )
+                        scale = newScale
+                        offset = newOffset
                     }
                 }
         )
@@ -978,6 +990,41 @@ private fun DrawScope.drawCameraGlyph(
         radius = 2.2f * s,
         center = Offset(7.5f * s, 8.5f * s),
         style = stroke
+    )
+}
+
+/**
+ * Keeps the displayed image covering the whole square crop box, so the crop is always
+ * 1:1 and never contains out-of-image area.
+ */
+private fun clampCropTransform(
+    bitmap: Bitmap,
+    containerSize: IntSize,
+    boxRect: Rect,
+    scale: Float,
+    offset: Offset
+): Pair<Float, Offset> {
+    val cw = containerSize.width.toFloat()
+    val ch = containerSize.height.toFloat()
+    val fitScale = minOf(cw / bitmap.width, ch / bitmap.height)
+
+    val minScale = maxOf(
+        boxRect.width / (bitmap.width * fitScale),
+        boxRect.height / (bitmap.height * fitScale)
+    )
+    val newScale = scale.coerceIn(minScale, maxOf(5f, minScale))
+
+    val dw = bitmap.width * fitScale * newScale
+    val dh = bitmap.height * fitScale * newScale
+
+    val maxX = boxRect.left - cw / 2f + dw / 2f
+    val minX = boxRect.right - cw / 2f - dw / 2f
+    val maxY = boxRect.top - ch / 2f + dh / 2f
+    val minY = boxRect.bottom - ch / 2f - dh / 2f
+
+    return newScale to Offset(
+        offset.x.coerceIn(minX, maxX),
+        offset.y.coerceIn(minY, maxY)
     )
 }
 
