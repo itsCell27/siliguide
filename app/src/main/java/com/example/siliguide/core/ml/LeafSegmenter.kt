@@ -178,6 +178,10 @@ private var letterboxRatio: Float = 1f
     private val inputTensorBuffer: ByteBuffer =
         ByteBuffer.allocateDirect(4 * 3 * inputWidth * inputHeight).order(ByteOrder.nativeOrder())
     private val pixelBuffer = IntArray(inputWidth * inputHeight)
+    private val tensorFloats = FloatArray(3 * inputWidth * inputHeight)
+    // Float view over the same memory as inputTensorBuffer, for bulk writes
+    private val inputFloatView = inputTensorBuffer.asFloatBuffer()
+    private val byteToFloat = FloatArray(256) { it / 255f }
     private val letterboxBitmap: Bitmap =
         Bitmap.createBitmap(inputWidth, inputHeight, Bitmap.Config.ARGB_8888)
     private val letterboxCanvas = Canvas(letterboxBitmap)
@@ -373,42 +377,37 @@ private var letterboxRatio: Float = 1f
 
         // 6. Read pixels from the letterboxed canvas into the reusable buffers
         val buffer = inputTensorBuffer
-        buffer.clear()
 
         val pixels = pixelBuffer
         letterboxBitmap.getPixels(pixels, 0, inputWidth, 0, 0, inputWidth, inputHeight)
 
-        // 7. Encode to tensor (NCHW planar or NHWC interleaved)
+        // 7. Encode to a reusable FloatArray (NCHW planar or NHWC interleaved) using the
+        //    byte->float lookup table, then copy to the direct buffer in one bulk write.
+        val floats = tensorFloats
+        val lut = byteToFloat
+        val count = pixels.size
+
         if (isNCHW) {
             // Planar format: all R, then all G, then all B
-            // ---------- R ----------
-            for (pixel in pixels) {
-                buffer.putFloat(
-                    ((pixel shr 16) and 0xFF) / 255f
-                )
-            }
-
-            // ---------- G ----------
-            for (pixel in pixels) {
-                buffer.putFloat(
-                    ((pixel shr 8) and 0xFF) / 255f
-                )
-            }
-
-            // ---------- B ----------
-            for (pixel in pixels) {
-                buffer.putFloat(
-                    (pixel and 0xFF) / 255f
-                )
+            for (i in 0 until count) {
+                val pixel = pixels[i]
+                floats[i] = lut[(pixel shr 16) and 0xFF]
+                floats[count + i] = lut[(pixel shr 8) and 0xFF]
+                floats[2 * count + i] = lut[pixel and 0xFF]
             }
         } else {
             // Interleaved format: R, G, B per pixel
-            for (pixel in pixels) {
-                buffer.putFloat(((pixel shr 16) and 0xFF) / 255f)
-                buffer.putFloat(((pixel shr 8) and 0xFF) / 255f)
-                buffer.putFloat((pixel and 0xFF) / 255f)
+            var o = 0
+            for (i in 0 until count) {
+                val pixel = pixels[i]
+                floats[o++] = lut[(pixel shr 16) and 0xFF]
+                floats[o++] = lut[(pixel shr 8) and 0xFF]
+                floats[o++] = lut[pixel and 0xFF]
             }
         }
+
+        inputFloatView.clear()
+        inputFloatView.put(floats)
 
         buffer.rewind()
 

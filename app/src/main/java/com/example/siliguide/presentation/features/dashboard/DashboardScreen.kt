@@ -333,7 +333,6 @@ fun DashboardContent(
                         displayName = profileDisplayName,
                         email = profileEmail,
                         authProvider = profileAuthProvider,
-                        appVersion = profileAppVersion,
                         onSaveDisplayName = onSaveDisplayName,
                         onConfirmLogOut = onConfirmLogOut,
                         onConfirmGuestLogOut = onConfirmGuestLogOut,
