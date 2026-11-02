@@ -1468,7 +1468,7 @@ fun OutOfScopeContent(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ResultBullet("The leaf detected isn't recognized as Siling Labuyo (Capsicum frutescens)")
                 ResultBullet("Or the visible symptom is outside our current four-class scope")
-                ResultBullet("Or image quality is too low for confident prediction (< 50%)")
+                ResultBullet("Or image quality is too low for confident prediction (< 60%)")
             }
         }
 
