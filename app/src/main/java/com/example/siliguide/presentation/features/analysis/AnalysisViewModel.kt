@@ -34,6 +34,7 @@ import com.example.siliguide.core.ml.DetectionRenderer
 import com.example.siliguide.data.cache.AnalysisCache
 import com.example.siliguide.data.cache.AnalysisCacheEntry
 import com.example.siliguide.data.local.mapper.JsonMapper
+import com.example.siliguide.domain.engine.LeafConditionSelector
 import com.example.siliguide.domain.model.BoundingBox
 import com.example.siliguide.domain.model.SegmentationDetection
 import com.example.siliguide.domain.usecase.DeleteAnalysisSessionUseCase
@@ -192,7 +193,7 @@ class AnalysisViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Default) {
             try {
                 // Run YOLO Instance Segmentation
-                val segmenter = LeafSegmenter(context, "models/best.tflite")
+                val segmenter = LeafSegmenter(context, "models/best_yolo26_seg.tflite")
                 val detections = segmenter.use { segmenter ->
                     segmenter.segment(bitmap)
                 }
@@ -258,14 +259,16 @@ class AnalysisViewModel @Inject constructor(
                     return@launch
                 }
 
+
+
                 detections.forEach { detection ->
                     Log.d("AnalysisViewModel", "Detection: $detection")
                 }
 
-                var hasCurling = false
-                var hasSpots = false
-                var hasYellowing = false
-                var hasHealthy = false
+//                var hasCurling = false
+//                var hasSpots = false
+//                var hasYellowing = false
+//                var hasHealthy = false
 
                 var finalConfidence = 0f
 
@@ -280,12 +283,12 @@ class AnalysisViewModel @Inject constructor(
 
                     finalConfidence = maxOf(finalConfidence, det.confidence)
 
-                    when (label) {
-                        "curling" -> hasCurling = true
-                        "spots" -> hasSpots = true
-                        "yellowing" -> hasYellowing = true
-                        "healthy" -> hasHealthy = true
-                    }
+//                    when (label) {
+//                        "curling" -> hasCurling = true
+//                        "spots" -> hasSpots = true
+//                        "yellowing" -> hasYellowing = true
+//                        "healthy" -> hasHealthy = true
+//                    }
                 }
 
                 Log.d("AnalysisViewModel", "===============================================")
@@ -317,13 +320,15 @@ class AnalysisViewModel @Inject constructor(
                     "Overlay size = ${overlay.width} x ${overlay.height}"
                 )
 
-                val finalLabel = when {
-                    hasCurling -> "curling"
-                    hasSpots -> "spots"
-                    hasYellowing -> "yellowing"
-                    hasHealthy -> "healthy"
-                    else -> "unknown"
-                }
+//                val finalLabel = when {
+//                    hasCurling -> "curling"
+//                    hasSpots -> "spots"
+//                    hasYellowing -> "yellowing"
+//                    hasHealthy -> "healthy"
+//                    else -> "unknown"
+//                }
+
+                val finalLabel = LeafConditionSelector.selectCondition(detections)
 
                 // 3. Try to get Sensor Data
                 val sensorData = if (deviceId != null) {
