@@ -126,7 +126,9 @@ fun LanSetupSuccessScreen(
     // Bypass name validation if it's a mode switch
     val canSave = (state.deviceName.isNotBlank() || state.isModeSwitch) && !state.isSaving
 
-    val hideBack = state.stage == LanSuccessStage.NAMING
+    // Hidden only while the phone-on-network check runs. Elsewhere the caller
+    // decides: plain step back before Save, "leave setup?" confirm after.
+    val showBack = state.stage != LanSuccessStage.VERIFYING
 
     val primaryButtonText = if (state.isModeSwitch) "Apply Network Switch" else "Save Device"
     val loadingButtonText = if (state.isModeSwitch) "Applying…" else "Saving…"
@@ -136,7 +138,7 @@ fun LanSetupSuccessScreen(
         stepLabel = "Step 4 of 4",
         progress = 1f,
         onBack = onBack,
-        showBack = hideBack,
+        showBack = showBack,
         enableBack = !state.isSaving,
         modifier = modifier,
         contentArrangement = Arrangement.spacedBy(13.dp),

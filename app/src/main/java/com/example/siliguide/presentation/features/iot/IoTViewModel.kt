@@ -571,6 +571,16 @@ class IoTViewModel @Inject constructor(
         validationDialog = null
     }
 
+    /**
+     * Drops only the process binding to the device hotspot.
+     *
+     * Unlike [disconnectFromDeviceWifi] it keeps the token, device id and name,
+     * so it is safe mid-wizard (switching transport, leaving after a save).
+     */
+    fun releaseDeviceHotspotBinding() {
+        disconnectFromDeviceWifiUseCase()
+    }
+
     // =========================================================================
     // BLUETOOTH SETUP STATE HELPERS
     // =========================================================================
@@ -1569,6 +1579,68 @@ class IoTViewModel @Inject constructor(
         lanReconfigureDeviceId = deviceId
     }
 
+    /**
+     * Id of the device this wizard run already claimed and saved.
+     *
+     * Set right after the local save, before WiFi provisioning. From here on
+     * the device is usable in its claim transport (AP or BLUETOOTH) even if it
+     * never joins the LAN, so the user may leave setup safely. Also stops a
+     * second Save tap from re-claiming (firmware refuses: already claimed).
+     */
+    var lanSavedDeviceId by mutableStateOf<String?>(null)
+        private set
+
+    /** Device id the "Choose WiFi" retry should re-provision. */
+    val lanRetryDeviceId: String?
+        get() = lanModeSwitchDeviceId ?: lanSavedDeviceId ?: connectedDeviceId
+
+    var showLanLeaveDialog by mutableStateOf(false)
+        private set
+
+    fun requestLeaveLanSetup() {
+        if (isFinalizingLan || lanSuccessStage == LanSuccessStage.VERIFYING) return
+        showLanLeaveDialog = true
+    }
+
+    fun dismissLanLeaveDialog() {
+        showLanLeaveDialog = false
+    }
+
+    /** Copy for the "leave setup?" dialog, matched to where the device stands. */
+    val lanLeaveDialogMessage: String
+        get() {
+            val ssid = lanSelectedSsid.orEmpty()
+            return when {
+                lanSuccessStage == LanSuccessStage.SWITCH_NETWORK && lanDeviceIp.isNotBlank() ->
+                    "Your device is saved and connected to \"$ssid\". Connect this phone " +
+                            "to \"$ssid\" later to see its readings."
+
+                lanModeSwitchDeviceId != null ->
+                    "WiFi setup isn't finished. Your device keeps its current connection " +
+                            "mode. You can try again from its device screen."
+
+                else -> {
+                    val transport = when (lanProvisioningMethod) {
+                        LanProvisioningMethod.BLUETOOTH -> "Bluetooth"
+                        LanProvisioningMethod.ACCESS_POINT -> "its hotspot"
+                    }
+                    "WiFi setup isn't finished. Your device is saved and works over " +
+                            "$transport for now. You can finish WiFi setup later from " +
+                            "its device screen."
+                }
+            }
+        }
+
+    /** Tears down transports and wizard state before the graph is popped. */
+    fun leaveLanSetup() {
+        showLanLeaveDialog = false
+        releaseDeviceHotspotBinding()
+        // Plain call, not viewModelScope: popping the graph clears this
+        // ViewModel and would cancel a launched job. close() does not block.
+        runCatching { bluetoothManager.disconnect() }
+        resetLanSetup()
+    }
+
     fun clearLanWifiReconfigure() {
         lanReconfigureDeviceId = null
     }
@@ -1594,6 +1666,9 @@ class IoTViewModel @Inject constructor(
      *  5. Update last_known_ip, then move the phone over to the same network.
      */
     fun finalizeLanAPMode() {
+
+        // Already claimed and saved this run — only WiFi is left to do
+        if (resumeSavedLanDevice()) return
 
         _iotUiState.update { currentState ->
             currentState.copy(
@@ -1746,6 +1821,10 @@ class IoTViewModel @Inject constructor(
                     return@launch
                 }
 
+                // Saved as AP — usable over the hotspot even if WiFi fails.
+                // provisionSavedDevice flips it to LAN only after a real join.
+                lanSavedDeviceId = deviceId
+
                 // ---- 3, 4, 5. Provision --------------------------------
                 provisionSavedDevice(
                     deviceId = deviceId,
@@ -1772,6 +1851,18 @@ class IoTViewModel @Inject constructor(
      * The device is already claimed and in the database, so only /configure
      * and the status poll are repeated.
      */
+    /**
+     * Save tapped again after this run already claimed and saved the device.
+     * Re-claiming would fail (the firmware rejects an already-claimed device),
+     * so jump straight to WiFi provisioning. Returns false when nothing is saved.
+     */
+    private fun resumeSavedLanDevice(): Boolean {
+        val savedId = lanSavedDeviceId ?: return false
+        lanReconfigureDeviceId = savedId
+        sendWifiToSavedDevice()
+        return true
+    }
+
     fun sendWifiToSavedDevice() {
 
         if (isFinalizingLan) return
@@ -1893,17 +1984,11 @@ class IoTViewModel @Inject constructor(
         }
 
         // ---- Wait for the device to actually join -------------------------
-        val status = awaitDeviceOnLan()
+        val outcome = awaitDeviceOnLan()
+        val status = outcome.status
 
         if (status == null) {
-            lanSaveDialog = LanSaveDialogState(
-                title = "Device Couldn't Join \"$ssid\"",
-                message = "The device could not connect to \"$ssid\". The password may be " +
-                        "wrong, or the network may be out of range of the device. Choose a " +
-                        "network again and re-enter the password.",
-                action = LanSaveAction.RECONFIGURE_WIFI,
-                confirmText = "Choose WiFi"
-            )
+            lanSaveDialog = lanJoinFailedDialog(ssid, outcome.lastStatusCode)
             return
         }
 
@@ -1945,7 +2030,9 @@ class IoTViewModel @Inject constructor(
      * The firmware gives up after WIFI_TIMEOUT (10s) and then retries every 5s,
      * so this window covers one full attempt plus a retry.
      */
-    private suspend fun awaitDeviceOnLan(): WiFiStatusDto? {
+    private suspend fun awaitDeviceOnLan(): LanJoinOutcome {
+
+        val tracker = LanJoinTracker()
 
         repeat(WIFI_STATUS_POLL_ATTEMPTS) { attempt ->
 
@@ -1957,19 +2044,91 @@ class IoTViewModel @Inject constructor(
 
             Log.d(
                 "AP_DEBUG",
-                "wifi-status attempt ${attempt + 1}: connected=${status?.connected} ip=${status?.ip}"
+                "wifi-status attempt ${attempt + 1}: connected=${status?.connected} " +
+                        "code=${status?.statusCode} ip=${status?.ip}"
             )
 
-            if (status != null &&
-                status.connected &&
+            tracker.record(status)?.let { return it }
+        }
+
+        return tracker.giveUp()
+    }
+
+    /** Result of waiting for the device to join WiFi. status != null means joined. */
+    private data class LanJoinOutcome(
+        val status: WiFiStatusDto?,
+        val lastStatusCode: Int?
+    )
+
+    /**
+     * Shared verdict logic for the AP and Bluetooth polls.
+     *
+     * statusCode is only a hint — firmware builds differ — so the only early
+     * exit is a repeated CONNECT_FAILED (router rejected the password). Every
+     * other code just keeps polling until the window ends.
+     */
+    private class LanJoinTracker {
+        private var lastCode: Int? = null
+        private var connectFailedStreak = 0
+
+        fun record(status: WiFiStatusDto?): LanJoinOutcome? {
+            if (status == null) return null
+
+            if (status.statusCode >= 0) lastCode = status.statusCode
+
+            if (status.connected &&
                 status.ip.isNotBlank() &&
                 status.ip != "0.0.0.0"
             ) {
-                return status
+                return LanJoinOutcome(status, status.statusCode)
+            }
+
+            connectFailedStreak =
+                if (status.statusCode == WL_CONNECT_FAILED) connectFailedStreak + 1 else 0
+
+            return if (connectFailedStreak >= CONNECT_FAILED_STREAK_TO_STOP) {
+                LanJoinOutcome(null, WL_CONNECT_FAILED)
+            } else {
+                null
             }
         }
 
-        return null
+        fun giveUp() = LanJoinOutcome(null, lastCode)
+    }
+
+    /** Failure copy picked from the device's last reported WiFi status. */
+    private fun lanJoinFailedDialog(ssid: String, statusCode: Int?): LanSaveDialogState {
+
+        val laterNote = " You can also go back and finish WiFi setup later."
+
+        return when (statusCode) {
+
+            WL_CONNECT_FAILED -> LanSaveDialogState(
+                title = "Wrong WiFi Password?",
+                message = "\"$ssid\" refused the device. Check the password and try " +
+                        "again." + laterNote,
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+
+            WL_NO_SSID_AVAIL -> LanSaveDialogState(
+                title = "\"$ssid\" Not Found",
+                message = "The device can't see \"$ssid\". It only works with 2.4 GHz " +
+                        "WiFi, so pick a 2.4 GHz network or move the device closer to " +
+                        "the router." + laterNote,
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+
+            else -> LanSaveDialogState(
+                title = "Device Couldn't Join \"$ssid\"",
+                message = "The device could not connect to \"$ssid\". The password may be " +
+                        "wrong, or the network may be out of range of the device. Choose a " +
+                        "network again and re-enter the password." + laterNote,
+                action = LanSaveAction.RECONFIGURE_WIFI,
+                confirmText = "Choose WiFi"
+            )
+        }
     }
 
     /**
@@ -2034,8 +2193,17 @@ class IoTViewModel @Inject constructor(
     }
 
     private companion object {
-        const val WIFI_STATUS_POLL_ATTEMPTS = 6
+        // 14 × 1.5 s ≈ 21 s: one full firmware attempt (10 s timeout) plus a
+        // retry (5 s gap). The old 6 × 1.5 s gave up before the first attempt ended.
+        const val WIFI_STATUS_POLL_ATTEMPTS = 14
         const val WIFI_STATUS_POLL_DELAY_MS = 1_500L
+
+        // Arduino wl_status_t values reported as statusCode
+        const val WL_NO_SSID_AVAIL = 1
+        const val WL_CONNECT_FAILED = 4
+
+        // Two reads in a row, so one stale value right after CONFIGURE can't end the wait
+        const val CONNECT_FAILED_STREAK_TO_STOP = 2
 
         const val PHONE_SWITCH_POLL_ATTEMPTS = 3
         const val PHONE_SWITCH_POLL_DELAY_MS = 1_200L
@@ -2438,6 +2606,9 @@ class IoTViewModel @Inject constructor(
      */
     fun finalizeLanBluetoothMode() {
 
+        // Already claimed and saved this run — only WiFi is left to do
+        if (resumeSavedLanDevice()) return
+
         val firmware = firmwareVersion
         val token = pairingToken
         val ssid = lanSelectedSsid
@@ -2560,7 +2731,10 @@ class IoTViewModel @Inject constructor(
                             isActive = true,
                             // Filled in once the device reports its LAN address
                             lastKnownIp = "",
-                            connectionMode = ConnectionMode.LAN,
+                            // BLUETOOTH until the device really joins WiFi —
+                            // provisionSavedDeviceViaBluetooth flips it to LAN.
+                            // A failed join leaves a working Bluetooth device.
+                            connectionMode = ConnectionMode.BLUETOOTH,
                             firmware = firmware,
                             dateAdded = existingDevice?.dateAdded ?: System.currentTimeMillis(),
                             updatedAt = System.currentTimeMillis()
@@ -2577,6 +2751,8 @@ class IoTViewModel @Inject constructor(
                     )
                     return@launch
                 }
+
+                lanSavedDeviceId = deviceId
 
                 // ---- 3, 4, 5. Provision --------------------------------
                 provisionSavedDeviceViaBluetooth(
@@ -2640,17 +2816,11 @@ class IoTViewModel @Inject constructor(
         }
 
         // ---- Wait for it to join, over the same socket ---------------------
-        val status = awaitDeviceOnLanViaBluetooth()
+        val outcome = awaitDeviceOnLanViaBluetooth()
+        val status = outcome.status
 
         if (status == null) {
-            lanSaveDialog = LanSaveDialogState(
-                title = "Device Couldn't Join \"$ssid\"",
-                message = "The device could not connect to \"$ssid\". The password may be " +
-                        "wrong, or the network may be out of range of the device. Choose a " +
-                        "network again and re-enter the password.",
-                action = LanSaveAction.RECONFIGURE_WIFI,
-                confirmText = "Choose WiFi"
-            )
+            lanSaveDialog = lanJoinFailedDialog(ssid, outcome.lastStatusCode)
             return
         }
 
@@ -2681,7 +2851,9 @@ class IoTViewModel @Inject constructor(
         verifyPhoneOnDeviceNetwork()
     }
 
-    private suspend fun awaitDeviceOnLanViaBluetooth(): WiFiStatusDto? {
+    private suspend fun awaitDeviceOnLanViaBluetooth(): LanJoinOutcome {
+
+        val tracker = LanJoinTracker()
 
         repeat(WIFI_STATUS_POLL_ATTEMPTS) { attempt ->
 
@@ -2693,24 +2865,19 @@ class IoTViewModel @Inject constructor(
 
             if (status == null && !ensureLanBluetoothConnected()) {
                 Log.d("BT_DEBUG", "Lost Bluetooth link mid-poll, giving up")
-                return null
+                return tracker.giveUp()
             }
 
             Log.d(
                 "BT_DEBUG",
-                "wifi-status attempt ${attempt + 1}: connected=${status?.connected} ip=${status?.ip}"
+                "wifi-status attempt ${attempt + 1}: connected=${status?.connected} " +
+                        "code=${status?.statusCode} ip=${status?.ip}"
             )
 
-            if (status != null &&
-                status.connected &&
-                status.ip.isNotBlank() &&
-                status.ip != "0.0.0.0"
-            ) {
-                return status
-            }
+            tracker.record(status)?.let { return it }
         }
 
-        return null
+        return tracker.giveUp()
     }
 
     fun stopLanBluetoothProvisioning() {
@@ -2739,6 +2906,8 @@ class IoTViewModel @Inject constructor(
         lanSelectedSsid = null
         lanSelectedPassword = ""
         lanReconfigureDeviceId = null
+        lanSavedDeviceId = null
+        showLanLeaveDialog = false
 
         lanSuccessStage = LanSuccessStage.NAMING
         lanDeviceIp = ""

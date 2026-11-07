@@ -107,7 +107,9 @@ fun LanWifiSelectionScreen(
             selectedNetwork != null &&
             (selectedNetwork.isOpen || state.password.isNotEmpty())
 
-    val showBack = !hasReconfiguredDeviceId
+    // Always shown. In reconfigure mode the caller turns Back into a
+    // "leave setup?" confirm instead of a pop (device is already saved).
+    val showBack = true
 
     LanWizardScaffold(
         flowLabel = "LAN Setup",

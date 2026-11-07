@@ -775,10 +775,10 @@ fun SiliGuideNavGraph(
                     defaultValue = null
                 }
             ),
-            startDestination = Screen.LanLocationPermission.route
+            startDestination = Screen.LanSetupMethod.route
         ) {
 
-            // ── Step 1 of 4 — Choose Setup Method (Retained for future use) ───
+            // ── Step 1 of 4 — Choose Setup Method (AP hotspot or Bluetooth) ───
             composable(Screen.LanSetupMethod.route) { backStackEntry ->
 
                 val parentEntry = remember(backStackEntry) {
@@ -827,23 +827,25 @@ fun SiliGuideNavGraph(
                         parentEntry?.savedStateHandle?.set("lan_method", it.name)
                     },
 
-                    onContinue = { viewModel.continueFromLanSetupMethod() }
+                    onContinue = {
+                        // Persist even when the user kept the default, so later
+                        // steps restore the right method after process death
+                        parentEntry?.savedStateHandle?.set(
+                            "lan_method",
+                            viewModel.lanProvisioningMethod.name
+                        )
+                        viewModel.continueFromLanSetupMethod()
+                    }
                 )
             }
 
-            // ── Step 2 of 4 — Location Permission (Primary Start for LAN Setup) ──
+            // ── Step 2 of 4 — Location Permission ─────────────────────────
             composable(Screen.LanLocationPermission.route) { backStackEntry ->
 
                 val parentEntry = remember(backStackEntry) {
                     navController.tryGetBackStackEntry(Screen.LanSetupGraph.route)
                 }
                 val viewModel: IoTViewModel = hiltViewModel(parentEntry ?: backStackEntry)
-
-                // Default LAN provisioning method to Bluetooth
-                LaunchedEffect(Unit) {
-                    viewModel.selectLanProvisioningMethod(LanProvisioningMethod.BLUETOOTH)
-                    parentEntry?.savedStateHandle?.set("lan_method", LanProvisioningMethod.BLUETOOTH.name)
-                }
 
                 // For LAN switching
                 val parentDeviceId = parentEntry?.arguments?.getString("deviceId")?.takeIf { it != "{deviceId}" }
@@ -1064,10 +1066,11 @@ fun SiliGuideNavGraph(
                     }
                 }
 
-                // Device is already claimed and saved — there is nowhere sane to
-                // go back to, so swallow system back while re-provisioning
+                // Device is already claimed and saved (in AP / BLUETOOTH mode
+                // until WiFi works), so leaving is safe — confirm first, then
+                // exit the whole wizard instead of popping into finished steps
                 BackHandler(enabled = reconfigureDeviceId != null) {
-                    viewModel.finishDeviceWiFiSetupDialog()
+                    viewModel.requestLeaveLanSetup()
                 }
 
                 // Re-provisioning worked — back to Success for the hand-off
@@ -1160,7 +1163,13 @@ fun SiliGuideNavGraph(
                 ) {
                     LanWifiSelectionScreen(
                         state = wifiState,
-                        onBack = { navController.popSafely(backStackEntry) },
+                        onBack = {
+                            if (hasReconfiguredDeviceId) {
+                                viewModel.requestLeaveLanSetup()
+                            } else {
+                                navController.popSafely(backStackEntry)
+                            }
+                        },
                         hasReconfiguredDeviceId = hasReconfiguredDeviceId,
                         onRefresh = { viewModel.startLanWifiScan(context) },
                         onSelectNetwork = { viewModel.selectLanWifiNetwork(it) },
@@ -1232,6 +1241,8 @@ fun SiliGuideNavGraph(
                     )
                 }
 
+                LanLeaveSetupDialog(viewModel, navController)
+
                 // Re-provisioning failure — let the user try another network
                 viewModel.lanSaveDialog?.let { dialog ->
                     MessageDialog(
@@ -1240,7 +1251,7 @@ fun SiliGuideNavGraph(
                         confirmText = dialog.confirmText,
                         onConfirm = {
                             val action = dialog.action
-                            val deviceId = viewModel.lanModeSwitchDeviceId ?: viewModel.connectedDeviceId
+                            val deviceId = viewModel.lanRetryDeviceId
 
                             viewModel.dismissLanSaveDialog()
 
@@ -1343,6 +1354,16 @@ fun SiliGuideNavGraph(
                             viewModel.selectLanProvisioningMethod(
                                 LanProvisioningMethod.BLUETOOTH
                             )
+                            // Keep the saved copy in step, or the next screen's
+                            // resync flips the method back to ACCESS_POINT
+                            parentEntry?.savedStateHandle?.set(
+                                "lan_method",
+                                LanProvisioningMethod.BLUETOOTH.name
+                            )
+                            // Drop any hotspot binding — Bluetooth path never does.
+                            // Binding only: disconnectFromDeviceWifi() would also
+                            // wipe the token, device id and name mid-wizard.
+                            viewModel.releaseDeviceHotspotBinding()
                             navController.navigate(Screen.LanBluetoothProvisioning.route) {
                                 launchSingleTop = true
                                 popUpTo(Screen.LanApProvisioning.route) { inclusive = true }
@@ -1564,8 +1585,14 @@ fun SiliGuideNavGraph(
                     }
                 }
 
-                BackHandler(enabled = viewModel.lanSuccessStage != LanSuccessStage.NAMING) {
-                    viewModel.connectToSameWiFiDialog()
+                // Once the device is saved (or handing off), Back must not pop
+                // into finished steps — confirm, then leave the whole wizard.
+                // requestLeaveLanSetup() ignores it while saving / verifying.
+                val lanBackLeaves = viewModel.lanSuccessStage != LanSuccessStage.NAMING ||
+                        viewModel.lanSavedDeviceId != null
+
+                BackHandler(enabled = lanBackLeaves) {
+                    viewModel.requestLeaveLanSetup()
                 }
 
                 // The user may switch networks from the notification shade
@@ -1593,10 +1620,12 @@ fun SiliGuideNavGraph(
                     state = successState,
 
                     onBack = {
-                        // Backing out mid-hand-off would abandon a saved device
-                        if (viewModel.lanSuccessStage == LanSuccessStage.NAMING &&
-                            backStackEntry.lifecycleIsResumed()
-                        ) {
+                        if (!backStackEntry.lifecycleIsResumed()) return@LanSetupSuccessScreen
+
+                        if (lanBackLeaves) {
+                            viewModel.requestLeaveLanSetup()
+                        } else {
+                            // Nothing claimed yet — a normal step back is safe
                             viewModel.resetLanApVerification()
                             navController.popBackStack()
                         }
@@ -1627,6 +1656,8 @@ fun SiliGuideNavGraph(
                     onCheckConnection = { viewModel.verifyPhoneOnDeviceNetwork() }
                 )
 
+                LanLeaveSetupDialog(viewModel, navController)
+
                 // Claim / save / provisioning failures
                 viewModel.lanSaveDialog?.let { dialog ->
                     MessageDialog(
@@ -1635,7 +1666,7 @@ fun SiliGuideNavGraph(
                         confirmText = dialog.confirmText,
                         onConfirm = {
                             val action = dialog.action
-                            val deviceId = viewModel.lanModeSwitchDeviceId ?: viewModel.connectedDeviceId
+                            val deviceId = viewModel.lanRetryDeviceId
 
                             viewModel.dismissLanSaveDialog()
 
@@ -2103,3 +2134,40 @@ private fun NavHostController.popSafely(from: NavBackStackEntry) {
 
 private fun NavHostController.tryGetBackStackEntry(route: String): NavBackStackEntry? =
     runCatching { getBackStackEntry(route) }.getOrNull()
+
+/**
+ * "Leave setup?" confirm for LAN screens reached after the device is saved.
+ *
+ * Leaving is safe: the device stays in its claim transport (AP / BLUETOOTH)
+ * until it really joins WiFi. A mode switch returns to the screen that
+ * opened the wizard (device detail); a new device goes to the Dashboard.
+ */
+@Composable
+private fun LanLeaveSetupDialog(
+    viewModel: IoTViewModel,
+    navController: NavHostController
+) {
+    if (!viewModel.showLanLeaveDialog) return
+
+    PermissionDialog(
+        title = "Leave WiFi Setup?",
+        message = viewModel.lanLeaveDialogMessage,
+        confirmText = "Leave",
+        dismissText = "Stay",
+        onConfirm = {
+            val isModeSwitch = viewModel.lanModeSwitchDeviceId != null
+
+            viewModel.leaveLanSetup()
+
+            val poppedToCaller = isModeSwitch &&
+                    navController.popBackStack(Screen.LanSetupGraph.route, inclusive = true)
+
+            if (!poppedToCaller) {
+                navController.navigate(Screen.Dashboard.route) {
+                    popUpTo(Screen.LanSetupGraph.route) { inclusive = true }
+                }
+            }
+        },
+        onDismiss = { viewModel.dismissLanLeaveDialog() }
+    )
+}
