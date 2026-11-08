@@ -1,8 +1,8 @@
 # SiliGuide
 
-SiliGuide is an Android app that helps growers check the health of **Siling Labuyo (chili) plants**.
+SiliGuide is an Android app that helps greenhouse growers check the health of **Siling Labuyo (chili) plants**.
 
-You take a photo of a leaf. An on-device AI model finds the leaf symptom. The app then combines that result with live soil and air readings from a SiliGuide ESP32 sensor device, and suggests the likely condition and what to do about it.
+You take a photo of a leaf. An on-device AI model finds the leaf symptom or condition. The app then combines that result with live soil and air readings from a SiliGuide ESP32 sensor device, and suggests the likely condition and what to do about it.
 
 The app works **offline first**. Cloud sync is optional.
 
@@ -66,16 +66,16 @@ These live in `domain/engine/SiliGuideThresholds.kt`.
 
 ## Tech stack
 
-| Area            | Tools |
-|-----------------|-------|
-| Language / UI   | Kotlin, Jetpack Compose, Material 3, Navigation Compose |
-| Architecture    | Clean Architecture + MVVM, Hilt (KSP) |
-| Local data      | SQLDelight, DataStore |
-| Background work | WorkManager |
-| Camera / ML     | CameraX, LiteRT (TFLite), OpenCV, ML Kit barcode scanning |
-| Networking      | Ktor (OkHttp), Bluetooth Classic SPP |
-| Cloud           | Supabase (Auth, Postgrest, Storage, Edge Functions) |
-| Sign-in         | Credential Manager (Google ID) |
+| Area            | Tools                                                          |
+|-----------------|----------------------------------------------------------------|
+| Language / UI   | Kotlin, Jetpack Compose, Material 3, Navigation Compose        |
+| Architecture    | Model-View-ViewModel MVVM, Hilt (KSP)                          |
+| Local data      | SQLDelight, DataStore                                          |
+| Background work | WorkManager                                                    |
+| Camera / ML     | CameraX, LiteRT (TFLite), OpenCV, ML Kit barcode scanning      |
+| Networking      | Ktor (OkHttp), Bluetooth Classic SPP                           |
+| Cloud           | Supabase (Auth, Postgrest, Storage, Edge Functions)            |
+| Sign-in         | Credential Manager (Google ID)                                 |
 | Security        | AES-256-GCM sensor payloads, Android Keystore for stored tokens |
 
 - **minSdk** 30 (Android 11), **targetSdk** 36
@@ -93,7 +93,7 @@ app/src/main/java/com/example/siliguide/
 │   ├── cache/       # In-memory analysis cache
 │   ├── local/       # SQLDelight mappers, DataStore preferences, session
 │   ├── remote/
-│   │   ├── iot/     # Esp32Api (HTTP), BluetoothApi (SPP), DTOs, AES-GCM crypto
+│   │   ├── iot/     # Esp32Api (HTTP), BluetoothApi, DTOs, AES-GCM crypto
 │   │   └── supabase/
 │   ├── repository/  # Repository implementations
 │   └── sync/        # SyncEngine + SyncWorker
