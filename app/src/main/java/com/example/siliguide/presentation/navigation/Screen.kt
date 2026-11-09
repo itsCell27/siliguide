@@ -4,24 +4,72 @@ import java.net.URLEncoder
 
 // A sealed class prevents typos by hardcoding our route names
 sealed class Screen(val route: String) {
-    object Welcome : Screen("welcome")
-    object Login : Screen("login")
-    object SignUp : Screen("signup")
-    object Dashboard : Screen("dashboard")
-    object Camera : Screen("camera")
 
-    // Some screens need to pass data, like the URI of the photo we just took
-    object CropAdjust : Screen("crop_adjust/{imageUri}") {
-        fun createRoute(imageUri: String): String {
-            val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
-            return "crop_adjust/$encodedUri"
+    object Welcome : Screen("welcome")
+    object EmailAuth : Screen("email_auth")
+    object GuestInfo : Screen("guest_info")
+    object Profile : Screen("profile")
+    object Dashboard : Screen("dashboard")
+    object DeleteAccount : Screen("delete_account")
+
+    object SeeAllDevices : Screen("see_all_devices?plantId={plantId}") {
+        fun createRoute(plantId: String? = null): String {
+            return if (plantId == null) "see_all_devices" else "see_all_devices?plantId=$plantId"
+        }
+    }
+    object SeeAllPlants : Screen("see_all_plants?isSelectionMode={isSelectionMode}&deviceId={deviceId}") {
+        fun createRoute(isSelectionMode: Boolean = false, deviceId: String? = null): String {
+            val params = mutableListOf<String>()
+            if (isSelectionMode) params.add("isSelectionMode=true")
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) "see_all_plants" else "see_all_plants?${params.joinToString("&")}"
         }
     }
 
-    object AnalysisResult : Screen("analysis_result/{imageUri}") {
-        fun createRoute(imageUri: String): String {
+    object PreAnalysis : Screen("pre_analysis/{plantId}") {
+        fun createRoute(plantId: String) = "pre_analysis/$plantId"
+    }
+
+    // Updated to include optional plantId AND optional deviceId
+    object Camera : Screen("camera?plantId={plantId}&deviceId={deviceId}") {
+        fun createRoute(plantId: String? = null, deviceId: String? = null): String {
+            val base = "camera"
+            val params = mutableListOf<String>()
+            plantId?.let { params.add("plantId=$it") }
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
+        }
+    }
+
+    // Updated to include optional plantId AND optional deviceId
+    object CropAdjust : Screen("crop_adjust/{imageUri}?plantId={plantId}&deviceId={deviceId}") {
+        fun createRoute(imageUri: String, plantId: String? = null, deviceId: String? = null): String {
             val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
-            return "analysis_result/$encodedUri"
+            val base = "crop_adjust/$encodedUri"
+            val params = mutableListOf<String>()
+            plantId?.let { params.add("plantId=$it") }
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
+        }
+    }
+
+    // Updated to include optional plantId AND optional deviceId
+    // Analysis route if the data comes from the camera to crop adjust screen to this route
+    object AnalysisResult : Screen("analysis_result/{imageUri}?plantId={plantId}&deviceId={deviceId}") {
+        fun createRoute(imageUri: String, plantId: String? = null, deviceId: String? = null): String {
+            val encodedUri = URLEncoder.encode(imageUri, "UTF-8")
+            val base = "analysis_result/$encodedUri"
+            val params = mutableListOf<String>()
+            plantId?.let { params.add("plantId=$it") }
+            deviceId?.let { params.add("deviceId=$it") }
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
+        }
+    }
+
+    // Analysis route for past analysis results from the database
+    object AnalysisHistoryResult : Screen("analysis_history_result/{sessionId}") {
+        fun createRoute(sessionId: String): String {
+            return "analysis_history_result/$sessionId"
         }
     }
 
@@ -29,6 +77,56 @@ sealed class Screen(val route: String) {
     object PlantDetail : Screen("plant/{plantId}") {
         fun createRoute(plantId: String) = "plant/$plantId"
     }
+    object AnalysisHistory : Screen("analysis_history/{plantId}") {
+        fun createRoute(plantId: String) = "analysis_history/$plantId"
+    }
+
     object IoTSetup : Screen("iot_setup")
-    object Profile : Screen("profile")
+
+    object IoTSetupBluetooth : Screen("iot_setup_bluetooth")
+    object BluetoothConnectionScreen : Screen("bluetooth_connection")
+    object BluetoothSelectionScreen : Screen("bluetooth_selection")
+    object BluetoothDeviceDetailsScreen : Screen("bluetooth_device_details")
+    object BluetoothSetupGraph : Screen("bluetooth_setup_graph?deviceId={deviceId}") {
+        fun createRoute(deviceId: String? = null): String =
+            if (deviceId == null) "bluetooth_setup_graph"
+            else "bluetooth_setup_graph?deviceId=$deviceId"
+    }
+
+    // --- AP SETUP WIZARD ---
+    object IoTSetupAP : Screen("iot_setup_ap?deviceId={deviceId}") {
+        fun createRoute(deviceId: String? = null): String =
+            if (deviceId == null) "iot_setup_ap"
+            else "iot_setup_ap?deviceId=$deviceId"
+    }
+    object QrScanner : Screen("qr_scanner")
+
+
+    // --- LAN SETUP WIZARD ---
+    object IoTSetupLAN : Screen("iot_setup_lan")
+    object LanSetupGraph : Screen("lan_setup_graph?deviceId={deviceId}") {
+        fun createRoute(deviceId: String? = null): String =
+            if (deviceId == null) "lan_setup_graph"
+            else "lan_setup_graph?deviceId=$deviceId"
+    }
+    object LanLocationPermission : Screen("lan_location_permission")
+
+    // deviceId is set only when re-provisioning an already saved device
+    object LanWifiSelection : Screen("lan_wifi_selection?deviceId={deviceId}") {
+         fun createRoute(deviceId: String? = null): String =
+             if (deviceId == null) "lan_wifi_selection"
+             else "lan_wifi_selection?deviceId=$deviceId"
+    }
+
+    object LanSetupMethod : Screen("lan_setup_method")
+    object LanApProvisioning : Screen("lan_ap_provisioning")
+    object LanBluetoothProvisioning : Screen("lan_bluetooth_provisioning")
+    object LanSetupSuccess : Screen("lan_setup_success")
+
+
+    // deviceId is URL-encoded because MAC addresses contain ':'
+    object IoTDeviceDetail : Screen("iot_device_detail/{deviceId}") {
+        fun createRoute(deviceId: String): String =
+            "iot_device_detail/${URLEncoder.encode(deviceId, "UTF-8")}"
+    }
 }

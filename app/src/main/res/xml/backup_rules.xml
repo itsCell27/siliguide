@@ -10,4 +10,6 @@
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>
 -->
+    <!--  REMOVE IF DATABASE SCHEMA IS FINALIZED  -->
+    <exclude domain="database" path="siliguide.db"/>
 </full-backup-content>

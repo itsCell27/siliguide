@@ -1,0 +1,70 @@
+package com.example.siliguide.data.remote.iot
+
+import android.content.Context
+import android.net.*
+import android.net.wifi.WifiNetworkSpecifier
+import android.os.Build
+
+class WifiProvisioningManager {
+
+    // Keep track of the active network request
+    private var activeCallback: ConnectivityManager.NetworkCallback? = null
+
+    fun connect(
+        context: Context,
+        ssid: String,
+        password: String,
+        onSuccess: () -> Unit,
+        onFailure: () -> Unit
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            onFailure()
+            return
+        }
+
+        val builder = WifiNetworkSpecifier.Builder()
+            .setSsid(ssid)
+
+        // Only apply password if network is secured
+        if (password.isNotEmpty()) {
+            builder.setWpa2Passphrase(password)
+        }
+
+        val specifier = builder.build()
+
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .setNetworkSpecifier(specifier)
+            .build()
+
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                connectivityManager.bindProcessToNetwork(network)
+                onSuccess()
+            }
+
+            override fun onUnavailable() {
+                onFailure()
+            }
+        }
+
+        connectivityManager.requestNetwork(request, callback)
+    }
+
+    fun disconnect(context: Context) {
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        // Tells the OS to stop routing app traffic through the specific IoT network
+        connectivityManager.bindProcessToNetwork(null)
+
+        // Tells the OS we are done with this specific network request
+        activeCallback?.let {
+            connectivityManager.unregisterNetworkCallback(it)
+            activeCallback = null
+        }
+    }
+}

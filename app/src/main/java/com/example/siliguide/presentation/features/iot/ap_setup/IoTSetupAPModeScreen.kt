@@ -1,0 +1,460 @@
+package com.example.siliguide.presentation.features.iot.ap_setup
+
+import android.content.Intent
+import android.provider.Settings
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.navigation.NavHostController
+import com.example.siliguide.R
+import com.example.siliguide.core.ui.theme.*
+import com.example.siliguide.domain.model.ConnectionMode
+import com.example.siliguide.presentation.features.iot.IoTViewModel
+import com.example.siliguide.presentation.navigation.Screen
+
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.siliguide.core.permission.PermissionStatus
+import com.example.siliguide.core.permission.PermissionType
+import com.example.siliguide.core.permission.PermissionUtils
+import com.example.siliguide.core.ui.components.LoadingOverlay
+import com.example.siliguide.core.ui.components.PermissionDialog
+import com.example.siliguide.presentation.features.iot.DEVICE_NAME_MAX_LENGTH
+import kotlinx.coroutines.launch
+
+@Composable
+fun IoTSetupAPModeScreen(
+    navController: NavHostController,
+    deviceId: String? = null,
+    onNavigateBack: () -> Unit,
+    onSetupComplete: () -> Unit
+) {
+    val viewModel: IoTViewModel = hiltViewModel()
+    val apConnectionState by viewModel.apConnectionState.collectAsState()
+    val connectionState = apConnectionState
+
+    val isReconfiguring = deviceId != null
+
+    val validationDialog = viewModel.validationDialog
+
+    // 1. Context & Coroutine Scope for the permission manager
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // 2. Permission Dialog States
+    var showRationaleDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // 3. The standard permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            navController.navigate(Screen.QrScanner.route)
+        }
+    }
+
+    // 4. The Shared Permission Logic
+    val handleScanQrClick = {
+        scope.launch {
+            val status = viewModel.permissionManager.getPermissionStatus(
+                context = context,
+                permission = Manifest.permission.CAMERA,
+                type = PermissionType.CAMERA
+            )
+
+            when (status) {
+                is PermissionStatus.Granted -> {
+                    navController.navigate(Screen.QrScanner.route)
+                }
+                is PermissionStatus.ShowRationale -> {
+                    showRationaleDialog = true
+                }
+                is PermissionStatus.PermanentlyDenied -> {
+                    showSettingsDialog = true
+                }
+                is PermissionStatus.RequestPermission -> {
+                    viewModel.permissionManager.markRequested(PermissionType.CAMERA)
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+            }
+        }
+    }
+
+    var currentStep by remember { mutableIntStateOf(1) }
+    var qrResult by remember { mutableStateOf<String?>(null) }
+    var isChecking by remember { mutableStateOf(false) }
+
+    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
+    val qrResultFromNav = savedStateHandle?.get<String>("qr_result")
+
+    //val context = LocalContext.current
+
+    val randomSuffix = remember {
+        val allowedChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        (1..3).map { allowedChars.random() }.joinToString("")
+    }
+    val defaultName = "SiliGuide$randomSuffix".take(DEVICE_NAME_MAX_LENGTH)
+    var deviceName by remember { mutableStateOf(defaultName) }
+
+    val apPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.all { it }
+        if (granted) {
+
+        }
+    }
+
+    // Tell ViewModel we are reconfiguring if an ID was passed
+    LaunchedEffect(deviceId) {
+        if (deviceId != null) {
+            viewModel.startApReconfigure(deviceId)
+        } else {
+            viewModel.clearApReconfigure()
+        }
+    }
+
+    // STEP 1: Check connection immediately on entry (Removed legacy monitoring)
+//    LaunchedEffect(Unit) {
+//        isChecking = true
+//        viewModel.forceCheckConnection()
+//    }
+
+    // STEP 2: Handle QR result from navigation
+    LaunchedEffect(qrResultFromNav) {
+        qrResultFromNav?.let { result ->
+            qrResult = result
+            viewModel.connectToDeviceFromQr(result)
+            savedStateHandle.remove<String>("qr_result")
+        }
+    }
+
+    // STEP 3: Auto move to Step 2 when connection successful
+    LaunchedEffect(connectionState) {
+        when (connectionState) {
+            "CONNECTED" -> {
+                isChecking = false
+                currentStep = 2
+            }
+            "FAILED" -> {
+                isChecking = false
+                // Stay on step 1, user can retry
+            }
+            "CONNECTING" -> {
+                isChecking = true
+            }
+        }
+    }
+
+    val currentOnSetupComplete by rememberUpdatedState(onSetupComplete)
+    LaunchedEffect(Unit) {
+        viewModel.setupComplete.collect {
+            currentOnSetupComplete()
+        }
+    }
+
+    // STEP 4: Setup lifecycle listener to disconnect from device when leaving screen
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        onDispose {
+            // Disconnect Wi-Fi when leaving screen completely
+            viewModel.disconnectFromDeviceWifi()
+        }
+    }
+
+
+
+    val handleBackPress: () -> Unit = {
+
+        if (currentStep == 2) {
+            // If user go back to step 2, disconnect from device
+            viewModel.disconnectFromDeviceWifi()
+            currentStep = 1
+        } else {
+            onNavigateBack()
+        }
+    }
+
+    LoadingOverlay(
+        isLoading = viewModel.isClaiming,
+        message = "Claiming device..."
+    ) {
+        Scaffold(
+            topBar = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(White)
+                        .statusBarsPadding()
+                ) {
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            enabled = !viewModel.isClaiming,
+                            onClick = handleBackPress
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(OffWhite)
+                                    .border(1.dp, Border, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.chevron_left),
+                                    contentDescription = "Back",
+                                    tint = GrayBody,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text(
+                            text = "AP Setup",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        val displayStep = if (currentStep == 2) 2 else 1
+
+                        Text(
+                            text = "Step $displayStep of 2",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GreenPrimary
+                        )
+                    }
+
+                    LinearProgressIndicator(
+                        progress = {
+                            if (currentStep == 2) 1.0f else 0.5f
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = GreenPrimary,
+                        trackColor = Border,
+                    )
+                }
+            },
+
+            bottomBar = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(White)
+                        .border(BorderStroke(1.dp, Border))
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(horizontal = 20.dp, vertical = 24.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            if (currentStep == 1) {
+                                handleScanQrClick()
+                            } else {
+                                // Step 2 - Save device
+                                // Route to correct finalize method
+                                if (isReconfiguring) {
+                                    viewModel.finalizeApModeSwitch()
+                                } else {
+                                    viewModel.finalizeSetup(
+                                        customName = deviceName,
+                                        connectionMode = ConnectionMode.AP,
+                                        ip = "192.168.4.1"
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GreenPrimary,
+                            contentColor = White,
+                            disabledContainerColor = GreenLight,
+                            disabledContentColor = White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = when (currentStep) {
+                            1 -> false
+                            2 -> isReconfiguring || deviceName.isNotBlank()
+                            else -> false
+                        }
+                    ) {
+                        Text(
+                            text = when (currentStep) {
+                                1 -> if (isChecking) "Checking…" else "Waiting…"
+                                else -> if (isReconfiguring) "Finish Switch" else "Save Device"
+                            },
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            },
+
+            containerColor = OffWhite
+        ) { paddingValues ->
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 20.dp)
+            ) {
+
+                Crossfade(
+                    targetState = currentStep,
+                    animationSpec = tween(300),
+                    label = "step_transition"
+                ) { step ->
+
+                    when (step) {
+
+                        // STEP 1: Connect to Device
+                        1 -> APStep1Content(
+                            viewModel = viewModel,
+                            onScanQrClick = {
+                                handleScanQrClick()
+                            },
+                            isChecking = isChecking,
+                            onManualRetry = {
+                                isChecking = true
+                                viewModel.forceCheckConnection()
+                            },
+                        )
+
+                        // STEP 2: Device Found - Configure
+                        2 -> APStep2Content(
+                            viewModel = viewModel,
+                            deviceName = deviceName,              // ← PASS DOWN
+                            isReconfiguring = isReconfiguring,
+                            onDeviceNameChange = { newName ->     // ← CALLBACK UP
+                                deviceName = newName
+                            },
+                            onBack = { currentStep = 1 }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+
+
+    // 5. RENDER THE PERMISSION DIALOGS
+    if (showRationaleDialog) {
+        PermissionDialog(
+            title = "Camera Permission Required",
+            message = "SiliGuide needs camera access to scan the QR code on your IoT device.",
+            confirmText = "Continue",
+            dismissText = "Cancel",
+            onConfirm = {
+                showRationaleDialog = false
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            },
+            onDismiss = {
+                showRationaleDialog = false
+            }
+        )
+    }
+
+    if (showSettingsDialog) {
+        PermissionDialog(
+            title = "Camera Permission Disabled",
+            message = "Camera access was permanently denied. You must enable it in your device's app settings to scan the QR code.",
+            confirmText = "Open Settings",
+            dismissText = "Cancel",
+            onConfirm = {
+                showSettingsDialog = false
+                PermissionUtils.openAppSettings(context)
+            },
+            onDismiss = {
+                showSettingsDialog = false
+            }
+        )
+    }
+
+
+    if (validationDialog != null) {
+
+        AlertDialog(
+
+            onDismissRequest = {
+                viewModel.dismissValidationDialog()
+            },
+
+            title = {
+                Text(
+                    text = validationDialog.title
+                )
+            },
+
+            text = {
+                Text(
+                    text = validationDialog.message
+                )
+            },
+
+            confirmButton = {
+
+                Button(
+                    onClick = {
+                        viewModel.dismissValidationDialog()
+                    }
+                ) {
+                    Text("OK")
+                }
+
+            }
+        )
+    }
+}
+
+@Composable
+@Preview
+fun APpreview() {
+    IoTSetupAPModeScreen(
+        navController = androidx.navigation.compose.rememberNavController(),
+        onNavigateBack = {},
+        onSetupComplete = {}
+    )
+}

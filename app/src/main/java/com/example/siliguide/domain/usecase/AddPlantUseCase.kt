@@ -2,29 +2,29 @@ package com.example.siliguide.domain.usecase
 
 import com.example.siliguide.domain.model.Plant
 import com.example.siliguide.domain.repository.PlantRepository
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
 class AddPlantUseCase @Inject constructor(
     private val repository: PlantRepository
 ) {
-    suspend operator fun invoke(name: String, userId: String, deviceId: String? = null) {
-        // Use SimpleDateFormat which is supported on all Android versions
-        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        val currentDate = formatter.format(Date())
+    // Re-added userId requirement to establish relational context safely
+    suspend operator fun invoke(userId: String, name: String, deviceId: String? = null) : String {
+
+        val currentTimestamp = System.currentTimeMillis()
 
         val newPlant = Plant(
-            plantId = UUID.randomUUID().toString(), // Generate unique ID
-            userId = userId,
+            plantId = UUID.randomUUID().toString(),
+            userId = userId, // Relates this plant to the active local account profile
             name = name,
-            dateCreated = currentDate,
+            dateCreated = currentTimestamp,
+            updatedAt = currentTimestamp,
             lastAnalyzedAt = null,
-            isSynced = false,
+            isSynced = false, // Instantiated as un-synced until WorkManager fires online
             deviceId = deviceId
         )
         repository.insertPlant(newPlant)
+
+        return newPlant.plantId
     }
 }

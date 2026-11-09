@@ -9,6 +9,7 @@ class GetPlantsUseCase @Inject constructor(
     private val repository: PlantRepository
 ) {
     operator fun invoke(userId: String): Flow<List<Plant>> {
+        // Call the updated repository function
         return repository.getPlantsByUser(userId)
     }
 }

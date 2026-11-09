@@ -1,0 +1,406 @@
+-- ============================================================
+-- SiliGuide.sq Local SQLDelight Database (SQLite Engine)
+-- Supports Multi-User Isolation and Cloud Synchronization
+-- ============================================================
+
+-- ============================================================
+-- TABLES DEFINITION
+-- ============================================================
+
+CREATE TABLE users (
+    user_id       TEXT NOT NULL PRIMARY KEY,
+    display_name  TEXT NOT NULL,
+    email         TEXT,
+    is_guest      INTEGER NOT NULL DEFAULT 0,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL
+);
+
+CREATE TABLE iot_devices (
+    device_id                   TEXT NOT NULL PRIMARY KEY,
+    user_id                     TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    hardware_mac                TEXT NOT NULL,  -- ESP32 factory eFuse MAC
+    device_name                 TEXT NOT NULL,
+    pairing_token               TEXT NOT NULL,
+    is_active                   INTEGER NOT NULL DEFAULT 1,
+    last_known_ip               TEXT,          -- NULL if never connected via LAN
+    connection_mode             TEXT NOT NULL, -- AP | LAN | BLUETOOTH
+    firmware                    TEXT,
+    is_synced                   INTEGER NOT NULL DEFAULT 0,
+    is_deleted                  INTEGER NOT NULL DEFAULT 0,
+    date_added                  INTEGER NOT NULL,
+    updated_at                  INTEGER NOT NULL,
+    last_seen_at                INTEGER,
+
+    -- Latest known sensor values; NULL means no reading has been received yet
+    last_soil_moisture               REAL,
+    last_soil_temp                   REAL,
+    last_soil_ph                     REAL,
+    last_nitrogen                    INTEGER,
+    last_phosphorus                  INTEGER,
+    last_potassium                   INTEGER,
+    last_electrical_conductivity     INTEGER,
+    last_air_temp                    REAL,
+    last_light_intensity             INTEGER
+);
+
+CREATE TABLE plants (
+    plant_id         TEXT NOT NULL PRIMARY KEY,
+    user_id          TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    plant_name       TEXT NOT NULL,
+    date_created     INTEGER NOT NULL,
+    updated_at       INTEGER NOT NULL,
+    last_analyzed_at INTEGER,           -- NULL until first analysis
+    is_synced        INTEGER NOT NULL DEFAULT 0,
+    device_id        TEXT UNIQUE REFERENCES iot_devices(device_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    is_deleted       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE analysis_sessions (
+    session_id             TEXT NOT NULL PRIMARY KEY,
+    plant_id               TEXT NOT NULL REFERENCES plants(plant_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    device_id              TEXT REFERENCES iot_devices(device_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    user_id                TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    session_timestamp      INTEGER NOT NULL,
+    image_path             TEXT NOT NULL,
+    predicted_class        TEXT NOT NULL, -- healthy | leaf_curling | leaf_spots | yellowing
+    confidence             REAL NOT NULL,  -- 0.0 to 1.0
+    segmentation_result    TEXT,          -- JSON containing all detected leaves
+    plant_condition        TEXT,           -- NULL for partial analysis
+    plant_condition_description TEXT,
+    possible_causes        TEXT,           -- JSON string array, always present
+    characteristics        TEXT,           -- JSON string array, NULL for partial
+    recommended_actions    TEXT,           -- JSON string array, NULL for partial
+    is_partial             INTEGER NOT NULL DEFAULT 0, -- 1 = image only, no sensor data
+    -- Sensor snapshot parameters (all NULL for partial analysis)
+    soil_moisture           REAL,
+    soil_ph                 REAL,
+    soil_temp               REAL,
+    electrical_conductivity INTEGER,
+    nitrogen                INTEGER,
+    phosphorus              INTEGER,
+    potassium               INTEGER,
+    light_intensity         INTEGER,
+    air_temp                REAL,
+
+    updated_at              INTEGER NOT NULL,
+    is_synced               INTEGER NOT NULL DEFAULT 0,
+    is_deleted              INTEGER NOT NULL DEFAULT 0
+);
+
+-- ============================================================
+-- QUERIES: USERS
+-- ============================================================
+
+insertUser:
+INSERT INTO users (user_id, display_name, email, is_guest, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(user_id) DO UPDATE SET
+    display_name = excluded.display_name,
+    email = excluded.email,
+    is_guest = excluded.is_guest,
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at;
+
+getUserById:
+SELECT * FROM users WHERE user_id = ?;
+
+migrateGuestToAuthenticated:
+UPDATE users
+SET user_id = :newUserId,
+    display_name = :newDisplayName,
+    email = :newEmail,
+    is_guest = 0,
+    updated_at = ?
+WHERE user_id = :oldGuestId;
+
+deleteUser:
+DELETE FROM users WHERE user_id = ?;
+
+updateDisplayName:
+UPDATE users SET display_name = ?, updated_at = ? WHERE user_id = ?;
+
+updateEmail:
+UPDATE users
+SET email = ?, updated_at = ?
+WHERE user_id = ?;
+
+
+-- ============================================================
+-- QUERIES: IOT_DEVICES
+-- ============================================================
+
+insertDevice:
+INSERT INTO iot_devices (device_id, user_id, hardware_mac, device_name, pairing_token, is_active, last_known_ip, connection_mode, firmware, date_added, updated_at)
+VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(device_id) DO UPDATE SET
+    user_id = excluded.user_id,
+    hardware_mac = excluded.hardware_mac,
+    device_name = excluded.device_name,
+    pairing_token = excluded.pairing_token,
+    is_active = excluded.is_active,
+    last_known_ip = excluded.last_known_ip,
+    connection_mode = excluded.connection_mode,
+    firmware = excluded.firmware,
+    date_added = excluded.date_added,
+    updated_at = excluded.updated_at;
+
+getDevicesByUser:
+SELECT * FROM iot_devices WHERE user_id = ? AND is_deleted = 0 ORDER BY device_name ASC;
+
+getUnlinkedDevicesByUser:
+SELECT d.*
+FROM iot_devices AS d
+WHERE d.user_id = ? AND d.is_deleted = 0
+  AND NOT EXISTS (
+      SELECT 1
+      FROM plants AS p
+      WHERE p.device_id = d.device_id
+        AND p.is_deleted = 0
+  )
+ORDER BY d.device_name ASC;
+
+getDeviceById:
+SELECT * FROM iot_devices WHERE device_id = ? AND is_deleted = 0;
+
+getDeviceByHardwareMac:
+SELECT * FROM iot_devices WHERE hardware_mac = ? COLLATE NOCASE AND is_deleted = 0;
+
+getActiveDevicesByUser:
+SELECT * FROM iot_devices WHERE user_id = ? AND is_active = 1 AND is_deleted = 0;
+
+getLastDeviceSensorData:
+SELECT
+    last_seen_at,
+    last_soil_moisture,
+    last_soil_temp,
+    last_soil_ph,
+    last_nitrogen,
+    last_phosphorus,
+    last_potassium,
+    last_electrical_conductivity,
+    last_air_temp,
+    last_light_intensity
+FROM iot_devices WHERE device_id = ? AND is_deleted = 0;
+
+updateDeviceName:
+UPDATE iot_devices
+SET
+    device_name = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
+
+updateDeviceIp:
+UPDATE iot_devices
+SET
+    last_known_ip = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
+
+updateDeviceConnectionMode:
+UPDATE iot_devices
+SET
+    connection_mode = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
+
+updateDeviceActiveStatus:
+UPDATE iot_devices
+SET
+    is_active = ?,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ? AND is_deleted = 0;
+
+updateDeviceSensorData:
+UPDATE iot_devices
+SET
+    last_seen_at = ?,
+    last_soil_moisture = ?,
+    last_soil_temp = ?,
+    last_soil_ph = ?,
+    last_nitrogen = ?,
+    last_phosphorus = ?,
+    last_potassium = ?,
+    last_electrical_conductivity = ?,
+    last_air_temp = ?,
+    last_light_intensity = ?
+WHERE device_id = ? AND is_deleted = 0;
+
+markDeviceDeleted:
+UPDATE iot_devices
+SET
+    is_deleted = 1,
+    is_synced = 0,
+    updated_at = ?
+WHERE device_id = ?;
+
+markDeviceSynced:
+UPDATE iot_devices SET is_synced = 1 WHERE device_id = ?;
+
+getUnsyncedDevicesByUser:
+SELECT * FROM iot_devices WHERE user_id = ? AND is_synced = 0;
+
+deleteDevice:
+DELETE FROM iot_devices WHERE device_id = ?;
+
+
+-- ============================================================
+-- QUERIES: PLANTS
+-- ============================================================
+
+insertPlant:
+INSERT INTO plants (plant_id, user_id, plant_name, date_created, updated_at, last_analyzed_at, device_id)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(plant_id) DO UPDATE SET
+    user_id = excluded.user_id,
+    plant_name = excluded.plant_name,
+    date_created = excluded.date_created,
+    updated_at = excluded.updated_at,
+    last_analyzed_at = excluded.last_analyzed_at,
+    device_id = excluded.device_id;
+
+getPlantsByUser:
+SELECT * FROM plants WHERE user_id = ? AND is_deleted = 0 ORDER BY date_created DESC;
+
+getPlantById:
+SELECT * FROM plants WHERE plant_id = ? AND is_deleted = 0;
+
+getPlantByDeviceId:
+SELECT * FROM plants WHERE device_id = ? AND is_deleted = 0;
+
+getUnlinkedPlantsByUser:
+SELECT * FROM plants WHERE user_id = ? AND device_id IS NULL AND is_deleted = 0;
+
+updatePlantName:
+UPDATE plants SET plant_name = ?, updated_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+
+-- Link an IoT Device to a plant
+linkPlantDevice:
+UPDATE plants SET device_id = ?, updated_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+
+getLinkedPlantByDeviceId:
+SELECT * FROM plants WHERE device_id = ? AND is_deleted = 0;
+
+updateLastAnalyzedAt:
+UPDATE plants
+SET
+    last_analyzed_at = ?,
+    updated_at = ?,
+    is_synced = 0
+WHERE plant_id = ? AND is_deleted = 0;
+
+-- Unlink a IoT Device to a plant
+unlinkPlantDevice:
+UPDATE plants SET device_id = NULL, updated_at = ?, is_synced = 0 WHERE plant_id = ? AND is_deleted = 0;
+
+markPlantSynced:
+UPDATE plants SET is_synced = 1 WHERE plant_id = ? AND is_deleted = 0;
+
+getUnsyncedPlantsByUser:
+SELECT * FROM plants WHERE user_id = ? AND is_synced = 0;
+
+markPlantDeleted:
+UPDATE plants
+SET is_deleted = 1,
+-- Set device_id to NULL to unlink linked device
+    device_id = NULL,
+    is_synced = 0,
+    updated_at = ?
+WHERE plant_id = ?;
+
+deletePlant:
+DELETE FROM plants WHERE plant_id = ?;
+
+
+-- ============================================================
+-- QUERIES: ANALYSIS_SESSIONS
+-- ============================================================
+
+insertSession:
+INSERT INTO analysis_sessions (
+    session_id, plant_id, device_id, user_id, session_timestamp, image_path,
+    predicted_class, confidence, segmentation_result, plant_condition, plant_condition_description, possible_causes,
+    characteristics, recommended_actions, is_partial,
+    soil_moisture, soil_ph, soil_temp, electrical_conductivity,
+    nitrogen, phosphorus, potassium, light_intensity, air_temp, updated_at
+) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(session_id) DO UPDATE SET
+    plant_id = excluded.plant_id,
+    device_id = excluded.device_id,
+    user_id = excluded.user_id,
+    session_timestamp = excluded.session_timestamp,
+    image_path = excluded.image_path,
+    predicted_class = excluded.predicted_class,
+    confidence = excluded.confidence,
+    segmentation_result = excluded.segmentation_result,
+    plant_condition = excluded.plant_condition,
+    plant_condition_description = excluded.plant_condition_description,
+    possible_causes = excluded.possible_causes,
+    characteristics = excluded.characteristics,
+    recommended_actions = excluded.recommended_actions,
+    is_partial = excluded.is_partial,
+    soil_moisture = excluded.soil_moisture,
+    soil_ph = excluded.soil_ph,
+    soil_temp = excluded.soil_temp,
+    electrical_conductivity = excluded.electrical_conductivity,
+    nitrogen = excluded.nitrogen,
+    phosphorus = excluded.phosphorus,
+    potassium = excluded.potassium,
+    light_intensity = excluded.light_intensity,
+    air_temp = excluded.air_temp,
+    updated_at = excluded.updated_at;
+
+getSessionsByPlant:
+SELECT * FROM analysis_sessions WHERE plant_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
+
+getSessionsByUser:
+SELECT * FROM analysis_sessions WHERE user_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
+
+getSessionById:
+SELECT * FROM analysis_sessions WHERE session_id = ? AND is_deleted = 0;
+
+getSessionsByDeviceId:
+SELECT * FROM analysis_sessions WHERE device_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
+
+getLatestSessionForPlant:
+SELECT * FROM analysis_sessions WHERE plant_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC LIMIT 1;
+
+getPartialAnalysisSessionsByUser:
+SELECT * FROM analysis_sessions WHERE is_partial = 1 AND user_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
+
+getCompleteAnalysisSessionsByUser:
+SELECT * FROM analysis_sessions WHERE is_partial = 0 AND user_id = ? AND is_deleted = 0 ORDER BY session_timestamp DESC;
+
+markSessionSynced:
+UPDATE analysis_sessions SET is_synced = 1 WHERE session_id = ?;
+
+markAnalysisSessionDeleted:
+UPDATE analysis_sessions
+SET is_deleted = 1,
+    is_synced = 0,
+    updated_at = ?
+WHERE session_id = ?;
+
+getUnsyncedSessionsByUser:
+SELECT * FROM analysis_sessions WHERE user_id = ? AND is_synced = 0;
+
+deleteSession:
+DELETE FROM analysis_sessions WHERE session_id = ?;
+
+
+
+-- ============================================================
+-- INDEXES FOR MULTI-USER PERFORMANCE
+-- ============================================================
+
+CREATE INDEX idx_iot_devices_user_id ON iot_devices(user_id);
+CREATE INDEX idx_plants_user_id ON plants(user_id);
+CREATE INDEX idx_plants_device_id ON plants(device_id);
+CREATE INDEX idx_analysis_sessions_user_id ON analysis_sessions(user_id);
+CREATE INDEX idx_analysis_sessions_plant_id ON analysis_sessions(plant_id);
+CREATE INDEX idx_analysis_sessions_device_id ON analysis_sessions(device_id);
+CREATE INDEX idx_analysis_sessions_timestamp ON analysis_sessions(session_timestamp);
