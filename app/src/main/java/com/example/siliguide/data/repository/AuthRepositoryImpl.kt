@@ -36,6 +36,9 @@ import kotlin.time.Duration.Companion.seconds
 private const val TAG = "AuthRepositoryImpl"
 private const val REMOTE_SIGNOUT_TIMEOUT_MS = 3000L
 
+/** Random default username like "User34786". Always well under the 20-char display name limit. */
+private fun generateRandomUsername(): String = "User${(10000..99999).random()}"
+
 class AuthRepositoryImpl @Inject constructor(
     private val dbManagerProvider: dagger.Lazy<SiliGuideDatabaseManager>,
     private val userPreferences: UserPreferences,
@@ -90,10 +93,7 @@ class AuthRepositoryImpl @Inject constructor(
             ?: throw IllegalStateException("Verification succeeded but no session was established.")
         val realUserId = session.user?.id
             ?: throw IllegalStateException("Authenticated user has no ID.")
-        val derivedName = session.user?.userMetadata?.get("name")?.toString()?.trim('"')
-            ?.takeIf { it.isNotBlank() }
-            ?: email.substringBefore("@")
-        handlePostSignIn(realUserId, email, derivedName)
+        handlePostSignIn(realUserId, email, generateRandomUsername())
         Result.success(Unit)
     } catch (e: Exception) {
         Log.d("VerifyEmailOTP", e.toString())
@@ -109,10 +109,11 @@ class AuthRepositoryImpl @Inject constructor(
             ?: throw IllegalStateException("Google sign-in succeeded but no session was established.")
         val realUserId = session.user?.id
             ?: throw IllegalStateException("Authenticated user has no ID.")
-        val displayName = session.user?.userMetadata?.get("full_name")?.toString()?.trim('"')
-            ?: session.user?.email?.substringBefore("@")
-            ?: "User"
-        handlePostSignIn(realUserId = realUserId, email = session.user?.email, defaultDisplayName = displayName)
+        handlePostSignIn(
+            realUserId = realUserId,
+            email = session.user?.email,
+            defaultDisplayName = generateRandomUsername()
+        )
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(Exception(e.toFriendlyAuthError()))
@@ -229,6 +230,8 @@ class AuthRepositoryImpl @Inject constructor(
                     oldGuestId = current.userId
                 )
             }
+            // Overwrite any name a server-side trigger may have created for this new account.
+            pushDisplayNameBestEffort(realUserId, defaultDisplayName, now)
         } else {
             // Check if user already exists in local SQLite
             val existingLocalUser = dbManager.queries.getUserById(realUserId).executeAsOneOrNull()
@@ -281,17 +284,34 @@ class AuthRepositoryImpl @Inject constructor(
                 finalUpdatedAt = now
             }
 
+            // A server trigger (or an older app build) may have stored an email-derived or
+            // overlong name. Replace it with the random default and push it to the server.
+            val resolvedEmail = email ?: remoteUser?.email ?: existingLocalUser?.email
+            val needsReplace = finalDisplayName.length > 20 ||
+                    (resolvedEmail != null && finalDisplayName == resolvedEmail.substringBefore("@"))
+            val storedName = if (needsReplace) defaultDisplayName else finalDisplayName
+            val storedUpdatedAt = if (needsReplace) now else finalUpdatedAt
+
             dbManager.queries.insertUser(
                 user_id = realUserId,
-                display_name = finalDisplayName,
-                email = email ?: remoteUser?.email ?: existingLocalUser?.email,
+                display_name = storedName,
+                email = resolvedEmail,
                 is_guest = 0L,
                 created_at = finalCreatedAt,
-                updated_at = finalUpdatedAt
+                updated_at = storedUpdatedAt
             )
+            if (needsReplace) pushDisplayNameBestEffort(realUserId, storedName, now)
         }
         userPreferences.saveSession(UserSession(realUserId, isGuest = false))
         syncRepository.enqueueOneTimeSync()
+    }
+
+    private suspend fun pushDisplayNameBestEffort(userId: String, name: String, nowMs: Long) {
+        try {
+            userRemoteSource.updateDisplayName(userId, name, Instant.ofEpochMilli(nowMs).toString())
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not push default display name to Supabase: ${e.message}")
+        }
     }
 
     override suspend fun updateDisplayName(newName: String): Result<Unit> = try {

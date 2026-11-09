@@ -54,6 +54,7 @@ import com.example.siliguide.core.permission.PermissionStatus
 import com.example.siliguide.core.permission.PermissionUtils
 import com.example.siliguide.presentation.features.iot.bluetooth_setup.BluetoothSelectionScreen
 
+import com.example.siliguide.core.ui.components.DeviceModeSwitchDialog
 import com.example.siliguide.core.ui.components.PermissionDialog
 import com.example.siliguide.presentation.features.iot.lan_setup.LanApProvisioningScreen
 import com.example.siliguide.presentation.features.iot.lan_setup.LanLocationPermissionScreen
@@ -517,21 +518,38 @@ fun SiliGuideNavGraph(
 
         // --- IOT SETUP WIZARD ---
         composable(route = Screen.IoTSetup.route) { backStackEntry ->
+            // AP or Bluetooth picked: remind the user to flip the device's mode switch first
+            var pendingSwitchMode by remember { mutableStateOf<ConnectionMode?>(null) }
+
             IoTSetupConnectionModeScreen(
                 onNavigateBack = { navController.popSafely(backStackEntry) },
                 onNext = { selectedMode ->
                     when (selectedMode) {
-                        ConnectionMode.AP ->
-                            navController.navigateSafely(backStackEntry, Screen.IoTSetupAP.createRoute())
-
+                        ConnectionMode.AP,
                         ConnectionMode.BLUETOOTH ->
-                            navController.navigateSafely(backStackEntry, Screen.BluetoothSetupGraph.createRoute())
+                            pendingSwitchMode = selectedMode
 
                         ConnectionMode.LAN ->
                             navController.navigateSafely(backStackEntry, Screen.IoTSetupLAN.route)
                     }
                 }
             )
+
+            pendingSwitchMode?.let { mode ->
+                val isAp = mode == ConnectionMode.AP
+                DeviceModeSwitchDialog(
+                    isAp = isAp,
+                    onConfirm = {
+                        pendingSwitchMode = null
+                        navController.navigateSafely(
+                            backStackEntry,
+                            if (isAp) Screen.IoTSetupAP.createRoute()
+                            else Screen.BluetoothSetupGraph.createRoute()
+                        )
+                    },
+                    onDismiss = { pendingSwitchMode = null }
+                )
+            }
         }
 
         // Bluetooth Setup
@@ -812,6 +830,9 @@ fun SiliGuideNavGraph(
                     }
                 }
 
+                // Remind the user to flip the device's mode switch before continuing
+                var showModeSwitchDialog by remember { mutableStateOf(false) }
+
                 LanSetupMethodScreen(
                     state = methodState,
 
@@ -827,16 +848,25 @@ fun SiliGuideNavGraph(
                         parentEntry?.savedStateHandle?.set("lan_method", it.name)
                     },
 
-                    onContinue = {
-                        // Persist even when the user kept the default, so later
-                        // steps restore the right method after process death
-                        parentEntry?.savedStateHandle?.set(
-                            "lan_method",
-                            viewModel.lanProvisioningMethod.name
-                        )
-                        viewModel.continueFromLanSetupMethod()
-                    }
+                    onContinue = { showModeSwitchDialog = true }
                 )
+
+                if (showModeSwitchDialog) {
+                    DeviceModeSwitchDialog(
+                        isAp = viewModel.lanProvisioningMethod == LanProvisioningMethod.ACCESS_POINT,
+                        onConfirm = {
+                            showModeSwitchDialog = false
+                            // Persist even when the user kept the default, so later
+                            // steps restore the right method after process death
+                            parentEntry?.savedStateHandle?.set(
+                                "lan_method",
+                                viewModel.lanProvisioningMethod.name
+                            )
+                            viewModel.continueFromLanSetupMethod()
+                        },
+                        onDismiss = { showModeSwitchDialog = false }
+                    )
+                }
             }
 
             // ── Step 2 of 4 — Location Permission ─────────────────────────

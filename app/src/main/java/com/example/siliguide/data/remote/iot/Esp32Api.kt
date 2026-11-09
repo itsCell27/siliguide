@@ -128,7 +128,7 @@ class Esp32Api @Inject constructor(
         val plainToken = pairingTokenCrypto.decrypt(token)
 
         // 1. Format credentials into the JSON string expected by ESP32 C++ parser
-        val unencryptedPayload = """{"ssid":"$ssid","pass":"$password"}"""
+        val unencryptedPayload = wifiCredentialsJson(ssid, password)
 
         // 2. Encrypt the JSON into a Base64 string using the pairing token
         val encryptedBase64Payload = crypto.encrypt(unencryptedPayload, plainToken)
@@ -143,6 +143,32 @@ class Esp32Api @Inject constructor(
         // Optional: Validate response status code or throw on HTTP errors
         if (response.status.value !in 200..299) {
             throw IllegalStateException("Failed to configure Wi-Fi. HTTP Status: ${response.status.value}")
+        }
+    }
+
+    /**
+     * Tells the device to rejoin the WiFi saved in its memory (firmware 1.1.0+
+     * keeps the last WiFi that actually worked there). Cancels a CONFIGURE
+     * attempt that is still running. Token-checked like /reset.
+     */
+    suspend fun reconnectSavedWiFi(
+        host: String,
+        token: String
+    ) {
+        val plainToken = pairingTokenCrypto.decrypt(token)
+        val encryptedBase64Payload = crypto.encrypt(commandJson("connect_wifi"), plainToken)
+
+        val response = client.post("http://$host/connect-wifi") {
+            contentType(ContentType.Text.Plain)
+            setBody(encryptedBase64Payload)
+            timeout {
+                connectTimeoutMillis = 1_500
+                requestTimeoutMillis = 2_500
+            }
+        }
+
+        if (response.status.value !in 200..299) {
+            throw IllegalStateException("connect-wifi rejected. HTTP Status: ${response.status.value}")
         }
     }
 

@@ -149,13 +149,13 @@ fun APStep1Content(
                 }
             }
 
-            Text(
-                text = "Or manually join the network shown on your sticker via WiFi settings.",
-                fontSize = 10.sp,
-                color = GreenDark,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+//            Text(
+//                text = "Or manually join the network shown on your sticker via WiFi settings.",
+//                fontSize = 10.sp,
+//                color = GreenDark,
+//                textAlign = TextAlign.Center,
+//                modifier = Modifier.padding(top = 4.dp)
+//            )
         }
 
         // Open WiFi Settings Row (.owr)

@@ -215,8 +215,8 @@ fun LanBluetoothProvisioningScreen(
                     accentColor = WizardWarningText
                 ) {
                     Text(
-                        text = "Make sure Bluetooth is turned on and the device is powered on " +
-                                "and nearby, then tap Retry.",
+                        text = "Make sure Bluetooth is turned on and the device is powered on, " +
+                                "nearby, and its mode switch is ON (Bluetooth mode), then tap Retry.",
                         style = WizardCaptionStyle,
                         color = WizardWarningText
                     )

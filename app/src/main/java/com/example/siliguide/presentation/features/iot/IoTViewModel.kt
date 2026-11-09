@@ -18,7 +18,9 @@ import com.example.siliguide.domain.usecase.SaveIoTDeviceUseCase
 import com.example.siliguide.domain.usecase.VerifyDeviceConnectionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -56,6 +58,7 @@ import com.example.siliguide.domain.usecase.CheckDeviceWiFiStatusUseCase
 import com.example.siliguide.domain.usecase.ConnectDeviceToWiFUseCase
 import com.example.siliguide.domain.usecase.ScanWifiNetworksUseCase
 import com.example.siliguide.domain.usecase.UpdateDeviceIpUseCase
+import com.example.siliguide.domain.usecase.ReconnectDeviceSavedWiFiUseCase
 import com.example.siliguide.presentation.features.iot.lan_setup.LanApProvisioningUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPermissionUiState
 import com.example.siliguide.presentation.features.iot.lan_setup.LanPreflightAction
@@ -103,6 +106,7 @@ class IoTViewModel @Inject constructor(
     private val updateDeviceIpUseCase: UpdateDeviceIpUseCase,
     private val updateDeviceConnectionModeUseCase: UpdateDeviceConnectionModeUseCase,
     private val getDeviceByHardwareMacUseCase: GetDeviceByHardwareMacUseCase,
+    private val reconnectDeviceSavedWiFiUseCase: ReconnectDeviceSavedWiFiUseCase,
     val permissionManager: PermissionManager,
 
     private val pairingTokenCrypto: PairingTokenCrypto
@@ -204,6 +208,10 @@ class IoTViewModel @Inject constructor(
             if (!isWifiEnabled()) {
                 _apConnectionState.value = "WIFI_OFF"
                 error = "WiFi is turned off. Please enable WiFi to connect to the IoT device."
+                showValidationDialog(
+                    title = "WiFi is off",
+                    message = "Please enable WiFi to connect to the IoT device."
+                )
                 return
             }
 
@@ -416,7 +424,7 @@ class IoTViewModel @Inject constructor(
 
             showValidationDialog(
                 title = "Unable to Reach Device",
-                message = "The app could not communicate with a SiliGuide device.\n\nPlease verify that your phone is connected to the correct SiliGuide_IoT Wi-Fi network, then tap Retry."
+                message = "The app could not communicate with a SiliGuide device.\n\nPlease verify that your phone is connected to the correct SiliGuide_IoT Wi-Fi network, then tap Retry. If the hotspot is missing, set the device's mode switch to OFF (hotspot mode)."
             )
         }
     }
@@ -723,7 +731,7 @@ class IoTViewModel @Inject constructor(
                     withContext(Dispatchers.Main) {
                         showValidationDialog(
                             title = "Connection Failed",
-                            message = "Could not reach the SILI-GUIDE sensor over Bluetooth. Ensure it is powered on, in range, and paired correctly."
+                            message = "Could not reach the SILI-GUIDE sensor over Bluetooth. Ensure it is powered on, in range, paired correctly, and its mode switch is ON (Bluetooth mode)."
                         )
                         resetBluetoothSetup()
                     }
@@ -825,7 +833,7 @@ class IoTViewModel @Inject constructor(
                     withContext(Dispatchers.Main) {
                         showValidationDialog(
                             title = "Connection Failed",
-                            message = "Could not reach the SILI-GUIDE sensor over Bluetooth. Ensure it is powered on, in range, and paired correctly."
+                            message = "Could not reach the SILI-GUIDE sensor over Bluetooth. Ensure it is powered on, in range, paired correctly, and its mode switch is ON (Bluetooth mode)."
                         )
                         resetBluetoothSetup()
                     }
@@ -1631,14 +1639,67 @@ class IoTViewModel @Inject constructor(
             }
         }
 
+    /**
+     * True after CONFIGURE was accepted but before the device was seen on the
+     * requested WiFi. On leave, the device is told to rejoin its saved WiFi.
+     */
+    private var lanWifiAttemptPending = false
+
+    /**
+     * Outlives the ViewModel on purpose: leaveLanSetup() pops the graph, which
+     * clears this ViewModel and would cancel viewModelScope mid-request.
+     * Only used for the short restore-then-teardown below.
+     */
+    private val leaveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /** Tears down transports and wizard state before the graph is popped. */
     fun leaveLanSetup() {
         showLanLeaveDialog = false
-        releaseDeviceHotspotBinding()
-        // Plain call, not viewModelScope: popping the graph clears this
-        // ViewModel and would cancel a launched job. close() does not block.
-        runCatching { bluetoothManager.disconnect() }
+
+        val restoreDeviceId = lanRetryDeviceId.takeIf { lanWifiAttemptPending }
+        val method = lanProvisioningMethod
+        val fallbackToken = pairingToken
+
         resetLanSetup()
+
+        if (restoreDeviceId == null) {
+            releaseDeviceHotspotBinding()
+            // Plain call, not a coroutine: close() does not block.
+            runCatching { bluetoothManager.disconnect() }
+            return
+        }
+
+        // A WiFi attempt failed and the user gave up. Firmware 1.1.0+ still
+        // holds the last WiFi that worked; ask it to go back now instead of
+        // waiting for its background reconnect. Must run before the hotspot
+        // binding / Bluetooth socket is released — that is the only route.
+        leaveScope.launch {
+            try {
+                withTimeoutOrNull(RESTORE_WIFI_TIMEOUT_MS) {
+                    val token = runCatching { getIoTDeviceByIdUseCase(restoreDeviceId) }
+                        .getOrNull()?.pairingToken ?: fallbackToken
+                    if (token.isNullOrBlank()) return@withTimeoutOrNull
+
+                    runCatching {
+                        when (method) {
+                            LanProvisioningMethod.ACCESS_POINT ->
+                                reconnectDeviceSavedWiFiUseCase(DEFAULT_AP_IP, token)
+                            LanProvisioningMethod.BLUETOOTH ->
+                                if (bluetoothManager.isConnected()) {
+                                    bluetoothApi.reconnectSavedWiFi(token)
+                                }
+                        }
+                    }.onFailure {
+                        // Older firmware has no such command — its own retry
+                        // loop is the only fallback. Nothing else to do.
+                        Log.d("IoTViewModel", "Restore saved WiFi skipped: ${it.message}")
+                    }
+                }
+            } finally {
+                releaseDeviceHotspotBinding()
+                runCatching { bluetoothManager.disconnect() }
+            }
+        }
     }
 
     fun clearLanWifiReconfigure() {
@@ -1984,13 +2045,15 @@ class IoTViewModel @Inject constructor(
         }
 
         // ---- Wait for the device to actually join -------------------------
-        val outcome = awaitDeviceOnLan()
+        lanWifiAttemptPending = true
+        val outcome = awaitDeviceOnLan(ssid)
         val status = outcome.status
 
         if (status == null) {
-            lanSaveDialog = lanJoinFailedDialog(ssid, outcome.lastStatusCode)
+            lanSaveDialog = lanJoinFailedDialog(ssid, outcome)
             return
         }
+        lanWifiAttemptPending = false
 
         // ---- Record where it landed ---------------------------------------
         runCatching { updateDeviceIpUseCase(deviceId, status.ip) }
@@ -2027,12 +2090,12 @@ class IoTViewModel @Inject constructor(
     /**
      * Polls /wifi-status on the hotspot until the device reports a real IP.
      *
-     * The firmware gives up after WIFI_TIMEOUT (10s) and then retries every 5s,
-     * so this window covers one full attempt plus a retry.
+     * Window covers the firmware's full attempt + retries; see
+     * WIFI_STATUS_POLL_ATTEMPTS. LanJoinTracker decides when to stop early.
      */
-    private suspend fun awaitDeviceOnLan(): LanJoinOutcome {
+    private suspend fun awaitDeviceOnLan(ssid: String): LanJoinOutcome {
 
-        val tracker = LanJoinTracker()
+        val tracker = LanJoinTracker(ssid)
 
         repeat(WIFI_STATUS_POLL_ATTEMPTS) { attempt ->
 
@@ -2045,7 +2108,8 @@ class IoTViewModel @Inject constructor(
             Log.d(
                 "AP_DEBUG",
                 "wifi-status attempt ${attempt + 1}: connected=${status?.connected} " +
-                        "code=${status?.statusCode} ip=${status?.ip}"
+                        "code=${status?.statusCode} ip=${status?.ip} " +
+                        "ssid=${status?.ssid} result=${status?.result} reason=${status?.reason}"
             )
 
             tracker.record(status)?.let { return it }
@@ -2054,54 +2118,86 @@ class IoTViewModel @Inject constructor(
         return tracker.giveUp()
     }
 
-    /** Result of waiting for the device to join WiFi. status != null means joined. */
+    /**
+     * Result of waiting for the device to join WiFi. status != null means joined.
+     * failReason is the firmware's own verdict ("wrong_password", ...) when it sent one.
+     */
     private data class LanJoinOutcome(
         val status: WiFiStatusDto?,
-        val lastStatusCode: Int?
+        val lastStatusCode: Int?,
+        val failReason: String? = null
     )
 
     /**
      * Shared verdict logic for the AP and Bluetooth polls.
      *
-     * statusCode is only a hint — firmware builds differ — so the only early
-     * exit is a repeated CONNECT_FAILED (router rejected the password). Every
-     * other code just keeps polling until the window ends.
+     * Firmware 1.1.0+ reports ssid and a result/reason for the attempt; older
+     * builds don't, so every new field is optional:
+     *
+     * - "connected" only counts when the device is on [requestedSsid]. After a
+     *   failed attempt new firmware rolls back to the old WiFi and reports
+     *   connected=true there — that must not read as success. Old firmware
+     *   sends no ssid, so the old check (connected + real IP) still applies.
+     * - result == "failed" for this SSID ends the wait at once.
+     * - Without result, the only early exit is a repeated CONNECT_FAILED.
      */
-    private class LanJoinTracker {
+    private class LanJoinTracker(private val requestedSsid: String) {
         private var lastCode: Int? = null
+        private var lastReason: String? = null
         private var connectFailedStreak = 0
+
+        private fun sameSsid(reported: String) =
+            reported.trim().equals(requestedSsid.trim(), ignoreCase = true)
 
         fun record(status: WiFiStatusDto?): LanJoinOutcome? {
             if (status == null) return null
 
             if (status.statusCode >= 0) lastCode = status.statusCode
 
-            if (status.connected &&
-                status.ip.isNotBlank() &&
-                status.ip != "0.0.0.0"
-            ) {
+            val hasRealIp = status.ip.isNotBlank() && status.ip != "0.0.0.0"
+            val onRequestedNetwork = status.ssid.isBlank() || sameSsid(status.ssid)
+
+            if (status.connected && hasRealIp && onRequestedNetwork) {
                 return LanJoinOutcome(status, status.statusCode)
             }
 
+            // Firmware's own verdict, when it is about this attempt
+            val resultIsOurs = status.resultSsid.isBlank() || sameSsid(status.resultSsid)
+            if (resultIsOurs && status.reason.isNotBlank()) lastReason = status.reason
+
+            if (resultIsOurs && status.result == RESULT_FAILED) {
+                return LanJoinOutcome(null, lastCode, status.reason.ifBlank { null })
+            }
+
+            // Old firmware fallback: two CONNECT_FAILED reads in a row
             connectFailedStreak =
                 if (status.statusCode == WL_CONNECT_FAILED) connectFailedStreak + 1 else 0
 
             return if (connectFailedStreak >= CONNECT_FAILED_STREAK_TO_STOP) {
-                LanJoinOutcome(null, WL_CONNECT_FAILED)
+                LanJoinOutcome(null, WL_CONNECT_FAILED, lastReason)
             } else {
                 null
             }
         }
 
-        fun giveUp() = LanJoinOutcome(null, lastCode)
+        fun giveUp() = LanJoinOutcome(null, lastCode, lastReason)
     }
 
-    /** Failure copy picked from the device's last reported WiFi status. */
-    private fun lanJoinFailedDialog(ssid: String, statusCode: Int?): LanSaveDialogState {
+    /**
+     * Failure copy. Prefers the firmware's reason; falls back to statusCode
+     * for older firmware that only reports wl_status_t.
+     */
+    private fun lanJoinFailedDialog(ssid: String, outcome: LanJoinOutcome): LanSaveDialogState {
 
         val laterNote = " You can also go back and finish WiFi setup later."
 
-        return when (statusCode) {
+        val kind = when (outcome.failReason) {
+            REASON_WRONG_PASSWORD -> WL_CONNECT_FAILED
+            REASON_NOT_FOUND -> WL_NO_SSID_AVAIL
+            else -> outcome.lastStatusCode
+        }
+
+        return when (kind) {
 
             WL_CONNECT_FAILED -> LanSaveDialogState(
                 title = "Wrong WiFi Password?",
@@ -2193,17 +2289,26 @@ class IoTViewModel @Inject constructor(
     }
 
     private companion object {
-        // 14 × 1.5 s ≈ 21 s: one full firmware attempt (10 s timeout) plus a
-        // retry (5 s gap). The old 6 × 1.5 s gave up before the first attempt ended.
-        const val WIFI_STATUS_POLL_ATTEMPTS = 14
+        // 34 × 1.5 s ≈ 51 s: covers the firmware's full 3 × 15 s attempt window
+        // (Oct-24 build). Newer firmware reports result="failed" and ends the
+        // wait early — a wrong password usually stops within ~5 s.
+        const val WIFI_STATUS_POLL_ATTEMPTS = 34
         const val WIFI_STATUS_POLL_DELAY_MS = 1_500L
 
         // Arduino wl_status_t values reported as statusCode
         const val WL_NO_SSID_AVAIL = 1
         const val WL_CONNECT_FAILED = 4
 
+        // /wifi-status "result" and "reason" values (firmware 1.1.0+)
+        const val RESULT_FAILED = "failed"
+        const val REASON_WRONG_PASSWORD = "wrong_password"
+        const val REASON_NOT_FOUND = "not_found"
+
         // Two reads in a row, so one stale value right after CONFIGURE can't end the wait
         const val CONNECT_FAILED_STREAK_TO_STOP = 2
+
+        // Leave-time "rejoin your saved WiFi" request; never hold up leaving longer
+        const val RESTORE_WIFI_TIMEOUT_MS = 4_000L
 
         const val PHONE_SWITCH_POLL_ATTEMPTS = 3
         const val PHONE_SWITCH_POLL_DELAY_MS = 1_200L
@@ -2552,8 +2657,8 @@ class IoTViewModel @Inject constructor(
 
             showValidationDialog(
                 title = "Couldn't Reach the Device",
-                message = "That SiliGuide device didn't answer. Make sure it is powered on " +
-                        "and nearby, then try again."
+                message = "That SiliGuide device didn't answer. Make sure it is powered on, " +
+                        "nearby, and its mode switch is ON (Bluetooth mode), then try again."
             )
 
         } finally {
@@ -2816,13 +2921,15 @@ class IoTViewModel @Inject constructor(
         }
 
         // ---- Wait for it to join, over the same socket ---------------------
-        val outcome = awaitDeviceOnLanViaBluetooth()
+        lanWifiAttemptPending = true
+        val outcome = awaitDeviceOnLanViaBluetooth(ssid)
         val status = outcome.status
 
         if (status == null) {
-            lanSaveDialog = lanJoinFailedDialog(ssid, outcome.lastStatusCode)
+            lanSaveDialog = lanJoinFailedDialog(ssid, outcome)
             return
         }
+        lanWifiAttemptPending = false
 
         runCatching { updateDeviceIpUseCase(deviceId, status.ip) }
             .onFailure { Log.e("IoTViewModel", "updateDeviceIp failed", it) }
@@ -2851,9 +2958,9 @@ class IoTViewModel @Inject constructor(
         verifyPhoneOnDeviceNetwork()
     }
 
-    private suspend fun awaitDeviceOnLanViaBluetooth(): LanJoinOutcome {
+    private suspend fun awaitDeviceOnLanViaBluetooth(ssid: String): LanJoinOutcome {
 
-        val tracker = LanJoinTracker()
+        val tracker = LanJoinTracker(ssid)
 
         repeat(WIFI_STATUS_POLL_ATTEMPTS) { attempt ->
 
@@ -2871,7 +2978,8 @@ class IoTViewModel @Inject constructor(
             Log.d(
                 "BT_DEBUG",
                 "wifi-status attempt ${attempt + 1}: connected=${status?.connected} " +
-                        "code=${status?.statusCode} ip=${status?.ip}"
+                        "code=${status?.statusCode} ip=${status?.ip} " +
+                        "ssid=${status?.ssid} result=${status?.result} reason=${status?.reason}"
             )
 
             tracker.record(status)?.let { return it }
@@ -2917,6 +3025,7 @@ class IoTViewModel @Inject constructor(
         lanBlocker = null
         error = null
         validationDialog = null
+        lanWifiAttemptPending = false
 
         _lanBluetoothState.value = LanBluetoothProvisioningUiState.Pairing
         lanBluetoothDevice = null

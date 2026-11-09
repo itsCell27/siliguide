@@ -193,7 +193,7 @@ class AnalysisViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Default) {
             try {
                 // Run YOLO Instance Segmentation
-                val segmenter = LeafSegmenter(context, "models/best_yolo26_seg.tflite")
+                val segmenter = LeafSegmenter(context, "models/best_yolo26_segv4.tflite")
                 val detections = segmenter.use { segmenter ->
                     segmenter.segment(bitmap)
                 }

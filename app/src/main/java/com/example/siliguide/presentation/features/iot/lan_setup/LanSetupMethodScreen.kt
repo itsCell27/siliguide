@@ -82,7 +82,8 @@ fun LanSetupMethodScreen(
             emoji = "📡",
             title = "Device Hotspot (AP)",
             description = "Temporarily connect to your IoT device's Wi-Fi hotspot to securely " +
-                    "transfer the selected Wi-Fi credentials.",
+                    "transfer the selected Wi-Fi credentials. Set the device's mode " +
+                    "switch to OFF first.",
             selected = state.selectedMethod == LanProvisioningMethod.ACCESS_POINT,
             onClick = { onSelectMethod(LanProvisioningMethod.ACCESS_POINT) }
         )
@@ -91,7 +92,8 @@ fun LanSetupMethodScreen(
             emoji = "ᛒ",
             title = "Bluetooth",
             description = "Use Bluetooth to securely send the selected Wi-Fi credentials without " +
-                    "leaving your current Wi-Fi network.",
+                    "leaving your current Wi-Fi network. Set the device's mode switch to " +
+                    "ON first.",
             selected = state.selectedMethod == LanProvisioningMethod.BLUETOOTH,
             onClick = { onSelectMethod(LanProvisioningMethod.BLUETOOTH) }
         )

@@ -712,34 +712,34 @@ fun AnalysisHistoryRow(
         }
 
         // Confidence badge
-        Box(
-            modifier = Modifier
-                .background(
-                    when {
-                        item.confidence >= 80 -> GreenBgLight
-                        item.confidence >= 60 -> WarningBg
-                        else -> DangerBg
-                    },
-                    RoundedCornerShape(5.dp)
-                )
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text       = "${item.confidence}%",
-                fontSize   = 9.sp,
-                lineHeight = 11.sp,
-                style      = LocalTextStyle.current.copy(
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                fontWeight = FontWeight.Medium,
-                fontFamily = DMSans,
-                color      = when {
-                    item.confidence >= 80 -> GreenDark
-                    item.confidence >= 60 -> Warning
-                    else                  -> Danger
-                }
-            )
-        }
+//        Box(
+//            modifier = Modifier
+//                .background(
+//                    when {
+//                        item.confidence >= 80 -> GreenBgLight
+//                        item.confidence >= 60 -> WarningBg
+//                        else -> DangerBg
+//                    },
+//                    RoundedCornerShape(5.dp)
+//                )
+//                .padding(horizontal = 6.dp, vertical = 2.dp)
+//        ) {
+//            Text(
+//                text       = "${item.confidence}%",
+//                fontSize   = 9.sp,
+//                lineHeight = 11.sp,
+//                style      = LocalTextStyle.current.copy(
+//                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+//                ),
+//                fontWeight = FontWeight.Medium,
+//                fontFamily = DMSans,
+//                color      = when {
+//                    item.confidence >= 80 -> GreenDark
+//                    item.confidence >= 60 -> Warning
+//                    else                  -> Danger
+//                }
+//            )
+//        }
     }
 }
 

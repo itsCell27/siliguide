@@ -31,8 +31,8 @@ android {
         applicationId = "com.example.siliguide"
         minSdk = 30     // android 11
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.0.22"
+        versionCode = 23
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -127,7 +127,7 @@ dependencies {
     implementation(libs.supabase.auth)
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.storage)
-    implementation(libs.supabase.realtime)
+    //implementation(libs.supabase.realtime)
     implementation(libs.supabase.functions)
 
     // Google

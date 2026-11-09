@@ -68,10 +68,7 @@ class BluetoothApi @Inject constructor(
      * device is already claimed, so claimDevice() has to run first.
      *
      * Wire format: CONFIGURE:base64( IV[12] + ciphertext + tag[16] )
-     * Plaintext:   {"ssid":"...","pass":"..."}
-     *
-     * The device parses that JSON with indexOf, not a real parser, so a quote
-     * or backslash in either value would corrupt the extraction.
+     * Plaintext:   {"ssid":"...","pass":"..."}  (JSON-escaped, see wifiCredentialsJson)
      */
     @Throws(Exception::class)
     suspend fun configureWiFi(
@@ -80,22 +77,10 @@ class BluetoothApi @Inject constructor(
         password: String
     ): ConfigureWiFiResponseDto {
 
-        require(!ssid.contains('"') && !ssid.contains('\\')) {
-            "SSID cannot contain quotes or backslashes"
-        }
-        require(!password.contains('"') && !password.contains('\\')) {
-            "Password cannot contain quotes or backslashes"
-        }
-
-        // decrypt token from SQLDelight DB if encrypted, or use directly if raw 64-hex chars
-        val plainToken = if (token.length == 64 && token.all { it in "0123456789ABCDEFabcdef" }) {
-            token
-        } else {
-            pairingTokenCrypto.decrypt(token)
-        }
+        val plainToken = plainTokenOf(token)
 
         // Field names must stay "ssid" and "pass" — firmware looks for exactly these
-        val plainPayload = """{"ssid":"$ssid","pass":"$password"}"""
+        val plainPayload = wifiCredentialsJson(ssid, password)
 
         val encryptedBase64 = crypto.encrypt(plainPayload, plainToken)
 
@@ -108,6 +93,33 @@ class BluetoothApi @Inject constructor(
         Log.d("BluetoothApi", "Configure Response: $response")
 
         return json.decodeFromString(response.trim())
+    }
+
+    /** DB tokens are encrypted; a raw 64-hex token is used as-is. */
+    private fun plainTokenOf(token: String): String =
+        if (token.length == 64 && token.all { it in "0123456789ABCDEFabcdef" }) {
+            token
+        } else {
+            pairingTokenCrypto.decrypt(token)
+        }
+
+    /**
+     * LOCKED GATEWAY: Rejoin the WiFi saved in device memory (firmware 1.1.0+
+     * keeps the last WiFi that actually worked there). Cancels a CONFIGURE
+     * attempt still running. Wire format: CONNECT_WIFI:base64(...)
+     */
+    @Throws(Exception::class)
+    suspend fun reconnectSavedWiFi(token: String) {
+        val encryptedBase64 = crypto.encrypt(commandJson("connect_wifi"), plainTokenOf(token))
+
+        val response = bluetoothManager.executeCommand(
+            "${BluetoothCommands.CONNECT_WIFI}:$encryptedBase64"
+        )
+        Log.d("BluetoothApi", "Connect-WiFi Response: $response")
+
+        if (!response.contains("connecting") && !response.contains("already_connected")) {
+            throw IllegalStateException("Device refused connect-wifi: $response")
+        }
     }
 
     /**

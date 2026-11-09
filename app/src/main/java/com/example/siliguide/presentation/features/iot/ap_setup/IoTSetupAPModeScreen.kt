@@ -121,12 +121,6 @@ fun IoTSetupAPModeScreen(
     val defaultName = "SiliGuide$randomSuffix".take(DEVICE_NAME_MAX_LENGTH)
     var deviceName by remember { mutableStateOf(defaultName) }
 
-    val wifiOff = apConnectionState == "WIFI_OFF"
-
-    var showWifiModal by remember { mutableStateOf(false) }
-
-    var previousWifiOff by remember { mutableStateOf(false) }
-
     val apPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
@@ -143,13 +137,6 @@ fun IoTSetupAPModeScreen(
         } else {
             viewModel.clearApReconfigure()
         }
-    }
-
-    LaunchedEffect(wifiOff) {
-        if (wifiOff && !previousWifiOff) {
-            showWifiModal = true
-        }
-        previousWifiOff = wifiOff
     }
 
     // STEP 1: Check connection immediately on entry (Removed legacy monitoring)
@@ -211,81 +198,6 @@ fun IoTSetupAPModeScreen(
             currentStep = 1
         } else {
             onNavigateBack()
-        }
-    }
-
-    // WIFI OFF MODAL
-    if (showWifiModal) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showWifiModal = false }
-        ) {
-            Card(
-                modifier = Modifier
-                    .width(300.dp)
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.TopEnd
-                    ) {
-                        IconButton(
-                            onClick = { showWifiModal = false },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = GrayMedium,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Icon(
-                        Icons.Rounded.Wifi,
-                        contentDescription = null,
-                        tint = Danger,
-                        modifier = Modifier.size(48.dp)
-                    )
-
-                    Text(
-                        "WiFi is Off",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Black
-                    )
-
-                    Text(
-                        "Turn on WiFi to connect to your IoT device",
-                        fontSize = 13.sp,
-                        color = GrayMedium,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Button(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
-                            context.startActivity(intent)
-                            showWifiModal = false
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Danger),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Open WiFi Settings", color = White, fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
         }
     }
 

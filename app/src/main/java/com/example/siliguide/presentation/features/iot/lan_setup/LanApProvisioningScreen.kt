@@ -110,7 +110,7 @@ fun LanApProvisioningScreen(
 
                 WizardBody(
                     text = "Temporarily join the device's hotspot so we can send your Wi-Fi " +
-                            "credentials to it."
+                            "credentials to it. No hotspot? Set the device's mode switch to OFF."
                 )
 
                 WizardCard(cornerRadius = 13.dp) {
@@ -190,7 +190,9 @@ fun LanApProvisioningScreen(
 
                 WizardBody(
                     text = "We couldn't reach your IoT device's hotspot. Please make sure the " +
-                            "device is powered on and connect to its Wi-Fi network."
+                            "device is powered on and its mode switch is OFF (hotspot mode), " +
+                            "then connect to its Wi-Fi network. To use Bluetooth instead, set " +
+                            "the switch to ON before tapping Switch to Bluetooth."
                 )
 
                 WizardAlertBanner(

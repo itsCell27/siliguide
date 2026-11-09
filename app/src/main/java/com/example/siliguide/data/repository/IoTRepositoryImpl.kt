@@ -263,6 +263,10 @@ class IoTRepositoryImpl @Inject constructor(
         return api.checkWiFiStatus(host)
     }
 
+    override suspend fun reconnectSavedWiFi(host: String, token: String) {
+        api.reconnectSavedWiFi(host = host, token = token)
+    }
+
     // --- DATABASE OPERATIONS ---
 
     override suspend fun getDeviceById(deviceId: String): IoTDevice? {

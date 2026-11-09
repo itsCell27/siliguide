@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.window.Dialog
+import com.example.siliguide.core.ui.components.DeviceModeSwitchDialog
 import com.example.siliguide.core.ui.components.MessageDialog
 import com.example.siliguide.core.ui.components.SiliGuideBackButton
 import com.example.siliguide.core.ui.components.monitoring.MonitoringCard
@@ -145,6 +146,9 @@ fun IoTDeviceDetailScreen(
     var showUnlinkDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedMode by remember(state.mode) { mutableStateOf(state.mode) }
+
+    // AP or Bluetooth picked: remind the user to flip the device's mode switch first
+    var pendingSwitchMode by remember { mutableStateOf<DetailConnectionMode?>(null) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -295,7 +299,11 @@ fun IoTDeviceDetailScreen(
                     scope.launch {
                         sheetState.hide()
                         viewModel.dismissModeChangeSheet()
-                        onModeChangeConfirmed(selectedMode)
+                        when (selectedMode) {
+                            DetailConnectionMode.AP,
+                            DetailConnectionMode.BLUETOOTH -> pendingSwitchMode = selectedMode
+                            DetailConnectionMode.LAN -> onModeChangeConfirmed(selectedMode)
+                        }
                     }
                 },
                 onCancel = {
@@ -306,6 +314,17 @@ fun IoTDeviceDetailScreen(
                 }
             )
         }
+    }
+
+    pendingSwitchMode?.let { mode ->
+        DeviceModeSwitchDialog(
+            isAp = mode == DetailConnectionMode.AP,
+            onConfirm = {
+                pendingSwitchMode = null
+                onModeChangeConfirmed(mode)
+            },
+            onDismiss = { pendingSwitchMode = null }
+        )
     }
 }
 

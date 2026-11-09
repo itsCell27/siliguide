@@ -49,6 +49,9 @@ interface IoTRepository {
 
     suspend fun checkWiFiStatus(host: String): WiFiStatusDto
 
+    /** Ask the device (over its hotspot) to rejoin the WiFi saved in its memory. */
+    suspend fun reconnectSavedWiFi(host: String, token: String)
+
     suspend fun saveDevice(device: IoTDevice)
     suspend fun deleteDevice(deviceId: String)
 

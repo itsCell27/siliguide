@@ -8,4 +8,5 @@ object BluetoothCommands {
     const val CONFIGURE = "CONFIGURE"
     const val GET_WIFI_STATUS = "GET_WIFI_STATUS"
     const val RESET = "RESET"
+    const val CONNECT_WIFI = "CONNECT_WIFI"
 }
